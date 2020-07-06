@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG  -shared -Wl,-soname,libserverclient.so -o libserverclient.so CMakeFiles/serverclient.dir/ModelServerClient.cpp.o -lzmq 

@@ -1,0 +1,6 @@
+build/*
+server/python_code/trained_models/*
+server/python_code/Data/*
+*.bo
+*.bdb
+tmp/*
