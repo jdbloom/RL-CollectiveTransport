@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(collective_RL_Transport)
 
-add_subdirectory(server)
+# add_subdirectory(server)
 
 # Leave for apple computers so that they can debug the code.
 if(APPLE)
@@ -41,7 +41,7 @@ find_package(Buzz REQUIRED)
 include_directories(${BUZZ_C_INCLUDE_DIR})
 
 # Set link to ModelServerClient
-link_directories(server/)
+#link_directories(server)
 
 # Compile code
 add_library(collectiveRlTransport SHARED collectiveRlTransport.h collectiveRlTransport.cpp)
@@ -54,8 +54,8 @@ target_link_libraries(collectiveRlTransport
   argos3plugin_simulator_genericrobot
   argos3plugin_simulator_media
   argos3plugin_simulator_qtopengl
-  argos3plugin_simulator_buzz
-  serverclient)
+  argos3plugin_simulator_buzz)
+  #serverclient)
 
 include(UseBuzz)
 

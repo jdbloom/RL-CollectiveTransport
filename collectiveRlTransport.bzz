@@ -1,40 +1,45 @@
 include "vec2.bzz"
 
+MAX_SPEED = 10.0
+MIN_SPEED = -MAX_SPEED
+
 function init(){
-  count = 0.0
   debug.trajectory.enable(100)
-	max_speed = 10.0
-	min_speed = -10.0
-	R_wheel = max_speed
-	L_wheel = max_speed
-  set_wheels(R_wheel, L_wheel)
-  gripper_flag = 0
+  R_wheel = MAX_SPEED
+  L_wheel = MAX_SPEED
+  set_wheels(L_wheel, R_wheel)
+  gripped = 0
 }
 
 function step(){
-  if (gripper_flag == 0){
+  if(gripped){
+    # TODO remove
+    L_increase = 0.0
+    R_increase = 0.0
+
+    # Grab R_increase and L_increase from PreStep() in the loopfunctions code.
+    # Make sure R_wheel and L_wheel are within bounds
+    L_wheel = L_wheel + L_increase
+    L_wheel = math.max(math.min(L_wheel, MAX_SPEED), MIN_SPEED)
+    R_wheel = R_wheel + R_increase
+    R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
+    # Set the wheel speeds
+    set_wheels(L_wheel, R_wheel)
+  }
+  else {
     if (proximity[0].value > 0.6){
       set_wheels(0.0, 0.0)
       gripper_lock()
       turret_disable()
-      gripper_flag = 1
+      gripped = 1
     }
-  }
-	else {
-		# Grab R_increase and L_increase from PreStep() in the loopfunctions code.
-		# Make sure R_wheel and L_wheel are within bounds
-		R_wheel = math.min(R_wheel + R_increase, max_speed)
-		R_wheel = math.max(R_wheel, min_speed)
-		L_wheel = math.min(L_wheel + L_increase, max_speed)
-		L_wheel = math.max(L_wheel, min_speed)
-		# Set the wheel speeds
-		set_wheels(R_wheel, L_wheel)
-	}
-
+  }  
 }
 
-function reset(){
-	log(id , " reset")
+function reset() {
+  log(id , " reset")
 }
 
-function destroy(){}
+function destroy() {
+  log(id , " destroy")
+}

@@ -3,14 +3,16 @@
 
 #include <buzz/argos/buzz_loop_functions.h>
 #include <argos3/core/utility/math/rng.h>
-#include "server/ModelServerClient.hpp"
+#include <argos3/plugins/simulator/entities/cylinder_entity.h>
+#include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
+//#include <server/ModelServerClient.hpp>
 
-class CCollectiveRlTransport : public CBuzzLoopFunctions {
+class CCollectiveRLTransport : public CBuzzLoopFunctions {
 
 public:
 
-   CCollectiveRlTransport() {}
-   virtual ~CCollectiveRlTransport() {}
+   CCollectiveRLTransport() {}
+   virtual ~CCollectiveRLTransport() {}
 
    /**
     * Executes user-defined initialization logic.
@@ -32,8 +34,8 @@ public:
    virtual void PreStep();
 
    /**
-    This function will grab the wheel speed for each robot from the
-    learning algorithm.
+      This function will grab the wheel speed for each robot from the
+      learning algorithm.
    */
    virtual void PostStep();
 
@@ -58,41 +60,83 @@ public:
     */
    virtual void Destroy();
 
- private:
+private:
+   
    /** The output file name */
-  std::string m_strOutFile;
-  /* the goal position */
-  CVector2 m_cGoal;
-  /* threshold to say that we are close enough to the goal */
-  double m_cThreshold;
-  UInt32 m_cActionSize;
-  UInt32 m_cObsSize;
-  UInt32 m_cNumRobots;
-  UInt32 m_cNumEpisodes;
-  UInt32 m_cEpisodeTime;
-  float m_cTimeOutReward;
-  float m_cGoalReward;
-  /** The output file stream */
-  std::ofstream m_cOutFile;
+   std::string m_strOutFile;
 
-  /** The Random Number Generator */
-  CRandom::CRNG* m_pcRNG;
+   /** The output file stream */
+   std::ofstream m_cOutFile;
 
+   /* the goal position */
+   CVector2 m_cGoal;
+   
+   /* threshold to say that we are close enough to the goal */
+   Real m_fThreshold;
 
+   /* Number of possible actions */
+   UInt32 m_unActionSize;
 
+   /* Number of observations */
+   UInt32 m_unObsSize;
+
+   /* Number of robots */
+   UInt32 m_unNumRobots;
+
+   /* Number of episodes */
+   UInt32 m_unNumEpisodes;
+
+   /* Time limit of each episode */
+   UInt32 m_unEpisodeTime;
+
+   /* Reward received upon timeout */
+   Real m_fTimeOutReward;
+
+   /* Reward received upon reaching goal */
+   Real m_fGoalReward;
+   
+   /** The Random Number Generator */
+   CRandom::CRNG* m_pcRNG;
+
+   /** Whether the cylinder reached the goal */
+   bool m_bReachedGoal;
+
+   /** Number of episodes */
+   UInt32 m_unEpisodeCounter;
+
+   /** Number of time steps left */
+   unsigned int m_unEpisodeTicksLeft;
+
+   /** Client for PyTorch server */
+   //ModelServerClient* m_pcPyTorch;
+
+   /** Initial cylinder positions (index = # episode) */
+   std::vector<CVector3> m_vecCylinderPos;
+
+   /** Initial robot positions (index = # episode, # robot) */
+   std::vector< std::vector<CVector3> > m_vecRobotPos;
+
+   /** Initial robot orientations (index = # episode, # robot) */
+   std::vector< std::vector<CQuaternion> > m_vecRobotOrient;
+
+   /** The cylinder */
+   CCylinderEntity* m_pcCylinder;
+
+   /** List of robots */
+   std::vector<CFootBotEntity*> m_vecRobots;
 
 private:
-   void PlaceRobots(const CVector2& cCenter,
-                    UInt32 newNRobots,
-                    UInt32 startID,
-                    bool makeRobots);
-  void PlaceCylinder();
+   
+   void CreateEntities();
+   
+   void PlaceRobots(UInt32 un_episode);
+   
+   void PlaceCylinder(UInt32 un_episode);
 
-  bool IsEpisodeFinished();
+   bool IsEpisodeFinished();
 
-  void GetObservations(UInt32 stateType, float* resultBuffer);
-  /* Socket */
-  ModelServerClient *client;
+   void GetObservations(UInt32 stateType, float* resultBuffer);
+
 };
 
 #endif

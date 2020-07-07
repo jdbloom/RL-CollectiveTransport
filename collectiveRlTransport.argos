@@ -39,9 +39,9 @@
   <!-- * Loop functions * -->
   <!-- ****************** -->
   <loop_functions library="build/libcollectiveRlTransport"
-                  label="collectiveRlTransport"
-                  data = "data.csv"
-                  robot_num = "1"
+                  label="collective_rl_transport"
+                  data_file = "data.csv"
+                  num_robots = "1"
                   goal = "4.5, 0"
                   threshold = "2"
                   obs_size = "9"
@@ -59,16 +59,16 @@
   <arena size="10, 5, 1" center="0,0,0.5">
 
     <box id="wall_north" size="10,0.1,0.5" movable="false">
-      <body position="0,2.5,0" orientation="0,0,0" />
+      <body position="0,2.4,0" orientation="0,0,0" />
     </box>
     <box id="wall_south" size="10,0.1,0.5" movable="false">
-      <body position="0,-2.5,0" orientation="0,0,0" />
+      <body position="0,-2.4,0" orientation="0,0,0" />
     </box>
     <box id="wall_east" size="0.1,5,0.5" movable="false">
-      <body position="5,0,0" orientation="0,0,0" />
+      <body position="4.9,0,0" orientation="0,0,0" />
     </box>
     <box id="wall_west" size="0.1,5,0.5" movable="false">
-      <body position="-5,0,0" orientation="0,0,0" />
+      <body position="-4.9,0,0" orientation="0,0,0" />
     </box>
 
 
@@ -106,7 +106,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <!--<qt-opengl>
+    <qt-opengl>
       <user_functions label="buzz_qt" />
       <camera>
          <placement idx="0" position="-11.3819,0.331892,4.83291" look_at="-10.6112,0.324185,4.19576" up="0.637119,-0.00637141,0.770739" lens_focal_length="20" />
@@ -123,7 +123,7 @@
          <placement idx="11" position="-2,0,2" look_at="0,0,0" up="0.707107,0,0.707107" lens_focal_length="20" />
       </camera>
 
-    </qt-opengl> -->
+    </qt-opengl>
   </visualization>
 
 </argos-configuration>

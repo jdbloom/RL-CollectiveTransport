@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 2.8.12)  # CMake version check
-project(serverclient)                   # Create project "server_client"
 set(CMAKE_CXX_STANDARD 14)              # Enable c++14 standard
 
 ## use the hint from above to find where 'zmq.hpp' is located
