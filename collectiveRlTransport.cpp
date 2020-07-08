@@ -1,44 +1,18 @@
 #include "collectiveRlTransport.h"
 
 #include <buzz/buzzvm.h>
-#include <argos3/core/simulator/simulator.h>
 
-#include <unordered_map>
+/****************************************/
+/****************************************/
 
 static const std::string FB_CONTROLLER = "fgc";
-static const Real WALL_THICKNESS            = 0.1;  // m
+static const Real WALL_THICKNESS            = 0.2;  // m
 static const Real CYLINDER_RADIUS           = 0.5;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6; // m
-static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS / 2;
-
-UInt32 episodeNum = 0;
-
-/****************************************/
-/****************************************/
-
-class GetRobotData : public CBuzzLoopFunctions::COperation{
-public:
-  virtual void operator()(const std::string& str_robot_id,
-                          buzzvm_t t_vm){
-
-      buzzobj_t tCount = BuzzGet(t_vm, "count");
-      // check if data is the correct type: in this case int
-      if(!buzzobj_isfloat(tCount)){
-        LOGERR << str_robot_id << ": variable 'count' has wrong type" <<std::endl;
-        return;
-      }
-      // Get the value
-      float nCount = buzzobj_getfloat(tCount);
-      // Add counter to list
-      m_mapCounters[str_robot_id] = nCount;
-  }
-
-public:
-  std::map<std::string, float> m_mapCounters;
-};
+static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
 /****************************************/
 /****************************************/
@@ -65,8 +39,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
    m_pcRNG = CRandom::CreateRNG("argos");
    /* Create and place stuff */
    CreateEntities();
-   PlaceCylinder(0);
-   PlaceRobots(0);
+   PlaceEntities(0);
    /* Call buzz Init() (HAS TO BE THE LAST LINE)*/
    CBuzzLoopFunctions::Init(t_tree);
 }
@@ -109,12 +82,12 @@ void CCollectiveRLTransport::CreateEntities() {
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
    CRange<Real> cXRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()     + CYLINDER_PLACEMENT_RADIUS + WALL_THICKNESS,
-      GetSpace().GetArenaLimits().GetMax().GetX() / 2 - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
+      -CYLINDER_PLACEMENT_RADIUS
       );
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS + WALL_THICKNESS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS - WALL_THICKNESS
+      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       cPos.Set(m_pcRNG->Uniform(cXRange),
@@ -138,7 +111,7 @@ void CCollectiveRLTransport::CreateEntities() {
          /* Add position */
          m_vecRobotPos.back().push_back(cPos);
          /* Calculate orientation to cylinder center */
-         CQuaternion cOrient(-j * cSlice + cOffset, CVector3::Z);
+         CQuaternion cOrient(j * cSlice + cOffset + CRadians::PI, CVector3::Z);
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
@@ -147,30 +120,24 @@ void CCollectiveRLTransport::CreateEntities() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PlaceCylinder(UInt32 un_episode) {
+void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
+   /* Make sure the episode is valid */
    if(un_episode >= m_unNumEpisodes) {
       THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
    }
-   if(!MoveEntity(m_pcCylinder->GetEmbodiedEntity(),
-                  m_vecCylinderPos[un_episode],
-                  CQuaternion())) {
-      THROW_ARGOSEXCEPTION("Cannot place cylinder at " << m_vecCylinderPos[un_episode]);
-   }
-}
-
-/****************************************/
-/****************************************/
-
-void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
-   if(un_episode >= m_unNumEpisodes) {
-      THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
-   }
-   for(size_t i = 0; i < m_unNumRobots; ++i) {
-      if(!MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(),
-                     m_vecRobotPos[un_episode][i],
-                     m_vecRobotOrient[un_episode][i])) {
-         THROW_ARGOSEXCEPTION("Cannot place foot-bot " << m_vecRobots[i]->GetId() << " at " << m_vecRobotPos[un_episode][i]);
-      }
+   /* The placements we chose are collision-free by construction, no need to
+    * check for collisions */
+   MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
+              m_vecCylinderPos[un_episode],      // position
+              CQuaternion(),                     // orientation
+              false,                             // not a check
+              true);                             // ignore collisions
+   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
+                 m_vecRobotPos[un_episode][i],        // position
+                 m_vecRobotOrient[un_episode][i],     // orientation
+                 false,                               // not a check
+                 true);                               // ignore collisions
    }
 }
 
@@ -178,7 +145,7 @@ void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
 /****************************************/
 
 void CCollectiveRLTransport::Reset() {
-
+   PlaceEntities(m_unEpisodeCounter);
 }
 
 /****************************************/
@@ -192,172 +159,175 @@ void CCollectiveRLTransport::Destroy() {
 /****************************************/
 
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
-  PutIncreases(std::map<std::string, float>& map_l_increase,
-	       std::map<std::string, float>& map_r_increase) :
-    m_mapLIncrease(map_l_increase),
-    m_mapRIncrease(map_r_increase)
-  {}
-  /** The action happens here */
-  virtual void operator()(const std::string& str_robot_id,
-			  buzzvm_t t_vm) {
-    BuzzPut(t_vm, "L_increase", static_cast<float>(m_mapLIncrease[str_robot_id]));
-    BuzzPut(t_vm, "R_increase", static_cast<float>(m_mapRIncrease[str_robot_id]));
-  }
-  std::map<std::string, float> m_mapLIncrease;
-  std::map<std::string, float> m_mapRIncrease;
+   
+   PutIncreases(std::vector<Real>& vec_l_increase,
+                std::vector<Real>& vec_r_increase) :
+      LIncrease(vec_l_increase),
+      RIncrease(vec_r_increase) {}
+   
+   virtual void operator()(const std::string& str_robot_id,
+                           buzzvm_t t_vm) {
+      BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
+      BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
+      DEBUG("[Ex] [t=%u] R#%u A = %f,%f\n",
+            CSimulator::GetInstance().GetSpace().GetSimulationClock(),
+            t_vm->robot,
+            LIncrease[t_vm->robot],
+            RIncrease[t_vm->robot]);
+   }
+   
+   std::vector<Real> LIncrease;
+   std::vector<Real> RIncrease;
 };
 
 /****************************************/
 /****************************************/
 
 struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
-   /** The action happens here */
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
-      m_mapLWheel[str_robot_id] = buzzobj_getfloat(BuzzGet(t_vm, "L_wheel"));
-      m_mapRWheel[str_robot_id] = buzzobj_getfloat(BuzzGet(t_vm, "R_wheel"));
+      LWheels.push_back(buzzobj_getfloat(BuzzGet(t_vm, "L_wheel")));
+      RWheels.push_back(buzzobj_getfloat(BuzzGet(t_vm, "R_wheel")));
    }
-   std::unordered_map<std::string, float> m_mapLWheel;
-   std::unordered_map<std::string, float> m_mapRWheel;
+   std::vector<float> LWheels;
+   std::vector<float> RWheels;
 };
 
 
-void CCollectiveRLTransport::GetObservations(UInt32 stateType, float* resultBuffer){
-  /* Get all the cylinder objects in the arena */
-  CSpace::TMapPerType& m_cCylinders = GetSpace().GetEntitiesByType("cylinder");
-  /* Create a new vector for the position of the cylinder*/
-  CVector2 cylinderPos;
-  /* For each individual Cylinder */
-  for(CSpace::TMapPerType::iterator it = m_cCylinders.begin();
-      it != m_cCylinders.end();
-      ++it) {
-     /* Get handle to Cylinder entity and controller */
-     CCylinderEntity& cCylinder = *any_cast<CCylinderEntity*>(it->second);
-     /* Set the vector equal to the X and Y position of the cylinder */
-     cylinderPos.Set(cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),
-              cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-  }
-  SInt32 id (0);
-  CSpace::TMapPerType& m_cFootbots = GetSpace().GetEntitiesByType("foot-bot");
-  for(CSpace::TMapPerType::iterator it = m_cFootbots.begin();
-     it != m_cFootbots.end();
-     ++it) {
-    /* Get the wheel speeds*/
-    GetWheelSpeeds cGWS;
-    BuzzForeachVM(cGWS);
-    float lWheel = cGWS.m_mapLWheel[it->first];
-    float rWheel = cGWS.m_mapRWheel[it->first];
-    /* Get handle to foot-bot entity and controller */
-    CFootBotEntity& cFootBot = *any_cast<CFootBotEntity*>(it->second);
-    CVector2 robotPos;
-    robotPos.Set(cFootBot.GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),
-             cFootBot.GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-    CQuaternion c_quaternion(cFootBot.GetEmbodiedEntity().GetOriginAnchor().Orientation);
-    CRadians cZAngle, cYAngle, cXAngle;
-    c_quaternion.ToEulerAngles(cZAngle, cYAngle, cXAngle);
-
-    float reward;
-    float done = 0;
-    // Get local Vector from Robot to Goal
-    CVector2 deltaRobotGoal = m_cGoal - robotPos;
-    float distRobotGoal = deltaRobotGoal.Length();
-    CRadians angRobotGoal = deltaRobotGoal.Angle() - cZAngle;
-    // Get local vector from Robot to Cylinder
-    CVector2 deltaRobotCylinder = cylinderPos - robotPos;
-    float distRobotCylinder = deltaRobotCylinder.Length();
-    CRadians angRobotCylinder = deltaRobotCylinder.Angle() - cZAngle;
-    // Get Distance from cylinder to goal
-    CVector2 deltaCylinderGoal = m_cGoal - cylinderPos;
-    float distCylinderGoal = deltaCylinderGoal.Length();
-
-    switch(stateType){
-      case 0:
-        reward = -1 + (1/(distRobotGoal*10));
-        break;
-      case 1:
-        reward = m_fGoalReward;
-        done = 1;
-        break;
-      case 2:
-        reward = m_fTimeOutReward;
-        done = 1;
-        break;
-    }
-    resultBuffer[id*m_unObsSize + 0] = distRobotGoal;
-    resultBuffer[id*m_unObsSize + 1] = (float)(ToDegrees(angRobotGoal).GetValue());
-    resultBuffer[id*m_unObsSize + 2] = lWheel;
-    resultBuffer[id*m_unObsSize + 3] = rWheel;
-    resultBuffer[id*m_unObsSize + 4] = distRobotCylinder;
-    resultBuffer[id*m_unObsSize + 5] = (float)(ToDegrees(angRobotCylinder).GetValue());
-    resultBuffer[id*m_unObsSize + 6] = distCylinderGoal;
-    resultBuffer[id*m_unObsSize + 7] = done;
-    resultBuffer[id*m_unObsSize + 8] = reward;
-    id ++;
-  }
+void CCollectiveRLTransport::GetObservations(std::vector<float>& vec_obs,
+                                             EEpisodeState e_state){
+   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      /* Get robot pose */
+      CVector3& cRobotPos =
+         m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Position;
+      CQuaternion& cRobotOrient =
+         m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+      CRadians cRobotZ, cRobotY, cRobotX;
+      cRobotOrient.ToEulerAngles(cRobotZ, cRobotY, cRobotX);
+      /* Get vector from robot to goal (robot-local) */
+      CVector2 cVecRobot2Goal(
+         m_cGoal.GetX() - cRobotPos.GetX(),
+         m_cGoal.GetY() - cRobotPos.GetY());
+      cVecRobot2Goal.Rotate(-cRobotZ);
+      /* Get vector from robot to cylinder (robot-local) */
+      CVector3& cCylinderPos =
+         m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+      CVector2 cVecRobot2Cylinder(
+         cCylinderPos.GetX() - cRobotPos.GetX(),
+         cCylinderPos.GetY() - cRobotPos.GetY());
+      cVecRobot2Cylinder.Rotate(-cRobotZ);
+      /* Get vector from cylinder to goal (robot-local) */
+      CVector2 cVecCylinder2Goal =
+         cVecRobot2Goal - cVecRobot2Cylinder;
+      /* Calculate reward and done state */
+      Real fReward;
+      Real fDone;
+      switch(e_state) {
+         case EPISODE_RUNNING: {
+            fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
+            fDone = 0.0;
+            break;
+         }
+         case EPISODE_SUCCESS: {
+            fReward = m_fGoalReward;
+            fDone = 1.0;
+            break;
+         }
+         case EPISODE_TIMEOUT: {
+            fReward = m_fTimeOutReward;
+            fDone = 1.0;
+            break;
+         }
+      }
+      /* Get the wheel speeds*/
+      GetWheelSpeeds cGWS;
+      BuzzForeachVM(cGWS);
+      Real fLWheel = cGWS.LWheels[i];
+      Real fRWheel = cGWS.RWheels[i];
+      /* Store the observations */
+      vec_obs[i * m_unObsSize + 0] = cVecRobot2Goal.Length();
+      vec_obs[i * m_unObsSize + 1] = ToDegrees(cVecRobot2Goal.Angle()).GetValue();
+      vec_obs[i * m_unObsSize + 2] = fLWheel;
+      vec_obs[i * m_unObsSize + 3] = fRWheel;
+      vec_obs[i * m_unObsSize + 4] = cVecRobot2Cylinder.Length();
+      vec_obs[i * m_unObsSize + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
+      vec_obs[i * m_unObsSize + 6] = cVecCylinder2Goal.Length();
+      vec_obs[i * m_unObsSize + 7] = fDone;
+      vec_obs[i * m_unObsSize + 8] = fReward;
+   }
 }
 
 /****************************************/
 /****************************************/
 
 void CCollectiveRLTransport::PreStep() {   
-   // /************************************
-   //  This function will grab the wheel speeds for each robot
-   //  for the current time step.
-   // ************************************/
-
-   // /*
-   // Observation:
-   // for each robot:
-   //   Vector between robot and goal
-   //   Left and Right wheel speeds
-   //   Distance from the cylinder to the goal
-   //   Vector from robot to cylinder
-   // */
-
-   // // PUSH DISTANCE AND ANGLE THROUGH SOCKET TO PYTHON
-   // float *observations = new float[m_unNumRobots*m_unObsSize];
-   // GetObservations(0, observations);
-   // m_pcPyTorch->SendAgentObservations(observations);
-   // delete observations;
-
-   // std::map<std::string, float> mapLIncrease;
-   // std::map<std::string, float> mapRIncrease;
-
-   // CSpace::TMapPerType& m_cFootbots = GetSpace().GetEntitiesByType("foot-bot");
-
-   // /* GRAB ACTIONS THROUGH SOCKET FROM PYTHON */
-   // UInt32 id (0);
-   // float *tempActions = m_pcPyTorch->GetAgentActions();
-   // m_cFootbots = GetSpace().GetEntitiesByType("foot-bot");
-   // for(CSpace::TMapPerType::iterator it = m_cFootbots.begin();
-   //    it != m_cFootbots.end();
-   //    ++it) {
-   //      float *tempAction = tempActions+(id*m_unActionSize);
-   //      CVector3 action;
-   //      if(tempAction[0] == 0){
-   //        action.SetX(-0.1);
-   //      }
-   //      else if(tempAction[0] == 1){
-   //        action.SetX(0.0);
-   //      }
-   //      else if(tempAction[0] == 2){
-   //        action.SetX(0.1);
-   //      }
-   //      if(tempAction[1] == 0){
-   //        action.SetY(-0.1);
-   //      }
-   //      else if(tempAction[1] == 1){
-   //        action.SetY(0.0);
-   //      }
-   //      else if(tempAction[1] == 2){
-   //        action.SetY(0.1);
-   //      }
-   //      action.SetZ(tempAction[2]);
-   //      mapLIncrease[it->first] = action.GetX(); //PLACE ACTUAL INCREASE HERE
-   //      mapRIncrease[it->first] = action.GetY(); //PLACE ACTUAL INCREASE HERE
-   //      id++;
-   // }
-   // BuzzForeachVM(PutIncreases(mapLIncrease, mapRIncrease));
+   /************************************
+    This function will grab the wheel speeds for each robot
+    for the current time step.
+   ************************************/
+   /*
+     Observation:
+     for each robot:
+     Vector between robot and goal
+     Left and Right wheel speeds
+     Distance from the cylinder to the goal
+     Vector from robot to cylinder
+   */
+   std::vector<float> vecObs(m_unNumRobots * m_unObsSize);
+   GetObservations(vecObs, EPISODE_RUNNING);
+   std::string OBS_DESCRIPTIONS[] = {
+      "robot2goal_dist",
+      "robot2goal_angle",
+      "lwheel",
+      "rwheel",
+      "robot2cylinder_dist",
+      "robot2cylinder_angle",
+      "cylinder2goal_dist",
+      "done",
+      "reward"
+   };
+   for(size_t i = 0; i < m_unNumRobots; ++i) {
+      for(size_t j = 0; j < m_unObsSize; ++j) {
+         DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), vecObs[i * m_unObsSize + j]);
+      }
+   }
+   DEBUG("\n");
+   /* Send observations to PyTorch */
+   // TODO m_pcPyTorch->SendAgentObservations(vecObs);
+   /* Get actions from PyTorch */
+   // TODO float* pfActions = m_pcPyTorch->GetAgentActions();
+   /* === PLACEHOLDER CODE STARTS === */
+   float* pfActions = new float[m_unNumRobots * m_unActionSize];
+   for(size_t i = 0; i < m_unNumRobots; ++i) {
+      float* pfAction = pfActions + i * m_unActionSize;
+      pfAction[0] = GetSpace().GetSimulationClock() % 3;
+      pfAction[1] = (GetSpace().GetSimulationClock() + 1) % 3;
+   }
+   for(size_t i = 0; i < m_unNumRobots; ++i) {
+      float* pfAction = pfActions + i * m_unActionSize;
+      DEBUG("[E%u] [t=%u] R#%zu A = %f,%f\n",
+            m_unEpisodeCounter,
+            GetSpace().GetSimulationClock(),
+            i,
+            pfAction[0],
+            pfAction[1]);
+   }
+   /* === PLACEHOLDER CODE ENDS === */
+   std::vector<Real> vecLIncrease(m_unNumRobots);
+   std::vector<Real> vecRIncrease(m_unNumRobots);
+   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      float* pfAction = pfActions + i * m_unActionSize;
+      Real fLIncrease, fRIncrease;
+      if(pfAction[0] == 0.0)      vecLIncrease[i] = -0.1;
+      else if(pfAction[0] == 1.0) vecLIncrease[i] =  0.0;
+      else if(pfAction[0] == 2.0) vecLIncrease[i] =  0.1;
+      if(pfAction[1] == 0.0)      vecRIncrease[i] = -0.1;
+      else if(pfAction[1] == 1.0) vecRIncrease[i] =  0.0;
+      else if(pfAction[1] == 2.0) vecRIncrease[i] =  0.1;
+   }
+   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease));
+   /* Cleanup */
+   delete[] pfActions;
 }
 
 /****************************************/
@@ -366,102 +336,95 @@ void CCollectiveRLTransport::PreStep() {
 bool CCollectiveRLTransport::IsExperimentFinished() {
    /* This is where we will check if the object breaks
       or if we have reached the goal position. */
-  if(m_unEpisodeCounter < m_unNumEpisodes){
-    return false;
-  }
-  else{
-    LOG<<"Ending Experiment"<<std::endl;
-    m_unEpisodeTicksLeft = m_unEpisodeTime;
-    return true;
-  }
+   if(m_unEpisodeCounter < m_unNumEpisodes) {
+      return false;
+   }
+   LOG << "Ending Experiment" << std::endl;
+   m_unEpisodeTicksLeft = m_unEpisodeTime;
+   return true;
 }
-  /**
-       * Executes user-defined logic when the experiment finishes.
-       * This method is called within CSimulator::IsExperimentFinished()
-       * as soon as its return value evaluates to <tt>true</tt>. This
-       * method is executed before Destroy().
-       * You can use this method to perform final calculations at the
-       * end of an experiment.
-       * The default implementation of this method does nothing.
-       */
+
+/****************************************/
+/****************************************/
+
+/**
+ * Executes user-defined logic when the experiment finishes.
+ * This method is called within CSimulator::IsExperimentFinished()
+ * as soon as its return value evaluates to <tt>true</tt>. This
+ * method is executed before Destroy().
+ * You can use this method to perform final calculations at the
+ * end of an experiment.
+ * The default implementation of this method does nothing.
+ */
 void CCollectiveRLTransport::PostExperiment() {
-  // LOG<<"Closing the Server"<<std::endl;
-  // m_pcPyTorch->CloseServer();
+   // LOG<<"Closing the Server"<<std::endl;
+   // m_pcPyTorch->CloseServer();
 }
+
+/****************************************/
+/****************************************/
 
 void CCollectiveRLTransport::PostStep() {
-  // CSpace::TMapPerType& m_cCylinders = GetSpace().GetEntitiesByType("cylinder");
-  // CVector2 cPos;
-  // for(CSpace::TMapPerType::iterator it = m_cCylinders.begin();
-  //     it != m_cCylinders.end();
-  //     ++it) {
-  //    /* Get handle to Cylinder entity */
-  //    CCylinderEntity& cCylinder = *any_cast<CCylinderEntity*>(it->second);
-  //    /* Set the new vector equal to the current position of the cylinder */
-  //    cPos.Set(cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),
-  //             cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-  // }
-
-  // if((cPos - m_cGoal).Length() < m_fThreshold) {
-  //   /*PUSH REWARD AND DONE THROUGH SOCKET TO PYTHON*/
-  //   m_bReachedGoal = true;
-  // }
-  // /* decrement remaining time */
-  // m_unEpisodeTicksLeft--;
-
-  // /*If we havnt reached our experiment limit then reset*/
-  // if(IsEpisodeFinished()){
-  //   argos::CSimulator& cSimulator = argos::CSimulator::GetInstance();
-  //     LOG << "Episode " << episodeNum <<" is done" << std::endl;
-  //   float *observations = new float[m_unNumRobots*m_unObsSize]; // Delete Me somewhere
-  //   GetObservations(m_bReachedGoal ? 1 : 2, observations);
-  //   m_pcPyTorch->SendAgentObservations(observations);
-  //   delete observations;
-  //   m_unEpisodeCounter ++;
-  //   m_unEpisodeTicksLeft = m_unEpisodeTime;
-  //   cSimulator.Reset();
-  //   /* Move cylinder and robots according to random position*/
-  //   CSpace::TMapPerType& m_cCylinders = GetSpace().GetEntitiesByType("cylinder");
-  //   /* Create a new vector for the position of the cylinder*/
-  //   CVector2 cPos;
-  //   /* For each individual Cylinder */
-  //   for(CSpace::TMapPerType::iterator it = m_cCylinders.begin();
-  //       it != m_cCylinders.end();
-  //       ++it) {
-  //         CCylinderEntity& cCylinder = *any_cast<CCylinderEntity*>(it->second);
-
-  //         if(!MoveEntity(
-  //           cCylinder.GetEmbodiedEntity(),                                       // move the body of the robot
-  //           m_vecCylinderPos->at(episodeNum),           // to this position
-  //           CQuaternion(ToRadians(CDegrees(180)), CVector3::Z),                                     // with this orientation
-  //           false)) {                                         // this is not a check, leave the robot there
-  //             LOGERR << "Can't move cylinder" << std::endl;
-  //         }
-  //           cPos.Set(cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),
-  //                    cCylinder.GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-  //   }
-  //   PlaceRobots(cPos, m_unNumRobots, 0, false);
-  //   episodeNum++;
-  //   cSimulator.Execute();
-
-  // }
+   /* Decrement remaining time */
+   --m_unEpisodeTicksLeft;
+   /* Check if the cylinder reached the goal */
+   CVector3& cCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector2 cCylinder2Goal(
+      m_cGoal.GetX() - cCylinderPos.GetX(),
+      m_cGoal.GetY() - cCylinderPos.GetY());
+   if(cCylinder2Goal.Length() < m_fThreshold) {
+      /* Push reward and done through socket to Python */
+      m_bReachedGoal = true;
+   }
+   /* If we haven't reached our experiment limit then reset */
+   if(IsEpisodeFinished()){
+      LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
+      std::vector<float> vecObs(m_unNumRobots * m_unObsSize);
+      GetObservations(vecObs, EPISODE_RUNNING);
+      std::string OBS_DESCRIPTIONS[] = {
+         "robot2goal_dist",
+         "robot2goal_angle",
+         "lwheel",
+         "rwheel",
+         "robot2cylinder_dist",
+         "robot2cylinder_angle",
+         "cylinder2goal_dist",
+         "done",
+         "reward"
+      };
+      for(size_t i = 0; i < m_unNumRobots; ++i) {
+         for(size_t j = 0; j < m_unObsSize; ++j) {
+            DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), vecObs[i * m_unObsSize + j]);
+         }
+      }
+      DEBUG("\n");
+      /* Send observations to PyTorch */
+      // TODO m_pcPyTorch->SendAgentObservations(observations);
+      /* Restart episode */
+      ++m_unEpisodeCounter;
+      if(m_unEpisodeCounter < m_unNumEpisodes) {
+         m_unEpisodeTicksLeft = m_unEpisodeTime;
+         GetSimulator().Reset();
+      }
+   }
 }
 
-bool CCollectiveRLTransport::IsEpisodeFinished(){
+/****************************************/
+/****************************************/
+
+bool CCollectiveRLTransport::IsEpisodeFinished() {
+   if(m_bReachedGoal) {
+      LOG << "Reached Goal" << std::endl;
+      m_bReachedGoal = false;
+      return true;
+   }
+   if(m_unEpisodeTicksLeft == 0) {
+      LOG << "We have timed out" << std::endl;
+      return true;
+   }
    return false;
-  // if(m_bReachedGoal){
-  //   LOG<<"Reached Goal"<<std::endl;
-  //   m_bReachedGoal = false;
-  //   return true;
-  // }
-  // else if(m_unEpisodeTicksLeft == 0){
-  //   LOG<<"We have timed out"<<std::endl;
-  //   return true;
-  // }
-  // else{
-  //   return false;
-  // }
 }
+
 /****************************************/
 /****************************************/
 

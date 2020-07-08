@@ -61,6 +61,14 @@ public:
    virtual void Destroy();
 
 private:
+
+   enum EEpisodeState {
+      EPISODE_RUNNING,
+      EPISODE_SUCCESS,
+      EPISODE_TIMEOUT
+   };
+   
+private:
    
    /** The output file name */
    std::string m_strOutFile;
@@ -129,13 +137,12 @@ private:
    
    void CreateEntities();
    
-   void PlaceRobots(UInt32 un_episode);
+   void PlaceEntities(UInt32 un_episode);
    
-   void PlaceCylinder(UInt32 un_episode);
-
    bool IsEpisodeFinished();
 
-   void GetObservations(UInt32 stateType, float* resultBuffer);
+   void GetObservations(std::vector<float>& vec_obs,
+                        EEpisodeState e_state);
 
 };
 
