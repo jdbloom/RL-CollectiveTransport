@@ -152,6 +152,7 @@ void CCollectiveRLTransport::Reset() {
 /****************************************/
 
 void CCollectiveRLTransport::Destroy() {
+   // TODO
    //delete m_pcPyTorch;
 }
 
@@ -288,7 +289,12 @@ void CCollectiveRLTransport::PreStep() {
    };
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       for(size_t j = 0; j < m_unObsSize; ++j) {
-         DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), vecObs[i * m_unObsSize + j]);
+         DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
+               m_unEpisodeCounter,
+               GetSpace().GetSimulationClock(),
+               i,
+               OBS_DESCRIPTIONS[j].c_str(),
+               vecObs[i * m_unObsSize + j]);
       }
    }
    DEBUG("\n");
@@ -305,7 +311,7 @@ void CCollectiveRLTransport::PreStep() {
    }
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = pfActions + i * m_unActionSize;
-      DEBUG("[E%u] [t=%u] R#%zu A = %f,%f\n",
+      DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
             m_unEpisodeCounter,
             GetSpace().GetSimulationClock(),
             i,
@@ -317,7 +323,6 @@ void CCollectiveRLTransport::PreStep() {
    std::vector<Real> vecRIncrease(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = pfActions + i * m_unActionSize;
-      Real fLIncrease, fRIncrease;
       if(pfAction[0] == 0.0)      vecLIncrease[i] = -0.1;
       else if(pfAction[0] == 1.0) vecLIncrease[i] =  0.0;
       else if(pfAction[0] == 2.0) vecLIncrease[i] =  0.1;
@@ -340,7 +345,6 @@ bool CCollectiveRLTransport::IsExperimentFinished() {
       return false;
    }
    LOG << "Ending Experiment" << std::endl;
-   m_unEpisodeTicksLeft = m_unEpisodeTime;
    return true;
 }
 
@@ -372,15 +376,13 @@ void CCollectiveRLTransport::PostStep() {
    CVector2 cCylinder2Goal(
       m_cGoal.GetX() - cCylinderPos.GetX(),
       m_cGoal.GetY() - cCylinderPos.GetY());
-   if(cCylinder2Goal.Length() < m_fThreshold) {
-      /* Push reward and done through socket to Python */
-      m_bReachedGoal = true;
-   }
+   m_bReachedGoal = (cCylinder2Goal.Length() < m_fThreshold);
    /* If we haven't reached our experiment limit then reset */
-   if(IsEpisodeFinished()){
+   if(IsEpisodeFinished()) {
       LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
       std::vector<float> vecObs(m_unNumRobots * m_unObsSize);
-      GetObservations(vecObs, EPISODE_RUNNING);
+      EEpisodeState eState = m_bReachedGoal ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
+      GetObservations(vecObs, eState);
       std::string OBS_DESCRIPTIONS[] = {
          "robot2goal_dist",
          "robot2goal_angle",
