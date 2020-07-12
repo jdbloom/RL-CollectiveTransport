@@ -42,8 +42,8 @@
                   num_robots = "1"
                   goal = "4.5, 0"
                   threshold = "2"
-                  num_episodes = "3"
-                  episode_time = "2"
+                  num_episodes = "10"
+                  episode_time = "10"
                   time_out_reward = "-1000"
                   goal_reward = "1000"
                   pytorch_url = "tcp://localhost:55555" />

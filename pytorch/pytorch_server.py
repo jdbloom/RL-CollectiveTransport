@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#import agent_dqn
+import python_code.agent_dqn as agent_dqn
 from collections import namedtuple
 from struct import pack, unpack, Struct
 import numpy as np
@@ -82,7 +82,7 @@ def serialize_actions(actions):
 #
 def ack():
     socket.send(b"ok")
-    
+
 #
 # Initialization
 #
@@ -126,7 +126,7 @@ while not exp_done:
             if not episode_done:
                 # Learn
                 # TODO
-                    actions = []
+                actions = []
                 for agent_model in models:
                     agent_model.receive_observation(obs, episode_done)
                     actions.append(agent_model.make_action(test=False))

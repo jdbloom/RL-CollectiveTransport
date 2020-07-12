@@ -11,8 +11,7 @@ import torch
 import torch.nn.functional as f
 import torch.optim as optim
 
-from agent import Agent
-from dqn_model import DQN
+from .dqn_model import DQN
 from matplotlib import pyplot as plt
 
 torch.manual_seed(595)
@@ -20,7 +19,7 @@ np.random.seed(595)
 random.seed(595)
 
 
-class Agent_DQN(Agent):
+class Agent_DQN():
 
     def __init__(self, num_agents, num_obs, num_actions, num_action_options, id):
         if torch.cuda.is_available():
@@ -95,6 +94,7 @@ class Agent_DQN(Agent):
     def train(self):
         self.last_N_rewards.append(self.running_reward)
         if self.episode_num > self.minimum_train_eps:
+            print("Learning!!")
             self.learn()
         else:
             self.loss_info.append(0)
@@ -175,6 +175,7 @@ class Agent_DQN(Agent):
         return np.array([l_wheel, r_wheel], dtype=np.float32)
 
     def receive_observation(self, state, done):
+        import ipdb; ipdb.set_trace()
         reward = state[-1] # Reward is always the last element of state
         state = np.array(state)
         if len(self.memory)==0:
