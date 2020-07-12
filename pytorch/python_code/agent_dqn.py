@@ -70,9 +70,9 @@ class Agent_DQN():
         self.epsilon_decay_step = 1.0/500000
 
         # Size_obs -2 to account for Done and reward not being known predictors
-        self.policy_net = DQN(self.size_obs - 2,
+        self.policy_net = DQN(self.size_obs - 1,
                               self.action_size, self.options_per_action).to(self.device)
-        self.target_net = DQN(self.size_obs - 2,
+        self.target_net = DQN(self.size_obs - 1,
                               self.action_size, self.options_per_action).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -85,16 +85,15 @@ class Agent_DQN():
         self.update_target_freqency = 100
         self.save_model_frequency = 50
 
-        self.model_file_path = 'trained_models/test/Q_Network_Parameters_'
-        self.data_file_path = 'Data/test/Model_Info/Model_Info_'+str(id)+'.json'
-        self.loss_file_path = 'Data/test/Loss_Info/Loss_Info_'+str(id)+'.json'
+        self.model_file_path = 'python_code/trained_models/test/Q_Network_Parameters_'
+        self.data_file_path = 'python_code/Data/test/Model_Info/Model_Info_'+str(id)+'.json'
+        self.loss_file_path = 'python_code/Data/test/Loss_Info/Loss_Info_'+str(id)+'.json'
         self.running_model_info = {}
         self.loss_info = []
 
     def train(self):
         self.last_N_rewards.append(self.running_reward)
         if self.episode_num > self.minimum_train_eps:
-            print("Learning!!")
             self.learn()
         else:
             self.loss_info.append(0)
@@ -107,7 +106,6 @@ class Agent_DQN():
         rewards = torch.from_numpy(np.stack(rewards)).to(self.device)
         next_states = torch.from_numpy(np.stack(next_states)).to(self.device)
         dones = torch.from_numpy(np.stack(dones)).to(self.device)
-
         states = states.float()
         next_states = next_states.float()
         qfun = self.policy_net(states)
@@ -133,6 +131,7 @@ class Agent_DQN():
             action: int
                 the predicted action from trained model
         """
+
         observation = self.memory[-1]
         observation = torch.tensor(observation[0], dtype=torch.float32).to(self.device)
         observation = observation.unsqueeze(0)
@@ -169,15 +168,13 @@ class Agent_DQN():
         7 - (1, 0)
         8 - (1, 1)
         '''
-
-        l_wheel = math.floor(selection_number/(self.options_per_action**0))
-        r_wheel = math.floor(selection_number/(self.options_per_action**1))
+        l_wheel = (math.floor(selection_number/self.options_per_action) - 1)/10.0
+        r_wheel = (selection_number%self.options_per_action - 1)/10.0
         return np.array([l_wheel, r_wheel], dtype=np.float32)
 
     def receive_observation(self, state, done):
-        import ipdb; ipdb.set_trace()
         reward = state[-1] # Reward is always the last element of state
-        state = np.array(state)
+        state = state[:-1]
         if len(self.memory)==0:
             last_state = state
         else: last_state = self.memory[-1][-2]
@@ -189,15 +186,15 @@ class Agent_DQN():
             print('Epsilon:', self.epsilon)
             print('Reward:', self.running_reward)
             if self.episode_num > self.minimum_train_eps:
-                self.running_model_info[self.episode_num] = [self.epsilon,\
+                self.running_model_info[self.episode_num] = [self.epsilon,
                                     self.running_reward]
                 with open(self.data_file_path, 'w') as fp:
                     json.dump(self.running_model_info, fp)
                 with open(self.loss_file_path, 'w') as lp:
                     json.dump(self.loss_info, lp)
             else:
-                self.running_model_info[self.episode_num] = [self.epsilon,\
-                                    self.running_reward, self.loss]
+                self.running_model_info[self.episode_num] = [self.epsilon,
+                                    self.running_reward]
                 with open(self.data_file_path, 'w') as fp:
                     json.dump(self.running_model_info, fp)
                 with open(self.loss_file_path, 'w') as lp:

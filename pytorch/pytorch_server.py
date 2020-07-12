@@ -123,18 +123,18 @@ while not exp_done:
         if not exp_done:
             # Receive the observations
             obs = parse_obs(msgs[1])
-            if not episode_done:
-                # Learn
-                # TODO
-                actions = []
-                for agent_model in models:
-                    agent_model.receive_observation(obs, episode_done)
-                    actions.append(agent_model.make_action(test=False))
-                # Send actions
-                socket.send(serialize_actions(actions))
-            else:
+            # Learn
+            # TODO
+            actions = []
+            for i, agent_model in enumerate(models):
+                agent_model.receive_observation(obs[i], episode_done)
+                actions.append(agent_model.make_action(test=False))
+            # Send actions
+            socket.send(serialize_actions(actions))
+            if episode_done:
+                # TODO Increment episode counter
                 print("Episode done\n")
-                ack()
+                #ack()
 
 #
 # All done
