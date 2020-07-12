@@ -132,9 +132,8 @@ while not exp_done:
             # Send actions
             socket.send(serialize_actions(actions))
             if episode_done:
-                # TODO Increment episode counter
+                [model.finish_episode() for model in models]
                 print("Episode done\n")
-                #ack()
 
 #
 # All done

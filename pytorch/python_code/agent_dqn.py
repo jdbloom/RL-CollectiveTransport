@@ -181,39 +181,6 @@ class Agent_DQN():
         self.push(last_state, self.last_action, reward, state, done)
         self.running_reward += self.gamma*reward
         self.train()
-        if done:
-            print('Episode Number:', self.episode_num)
-            print('Epsilon:', self.epsilon)
-            print('Reward:', self.running_reward)
-            if self.episode_num > self.minimum_train_eps:
-                self.running_model_info[self.episode_num] = [self.epsilon,
-                                    self.running_reward]
-                with open(self.data_file_path, 'w') as fp:
-                    json.dump(self.running_model_info, fp)
-                with open(self.loss_file_path, 'w') as lp:
-                    json.dump(self.loss_info, lp)
-            else:
-                self.running_model_info[self.episode_num] = [self.epsilon,
-                                    self.running_reward]
-                with open(self.data_file_path, 'w') as fp:
-                    json.dump(self.running_model_info, fp)
-                with open(self.loss_file_path, 'w') as lp:
-                    json.dump(self.loss_info, lp)
-
-            self.episode_num += 1
-            self.running_reward = 0
-            if self.episode_num > self.minimum_train_eps:
-                if self.episode_num % self.save_model_frequency == 0:
-                    avg_last_10 = sum(self.last_N_rewards)/10
-                    print("Average of last 10 rewards:\t",avg_last_10)
-                    self.rewards_N_ep.append(avg_last_10)
-                    print('------------ Saving Model -------------')
-                    torch.save(self.policy_net.state_dict(), self.model_file_path+str(self.episode_num)+'.pth')
-
-                if self.episode_num % self.update_target_freqency == 0:
-                    print('------------ UPDATING TARGET -------------')
-                    self.target_net.load_state_dict(self.policy_net.state_dict())
-
 
     def push(self, state, action, reward, next_state, done):
         """
@@ -237,3 +204,37 @@ class Agent_DQN():
 
     def init_game_setting(self):
         pass
+    
+    def finish_episode(self):
+        print('Episode Number:', self.episode_num)
+        print('Epsilon:', self.epsilon)
+        print('Reward:', self.running_reward)
+        if self.episode_num > self.minimum_train_eps:
+            self.running_model_info[self.episode_num] = [self.epsilon,
+                                self.running_reward]
+            with open(self.data_file_path, 'w') as fp:
+                json.dump(self.running_model_info, fp)
+            with open(self.loss_file_path, 'w') as lp:
+                json.dump(self.loss_info, lp)
+        else:
+            self.running_model_info[self.episode_num] = [self.epsilon,
+                                self.running_reward]
+            with open(self.data_file_path, 'w') as fp:
+                json.dump(self.running_model_info, fp)
+            with open(self.loss_file_path, 'w') as lp:
+                json.dump(self.loss_info, lp)
+
+        self.episode_num += 1
+        self.running_reward = 0
+        if self.episode_num > self.minimum_train_eps:
+            if self.episode_num % self.save_model_frequency == 0:
+                avg_last_10 = sum(self.last_N_rewards)/10
+                print("Average of last 10 rewards:\t",avg_last_10)
+                self.rewards_N_ep.append(avg_last_10)
+                print('------------ Saving Model -------------')
+                torch.save(self.policy_net.state_dict(), self.model_file_path+str(self.episode_num)+'.pth')
+
+            if self.episode_num % self.update_target_freqency == 0:
+                print('------------ UPDATING TARGET -------------')
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+    
