@@ -101,7 +101,7 @@ print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Create the models
 # TODO why doesn't the model take the number of actions as input? It's hardcoded in the Agent_DQN class...
-#models = [agent_dqn.Agent_DQN(params['num_robots'], params['num_obs'], i) for i in range(params['num_robots'])]
+models = [agent_dqn.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
 # Send acknowledgment
 ack()
 
@@ -126,10 +126,11 @@ while not exp_done:
             if not episode_done:
                 # Learn
                 # TODO
+                    actions = []
+                for agent_model in models:
+                    agent_model.receive_observation(obs, episode_done)
+                    actions.append(agent_model.make_action(test=False))
                 # Send actions
-                # TODO here I expect a list of numpy arrays, one per robot
-                # PLACEHOLDER code
-                actions = [np.array([1.0, 0.0]) for r in range(0, params['num_robots'])]
                 socket.send(serialize_actions(actions))
             else:
                 print("Episode done\n")

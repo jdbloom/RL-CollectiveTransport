@@ -22,7 +22,7 @@ random.seed(595)
 
 class Agent_DQN(Agent):
 
-    def __init__(self, num_agents, size_obs, id):
+    def __init__(self, num_agents, num_obs, num_actions, num_action_options, id):
         if torch.cuda.is_available():
             self.device = 'cuda'
             print("Using GPU!!!!")
@@ -46,10 +46,10 @@ class Agent_DQN(Agent):
         # See make_action() for parsing
 
         self.id = id
-        self.action_size = 2
-        self.options_per_action = 3
+        self.action_size = num_actions
+        self.options_per_action = num_action_options
         self.num_agents = num_agents
-        self.size_obs = size_obs
+        self.size_obs = num_obs
         self.memory = deque(maxlen=100000)
         self.last_action = 0.0
         # Can probably change these to lists... I think they were just used for plotting CHANGEME
@@ -174,7 +174,8 @@ class Agent_DQN(Agent):
         r_wheel = math.floor(selection_number/(self.options_per_action**1))
         return np.array([l_wheel, r_wheel], dtype=np.float32)
 
-    def receive_observation(self, state, done, reward):
+    def receive_observation(self, state, done):
+        reward = state[-1] # Reward is always the last element of state
         state = np.array(state)
         if len(self.memory)==0:
             last_state = state
