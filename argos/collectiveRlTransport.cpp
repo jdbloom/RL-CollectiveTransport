@@ -1,6 +1,7 @@
 #include "collectiveRlTransport.h"
 
 #include <buzz/buzzvm.h>
+#include <zmq.h>
 
 /****************************************/
 /****************************************/
@@ -14,34 +15,90 @@ static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6; // m
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
+static const std::string OBS_DESCRIPTIONS[] = {
+   "robot2goal_dist",
+   "robot2goal_angle",
+   "lwheel",
+   "rwheel",
+   "robot2cylinder_dist",
+   "robot2cylinder_angle",
+   "cylinder2goal_dist",
+   "reward"
+};
+
+static const std::string ACTIONS_DESCRIPTIONS[] = {
+   "lwheel",
+   "rwheel"
+};
+
+/****************************************/
+/****************************************/
+
+CCollectiveRLTransport::CCollectiveRLTransport() :
+   m_unNumObs(8),
+   m_unNumActions(2),
+   m_ptZMQContext(nullptr),
+   m_ptZMQSocket(nullptr) {
+}
+
 /****************************************/
 /****************************************/
 
 void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
-   /* Parse XML tree */
-   GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
-   GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
-   GetNodeAttribute(t_tree, "goal",            m_cGoal);
-   GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
-   GetNodeAttribute(t_tree, "obs_size",        m_unObsSize);
-   GetNodeAttribute(t_tree, "action_size",     m_unActionSize);
-   GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
-   GetNodeAttribute(t_tree, "episode_time",    m_unEpisodeTime);
-   GetNodeAttribute(t_tree, "time_out_reward", m_fTimeOutReward);
-   GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
-   m_bReachedGoal = false;
-   m_unEpisodeCounter = 0;
-   m_unEpisodeTicksLeft = m_unEpisodeTime;
-   /* Connect to PyTorch */
-   // TODO
-   //m_pcPyTorch = new ModelServerClient(55555, 55555, m_unNumRobots, m_unObsSize, m_unActionSize);
-   /* Create a new RNG */
-   m_pcRNG = CRandom::CreateRNG("argos");
-   /* Create and place stuff */
-   CreateEntities();
-   PlaceEntities(0);
-   /* Call buzz Init() (HAS TO BE THE LAST LINE)*/
-   CBuzzLoopFunctions::Init(t_tree);
+   try {
+      /* Parse XML tree */
+      GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
+      GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
+      GetNodeAttribute(t_tree, "goal",            m_cGoal);
+      GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
+      GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
+      GetNodeAttribute(t_tree, "episode_time",    m_unEpisodeTime);
+      GetNodeAttribute(t_tree, "time_out_reward", m_fTimeOutReward);
+      GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
+      std::string strPyTorchURL;
+      GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
+      /*
+       * Connect to PyTorch
+       */
+      /* Create context */
+      m_ptZMQContext = zmq_ctx_new();
+      if(m_ptZMQContext == nullptr) {
+         THROW_ARGOSEXCEPTION("Cannot create ZeroMQ context: " << zmq_strerror(errno));
+      }
+      /* Create context */
+      m_ptZMQSocket = zmq_socket(m_ptZMQContext, ZMQ_REQ);
+      if(m_ptZMQSocket == nullptr) {
+         THROW_ARGOSEXCEPTION("Cannot create ZeroMQ socket: " << zmq_strerror(errno));
+      }
+      /*
+       * This call returns success even when the server is down.
+       * Usually a failed connection is detected when the first data is sent.
+       * This weird behavior is a design choice of ZeroMQ.
+       */
+      if(zmq_connect(m_ptZMQSocket, strPyTorchURL.c_str()) != 0) {
+         THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
+      }
+      /* Send parameters */
+      ZMQSendParams();
+      LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
+      /* Initialize episode-related variables */
+      m_bReachedGoal = false;
+      m_unEpisodeCounter = 0;
+      m_unEpisodeTicksLeft = m_unEpisodeTime;
+      /* Create structures for observations and actions */
+      m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
+      m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
+      /* Create a new RNG */
+      m_pcRNG = CRandom::CreateRNG("argos");
+      /* Create and place stuff */
+      CreateEntities();
+      PlaceEntities(0);
+      /* Call buzz Init() (HAS TO BE THE LAST LINE) */
+      CBuzzLoopFunctions::Init(t_tree);
+   }
+   catch(CARGoSException& ex) {
+      THROW_ARGOSEXCEPTION_NESTED("while initializing the loop functions", ex);
+   }
 }
 
 /****************************************/
@@ -152,8 +209,10 @@ void CCollectiveRLTransport::Reset() {
 /****************************************/
 
 void CCollectiveRLTransport::Destroy() {
-   // TODO
-   //delete m_pcPyTorch;
+   /* Disconnect and get rid of the ZeroMQ socket */
+   if(m_ptZMQSocket) zmq_close(m_ptZMQSocket);
+   /* Get rid of the ZeroMQ context */
+   if(m_ptZMQContext) zmq_ctx_destroy(m_ptZMQContext);
 }
 
 /****************************************/
@@ -170,7 +229,7 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
                            buzzvm_t t_vm) {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
-      DEBUG("[Ex] [t=%u] R#%u A = %f,%f\n",
+      DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
@@ -195,8 +254,7 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 };
 
 
-void CCollectiveRLTransport::GetObservations(std::vector<float>& vec_obs,
-                                             EEpisodeState e_state){
+void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       /* Get robot pose */
       CVector3& cRobotPos =
@@ -220,23 +278,19 @@ void CCollectiveRLTransport::GetObservations(std::vector<float>& vec_obs,
       /* Get vector from cylinder to goal (robot-local) */
       CVector2 cVecCylinder2Goal =
          cVecRobot2Goal - cVecRobot2Cylinder;
-      /* Calculate reward and done state */
+      /* Calculate reward */
       Real fReward;
-      Real fDone;
       switch(e_state) {
          case EPISODE_RUNNING: {
             fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
-            fDone = 0.0;
             break;
          }
          case EPISODE_SUCCESS: {
             fReward = m_fGoalReward;
-            fDone = 1.0;
             break;
          }
          case EPISODE_TIMEOUT: {
             fReward = m_fTimeOutReward;
-            fDone = 1.0;
             break;
          }
       }
@@ -246,15 +300,14 @@ void CCollectiveRLTransport::GetObservations(std::vector<float>& vec_obs,
       Real fLWheel = cGWS.LWheels[i];
       Real fRWheel = cGWS.RWheels[i];
       /* Store the observations */
-      vec_obs[i * m_unObsSize + 0] = cVecRobot2Goal.Length();
-      vec_obs[i * m_unObsSize + 1] = ToDegrees(cVecRobot2Goal.Angle()).GetValue();
-      vec_obs[i * m_unObsSize + 2] = fLWheel;
-      vec_obs[i * m_unObsSize + 3] = fRWheel;
-      vec_obs[i * m_unObsSize + 4] = cVecRobot2Cylinder.Length();
-      vec_obs[i * m_unObsSize + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
-      vec_obs[i * m_unObsSize + 6] = cVecCylinder2Goal.Length();
-      vec_obs[i * m_unObsSize + 7] = fDone;
-      vec_obs[i * m_unObsSize + 8] = fReward;
+      m_vecObs[i * m_unNumObs + 0] = cVecRobot2Goal.Length();
+      m_vecObs[i * m_unNumObs + 1] = ToDegrees(cVecRobot2Goal.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 2] = fLWheel;
+      m_vecObs[i * m_unNumObs + 3] = fRWheel;
+      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
+      m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
+      m_vecObs[i * m_unNumObs + 7] = fReward;
    }
 }
 
@@ -262,55 +315,25 @@ void CCollectiveRLTransport::GetObservations(std::vector<float>& vec_obs,
 /****************************************/
 
 void CCollectiveRLTransport::PreStep() {   
-   /************************************
-    This function will grab the wheel speeds for each robot
-    for the current time step.
-   ************************************/
-   /*
-     Observation:
-     for each robot:
-     Vector between robot and goal
-     Left and Right wheel speeds
-     Distance from the cylinder to the goal
-     Vector from robot to cylinder
-   */
-   std::vector<float> vecObs(m_unNumRobots * m_unObsSize);
-   GetObservations(vecObs, EPISODE_RUNNING);
-   std::string OBS_DESCRIPTIONS[] = {
-      "robot2goal_dist",
-      "robot2goal_angle",
-      "lwheel",
-      "rwheel",
-      "robot2cylinder_dist",
-      "robot2cylinder_angle",
-      "cylinder2goal_dist",
-      "done",
-      "reward"
-   };
+   GetObservations(EPISODE_RUNNING);
    for(size_t i = 0; i < m_unNumRobots; ++i) {
-      for(size_t j = 0; j < m_unObsSize; ++j) {
+      for(size_t j = 0; j < m_unNumObs; ++j) {
          DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
                m_unEpisodeCounter,
                GetSpace().GetSimulationClock(),
                i,
                OBS_DESCRIPTIONS[j].c_str(),
-               vecObs[i * m_unObsSize + j]);
+               m_vecObs[i * m_unNumObs + j]);
       }
    }
    DEBUG("\n");
    /* Send observations to PyTorch */
-   // TODO m_pcPyTorch->SendAgentObservations(vecObs);
+   ZMQSendEpisodeState(EPISODE_RUNNING);
+   ZMQSendObservations();
    /* Get actions from PyTorch */
-   // TODO float* pfActions = m_pcPyTorch->GetAgentActions();
-   /* === PLACEHOLDER CODE STARTS === */
-   float* pfActions = new float[m_unNumRobots * m_unActionSize];
+   ZMQGetActions();
    for(size_t i = 0; i < m_unNumRobots; ++i) {
-      float* pfAction = pfActions + i * m_unActionSize;
-      pfAction[0] = GetSpace().GetSimulationClock() % 3;
-      pfAction[1] = (GetSpace().GetSimulationClock() + 1) % 3;
-   }
-   for(size_t i = 0; i < m_unNumRobots; ++i) {
-      float* pfAction = pfActions + i * m_unActionSize;
+      float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
             m_unEpisodeCounter,
             GetSpace().GetSimulationClock(),
@@ -318,11 +341,10 @@ void CCollectiveRLTransport::PreStep() {
             pfAction[0],
             pfAction[1]);
    }
-   /* === PLACEHOLDER CODE ENDS === */
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
-      float* pfAction = pfActions + i * m_unActionSize;
+      float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       if(pfAction[0] == 0.0)      vecLIncrease[i] = -0.1;
       else if(pfAction[0] == 1.0) vecLIncrease[i] =  0.0;
       else if(pfAction[0] == 2.0) vecLIncrease[i] =  0.1;
@@ -331,8 +353,6 @@ void CCollectiveRLTransport::PreStep() {
       else if(pfAction[1] == 2.0) vecRIncrease[i] =  0.1;
    }
    BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease));
-   /* Cleanup */
-   delete[] pfActions;
 }
 
 /****************************************/
@@ -361,8 +381,8 @@ bool CCollectiveRLTransport::IsExperimentFinished() {
  * The default implementation of this method does nothing.
  */
 void CCollectiveRLTransport::PostExperiment() {
-   // LOG<<"Closing the Server"<<std::endl;
-   // m_pcPyTorch->CloseServer();
+   LOG<<"Closing the Server"<<std::endl;
+   ZMQSendTermination();
 }
 
 /****************************************/
@@ -372,36 +392,23 @@ void CCollectiveRLTransport::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
    /* Check if the cylinder reached the goal */
-   CVector3& cCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CVector2 cCylinder2Goal(
-      m_cGoal.GetX() - cCylinderPos.GetX(),
-      m_cGoal.GetY() - cCylinderPos.GetY());
-   m_bReachedGoal = (cCylinder2Goal.Length() < m_fThreshold);
+   m_bReachedGoal = CylinderAtTarget();
+   EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
       LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
-      std::vector<float> vecObs(m_unNumRobots * m_unObsSize);
-      EEpisodeState eState = m_bReachedGoal ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
-      GetObservations(vecObs, eState);
-      std::string OBS_DESCRIPTIONS[] = {
-         "robot2goal_dist",
-         "robot2goal_angle",
-         "lwheel",
-         "rwheel",
-         "robot2cylinder_dist",
-         "robot2cylinder_angle",
-         "cylinder2goal_dist",
-         "done",
-         "reward"
-      };
+      eState = m_bReachedGoal ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
+      GetObservations(eState);
       for(size_t i = 0; i < m_unNumRobots; ++i) {
-         for(size_t j = 0; j < m_unObsSize; ++j) {
-            DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), vecObs[i * m_unObsSize + j]);
+         for(size_t j = 0; j < m_unNumObs; ++j) {
+            DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), m_vecObs[i * m_unNumObs + j]);
          }
       }
       DEBUG("\n");
       /* Send observations to PyTorch */
-      // TODO m_pcPyTorch->SendAgentObservations(observations);
+      ZMQSendEpisodeState(eState);
+      ZMQSendObservations();
+      ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
       if(m_unEpisodeCounter < m_unNumEpisodes) {
@@ -409,6 +416,18 @@ void CCollectiveRLTransport::PostStep() {
          GetSimulator().Reset();
       }
    }
+}
+
+/****************************************/
+/****************************************/
+
+bool CCollectiveRLTransport::CylinderAtTarget() {
+   CVector3& cCylinderPos =
+      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector2 cCylinder2Goal(
+      m_cGoal.GetX() - cCylinderPos.GetX(),
+      m_cGoal.GetY() - cCylinderPos.GetY());
+   return cCylinder2Goal.Length() < m_fThreshold;
 }
 
 /****************************************/
@@ -425,6 +444,116 @@ bool CCollectiveRLTransport::IsEpisodeFinished() {
       return true;
    }
    return false;
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
+   unsigned char punDone[2] =
+      {
+         0,                            // experiment not done
+         (e_state != EPISODE_RUNNING), // episode done?
+      };
+   if(zmq_send(
+         m_ptZMQSocket,             // the socket
+         &punDone,                   // data pointer
+         sizeof(unsigned char) * 2, // data size in bytes
+         ZMQ_SNDMORE)               // another message will follow (observations)
+      < 0) {                        // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendTermination() {
+   unsigned char punDone[2] =
+      {
+         1, // experiment done
+         1, // episode done
+      };
+   if(zmq_send(
+         m_ptZMQSocket,             // the socket
+         &punDone,                  // data pointer
+         sizeof(unsigned char) * 2, // data size in bytes
+         0)                         // no more messages
+      < 0) {                        // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendParams() {
+   /* Make the parameter buffer */
+   std::vector<unsigned int> vecParams;
+   vecParams.push_back(m_unNumRobots);
+   vecParams.push_back(m_unNumObs);
+   vecParams.push_back(m_unNumActions);
+   DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
+   DEBUG("m_unNumObs     = %u\n", m_unNumObs);
+   DEBUG("m_unNumActions = %u\n", m_unNumActions);
+   /* Send the parameters */
+   if(zmq_send(
+         m_ptZMQSocket,                           // the socket
+         &vecParams[0],                           // data pointer
+         sizeof(unsigned int) * vecParams.size(), // data size in bytes
+         0)                                       // no special flags
+      < 0) {                                      // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send parameters to PyTorch: " << zmq_strerror(errno));
+   }
+   /* Wait for acknowledgment */
+   ZMQGetAck();
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendObservations() {
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<float*>(&m_vecObs[0]), // data pointer
+         sizeof(float) * m_vecObs.size(),  // data size in bytes
+         0)                                // no special flags
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQGetActions() {
+   /* Receive the message */
+   if(zmq_recv(
+         m_ptZMQSocket,                       // the socket
+         &m_vecActions[0],                    // data buffer
+         sizeof(float) * m_vecActions.size(), // data size in bytes
+         0)                                   // no special flags
+      < 0) {                                  // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot receive data from PyTorch: " << zmq_strerror(errno));
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQGetAck() {
+   DEBUG_FUNCTION_ENTER;
+   char pchAck[4];
+   /* Receive the message */
+   if(zmq_recv(
+         m_ptZMQSocket, // the socket
+         &pchAck,       // data buffer
+         4,             // data size in bytes
+         0)             // no special flags
+      < 0) {            // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot receive acknowledgment from PyTorch: " << zmq_strerror(errno));
+   }
+   DEBUG_FUNCTION_EXIT;
 }
 
 /****************************************/

@@ -11,7 +11,7 @@ class CCollectiveRLTransport : public CBuzzLoopFunctions {
 
 public:
 
-   CCollectiveRLTransport() {}
+   CCollectiveRLTransport();
    virtual ~CCollectiveRLTransport() {}
 
    /**
@@ -83,10 +83,10 @@ private:
    Real m_fThreshold;
 
    /* Number of possible actions */
-   UInt32 m_unActionSize;
+   UInt32 m_unNumActions;
 
    /* Number of observations */
-   UInt32 m_unObsSize;
+   UInt32 m_unNumObs;
 
    /* Number of robots */
    UInt32 m_unNumRobots;
@@ -115,9 +115,6 @@ private:
    /** Number of time steps left */
    unsigned int m_unEpisodeTicksLeft;
 
-   /** Client for PyTorch server */
-   //ModelServerClient* m_pcPyTorch;
-
    /** Initial cylinder positions (index = # episode) */
    std::vector<CVector3> m_vecCylinderPos;
 
@@ -133,16 +130,41 @@ private:
    /** List of robots */
    std::vector<CFootBotEntity*> m_vecRobots;
 
+   /** The vector of observations */
+   std::vector<float> m_vecObs;
+
+   /** The vector of actions */
+   std::vector<float> m_vecActions;
+
+   /** ZeroMQ context */
+   void* m_ptZMQContext;
+
+   /** ZeroMQ communication socket */
+   void* m_ptZMQSocket;
+
 private:
    
    void CreateEntities();
    
    void PlaceEntities(UInt32 un_episode);
+
+   bool CylinderAtTarget();
    
    bool IsEpisodeFinished();
 
-   void GetObservations(std::vector<float>& vec_obs,
-                        EEpisodeState e_state);
+   void GetObservations(EEpisodeState e_state);
+
+   void ZMQSendEpisodeState(EEpisodeState e_state);
+
+   void ZMQSendTermination();
+
+   void ZMQSendParams();
+
+   void ZMQSendObservations();
+
+   void ZMQGetActions();
+
+   void ZMQGetAck();
 
 };
 

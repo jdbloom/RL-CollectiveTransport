@@ -4,7 +4,7 @@ MAX_SPEED = 10.0
 MIN_SPEED = -MAX_SPEED
 
 function init(){
-  debug.trajectory.enable(100)
+  #debug.trajectory.enable(100)
   R_wheel = MAX_SPEED
   L_wheel = MAX_SPEED
   set_wheels(L_wheel, R_wheel)
