@@ -67,9 +67,9 @@ private:
       EPISODE_SUCCESS,
       EPISODE_TIMEOUT
    };
-   
+
 private:
-   
+
    /** The output file name */
    std::string m_strOutFile;
 
@@ -78,9 +78,18 @@ private:
 
    /* the goal position */
    CVector2 m_cGoal;
-   
+
    /* threshold to say that we are close enough to the goal */
    Real m_fThreshold;
+
+   /* number of episodes to tell when to decrease threshold */
+   UInt32 m_unDecThresholdTime;
+
+   /* amount to decrease threshold by */
+   Real m_fDecThreshold;
+
+   /* minimum threshold*/
+   Real m_fMinThreshold;
 
    /* Number of possible actions */
    UInt32 m_unNumActions;
@@ -102,7 +111,7 @@ private:
 
    /* Reward received upon reaching goal */
    Real m_fGoalReward;
-   
+
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
@@ -117,6 +126,9 @@ private:
 
    /** Initial cylinder positions (index = # episode) */
    std::vector<CVector3> m_vecCylinderPos;
+
+   /** Position of the cylinder from the previous time step*/
+   CVector3 m_cOldCylinderPos;
 
    /** Initial robot positions (index = # episode, # robot) */
    std::vector< std::vector<CVector3> > m_vecRobotPos;
@@ -133,6 +145,9 @@ private:
    /** The vector of observations */
    std::vector<float> m_vecObs;
 
+   /** The vector of rewards */
+   std::vector<float> m_vecRewards;
+
    /** The vector of actions */
    std::vector<float> m_vecActions;
 
@@ -143,13 +158,13 @@ private:
    void* m_ptZMQSocket;
 
 private:
-   
+
    void CreateEntities();
-   
+
    void PlaceEntities(UInt32 un_episode);
 
    bool CylinderAtTarget();
-   
+
    bool IsEpisodeFinished();
 
    void GetObservations(EEpisodeState e_state);
@@ -161,6 +176,8 @@ private:
    void ZMQSendParams();
 
    void ZMQSendObservations();
+
+   void ZMQSendRewards();
 
    void ZMQGetActions();
 

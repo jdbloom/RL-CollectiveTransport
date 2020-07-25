@@ -44,6 +44,7 @@ class Agent_DQN():
         # wheel speed changes
         # See make_action() for parsing
 
+        #TODO: Clean up variables
         self.id = id
         self.action_size = num_actions
         self.options_per_action = num_action_options
@@ -85,9 +86,9 @@ class Agent_DQN():
         self.update_target_freqency = 100
         self.save_model_frequency = 50
 
-        self.model_file_path = 'python_code/trained_models/test/Q_Network_Parameters_'
-        self.data_file_path = 'python_code/Data/test/Model_Info/Model_Info_'+str(id)+'.json'
-        self.loss_file_path = 'python_code/Data/test/Loss_Info/Loss_Info_'+str(id)+'.json'
+        self.model_file_path = 'python_code/trained_models/test1/Q_Network_Parameters_'
+        self.data_file_path = 'python_code/Data/test1/Model_Info/Model_Info_'+str(id)+'.json'
+        self.loss_file_path = 'python_code/Data/test1/Loss_Info/Loss_Info_'+str(id)+'.json'
         self.running_model_info = {}
         self.loss_info = []
 
@@ -96,27 +97,36 @@ class Agent_DQN():
         if self.episode_num > self.minimum_train_eps:
             self.learn()
         else:
-            self.loss_info.append(0)
+            self.loss_info.append(0) # TODO this is wrong... what should it be?
 
     def learn(self):
+        # Randomly sample replay buffer for size = batch_size
         sampled_batch = self.replay_buffer(self.batch_size)
+        # Unpack batch into states, actions, rewards, next states, and dones
         states, actions, rewards, next_states, dones = list(zip(*sampled_batch))
+        # Transform numpy to tensor
         states = torch.from_numpy(np.stack(states)).to(self.device)
         actions = torch.from_numpy(np.stack(actions)).to(self.device)
         rewards = torch.from_numpy(np.stack(rewards)).to(self.device)
         next_states = torch.from_numpy(np.stack(next_states)).to(self.device)
         dones = torch.from_numpy(np.stack(dones)).to(self.device)
-        states = states.float()
-        next_states = next_states.float()
+        # produce q function based on the states
         qfun = self.policy_net(states)
+        # get state-action values based on the actions taken
         state_action_values = qfun.gather(1, actions.unsqueeze(-1).long()).squeeze()
-
+        # Get predicted values from the target net based on next states
         next_state_values = self.target_net(next_states).max(1).values.detach()
+        # Calculate the TD error
         TD_error = rewards + self.gamma*next_state_values*(1-dones)
+        # TODO: Loss is noise at the moment, we need to revisit how this is calculated and if it makes sense for what we are doing.
         self.loss = f.smooth_l1_loss(state_action_values, TD_error)
+        # Clear the gradiants
         self.optimizer.zero_grad()
+        # Back propogate the loss
         self.loss.backward()
+        # TODO: What does this do?
         self.optimizer.step()
+        # Add store loss
         self.loss_info.append(self.loss.item())
 
 
@@ -139,10 +149,10 @@ class Agent_DQN():
         if not test:
             self.time_ticks += 1
             if np.random.rand() <= self.epsilon:
-                action = random.randrange(self.options_per_action**self.action_size)
+                action = random.randrange(self.options_per_action**self.action_size) #TODO: Is this correct?
             else:
                 with torch.no_grad():
-                    action = self.target_net(observation).detach().cpu().clone().numpy()
+                    action = self.target_net(observation).detach().cpu().clone().numpy() #WHY TARGET AND NOT POLICY???
                     action = np.argmax(action, axis=1)[0]
 
             if self.epsilon > self.epsilon_min:

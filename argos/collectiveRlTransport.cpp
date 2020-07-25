@@ -35,7 +35,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(8),
+   m_unNumObs(7),
    m_unNumActions(2),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -57,6 +57,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
+      m_fDecThreshold = 0.5;
+      m_unDecThresholdTime = 250; // Decrease Threshold every 250 episodes
+      m_fMinThreshold = 0.5;
       /*
        * Connect to PyTorch
        */
@@ -85,8 +88,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
       m_unEpisodeTicksLeft = m_unEpisodeTime;
-      /* Create structures for observations and actions */
+      /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
+      m_vecRewards.resize(m_unNumObs, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       /* Create a new RNG */
       m_pcRNG = CRandom::CreateRNG("argos");
@@ -182,6 +186,8 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    if(un_episode >= m_unNumEpisodes) {
       THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
    }
+   /* Get the old position of the cylinder*/
+   m_cOldCylinderPos = m_vecCylinderPos[un_episode];
    /* The placements we chose are collision-free by construction, no need to
     * check for collisions */
    MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
@@ -203,6 +209,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
 
 void CCollectiveRLTransport::Reset() {
    PlaceEntities(m_unEpisodeCounter);
+   m_bReachedGoal = false;
 }
 
 /****************************************/
@@ -219,23 +226,23 @@ void CCollectiveRLTransport::Destroy() {
 /****************************************/
 
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
-   
+
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase) {}
-   
+
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
-      DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
+      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
-            RIncrease[t_vm->robot]);
+            RIncrease[t_vm->robot]);*/
    }
-   
+
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
 };
@@ -276,13 +283,23 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          cCylinderPos.GetY() - cRobotPos.GetY());
       cVecRobot2Cylinder.Rotate(-cRobotZ);
       /* Get vector from cylinder to goal (robot-local) */
-      CVector2 cVecCylinder2Goal =
-         cVecRobot2Goal - cVecRobot2Cylinder;
+      CVector2 cVecCylinder2Goal
+         (m_cGoal.GetX() - cCylinderPos.GetX(), m_cGoal.GetY() - cCylinderPos.GetY());
+      /* Get the cosine similarity of the cylinder */
+      CVector2 cMotion(cCylinderPos.GetX() - m_cOldCylinderPos.GetX(), cCylinderPos.GetY() - m_cOldCylinderPos.GetY());
+      Real fDirection = 0;
+      if(cMotion.Length()>1e-4){
+        fDirection= cVecCylinder2Goal.DotProduct(cMotion) /
+                          (cVecCylinder2Goal.Length()*cMotion.Length());
+
+      }
       /* Calculate reward */
       Real fReward;
       switch(e_state) {
          case EPISODE_RUNNING: {
-            fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
+            //fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
+            /* Cost of living + direction x reward for moving */
+            fReward = -2 + fDirection;
             break;
          }
          case EPISODE_SUCCESS: {
@@ -294,6 +311,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
             break;
          }
       }
+      //DEBUG("cMotion = (%f,%f)\n", cMotion.GetX(), cMotion.GetY());
+      //DEBUG("cVecCylinder2Goal = (%f,%f)\n", cVecCylinder2Goal.GetX(), cVecCylinder2Goal.GetY());
+      //DEBUG("fDirection = %f\n", fDirection);
       /* Get the wheel speeds*/
       GetWheelSpeeds cGWS;
       BuzzForeachVM(cGWS);
@@ -307,16 +327,18 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
-      m_vecObs[i * m_unNumObs + 7] = fReward;
+      m_vecRewards[i] = fReward;
+
    }
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PreStep() {   
+void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
-   for(size_t i = 0; i < m_unNumRobots; ++i) {
+   m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       for(size_t j = 0; j < m_unNumObs; ++j) {
          DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
                m_unEpisodeCounter,
@@ -326,13 +348,14 @@ void CCollectiveRLTransport::PreStep() {
                m_vecObs[i * m_unNumObs + j]);
       }
    }
-   DEBUG("\n");
+   DEBUG("\n");*/
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
+   ZMQSendRewards();
    /* Get actions from PyTorch */
    ZMQGetActions();
-   for(size_t i = 0; i < m_unNumRobots; ++i) {
+   /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
             m_unEpisodeCounter,
@@ -340,17 +363,13 @@ void CCollectiveRLTransport::PreStep() {
             i,
             pfAction[0],
             pfAction[1]);
-   }
+   }*/
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
-      if(pfAction[0] == 0.0)      vecLIncrease[i] = -0.1;
-      else if(pfAction[0] == 1.0) vecLIncrease[i] =  0.0;
-      else if(pfAction[0] == 2.0) vecLIncrease[i] =  0.1;
-      if(pfAction[1] == 0.0)      vecRIncrease[i] = -0.1;
-      else if(pfAction[1] == 1.0) vecRIncrease[i] =  0.0;
-      else if(pfAction[1] == 2.0) vecRIncrease[i] =  0.1;
+      vecLIncrease[i] = pfAction[0];
+      vecRIncrease[i] = pfAction[1];
    }
    BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease));
 }
@@ -396,18 +415,27 @@ void CCollectiveRLTransport::PostStep() {
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
-      LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
+      LOG << "Episode " << m_unEpisodeCounter + 1 << " is done" << std::endl;
+      /* check to see if we need to decrease the threshold */
+      if((m_unEpisodeCounter+1) % m_unDecThresholdTime == 0){
+        if(m_fThreshold > m_fMinThreshold){
+          m_fThreshold = m_fThreshold - m_fDecThreshold;
+          LOG << "Updating Threshold to:"<< m_fThreshold <<std::endl;
+        }
+      }
+
       eState = m_bReachedGoal ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
       GetObservations(eState);
-      for(size_t i = 0; i < m_unNumRobots; ++i) {
+      /*for(size_t i = 0; i < m_unNumRobots; ++i) {
          for(size_t j = 0; j < m_unNumObs; ++j) {
             DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), m_vecObs[i * m_unNumObs + j]);
          }
       }
-      DEBUG("\n");
+      DEBUG("\n");*/
       /* Send observations to PyTorch */
       ZMQSendEpisodeState(eState);
       ZMQSendObservations();
+      ZMQSendRewards();
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -436,7 +464,6 @@ bool CCollectiveRLTransport::CylinderAtTarget() {
 bool CCollectiveRLTransport::IsEpisodeFinished() {
    if(m_bReachedGoal) {
       LOG << "Reached Goal" << std::endl;
-      m_bReachedGoal = false;
       return true;
    }
    if(m_unEpisodeTicksLeft == 0) {
@@ -450,15 +477,16 @@ bool CCollectiveRLTransport::IsEpisodeFinished() {
 /****************************************/
 
 void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
-   unsigned char punDone[2] =
+   unsigned char punDone[3] =
       {
          0,                            // experiment not done
          (e_state != EPISODE_RUNNING), // episode done?
+         m_bReachedGoal,               // reached goal?
       };
    if(zmq_send(
          m_ptZMQSocket,             // the socket
          &punDone,                   // data pointer
-         sizeof(unsigned char) * 2, // data size in bytes
+         sizeof(unsigned char) * 3, // data size in bytes
          ZMQ_SNDMORE)               // another message will follow (observations)
       < 0) {                        // >= 0 means success
       THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
@@ -469,15 +497,16 @@ void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
 /****************************************/
 
 void CCollectiveRLTransport::ZMQSendTermination() {
-   unsigned char punDone[2] =
+   unsigned char punDone[3] =
       {
          1, // experiment done
          1, // episode done
+         0, // No Reward
       };
    if(zmq_send(
          m_ptZMQSocket,             // the socket
          &punDone,                  // data pointer
-         sizeof(unsigned char) * 2, // data size in bytes
+         sizeof(unsigned char) * 3, // data size in bytes
          0)                         // no more messages
       < 0) {                        // >= 0 means success
       THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
@@ -493,9 +522,9 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unNumRobots);
    vecParams.push_back(m_unNumObs);
    vecParams.push_back(m_unNumActions);
-   DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
+   /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
-   DEBUG("m_unNumActions = %u\n", m_unNumActions);
+   DEBUG("m_unNumActions = %u\n", m_unNumActions);*/
    /* Send the parameters */
    if(zmq_send(
          m_ptZMQSocket,                           // the socket
@@ -517,11 +546,25 @@ void CCollectiveRLTransport::ZMQSendObservations() {
          m_ptZMQSocket,                    // the socket
          const_cast<float*>(&m_vecObs[0]), // data pointer
          sizeof(float) * m_vecObs.size(),  // data size in bytes
-         0)                                // no special flags
+         ZMQ_SNDMORE)                      // another message will follow (rewards)
       < 0) {                               // >= 0 means success
       THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
    }
 }
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendRewards(){
+  if (zmq_send_const(
+        m_ptZMQSocket,                        // the socket
+        const_cast<float*>(&m_vecRewards[0]), // data pointer
+        sizeof(float)*m_vecRewards.size(),    //data size in bytes
+        0)                                    // no special flags
+     < 0) {                                   // >= means success
+       THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+}
+
 
 /****************************************/
 /****************************************/

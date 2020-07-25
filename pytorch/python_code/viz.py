@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-path_to_json = 'Data/test'
-path_to_Model_Info_json = 'Data/test/Model_Info/'
-path_to_Loss_Info_json = 'Data/test/Loss_Info/'
+path_to_json = 'Data/test1'
+path_to_Model_Info_json = 'Data/test1/Model_Info/'
+path_to_Loss_Info_json = 'Data/test1/Loss_Info/'
 
 # Load all robot data
 json_Model_file_names = [pos_json for pos_json in os.listdir(path_to_Model_Info_json) if pos_json.endswith('.json')]

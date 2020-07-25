@@ -35,6 +35,7 @@ find_package(Lua53)
 include_directories(${LUA_INCLUDE_DIR})
 
 # Check for Buzz
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} /usr/local/share/buzz/cmake)
 find_package(Buzz REQUIRED)
 include_directories(${BUZZ_C_INCLUDE_DIR})
 
