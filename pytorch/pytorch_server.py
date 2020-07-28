@@ -134,6 +134,12 @@ if test:
 # Send acknowledgment
 ack()
 
+def handle_communications(agent_models):
+    for sender_id, sender_model in enumerate(models):
+        for recepient, messages in sender_model.mailbox.outbox.items():
+            for message in messages:
+                models[recepient].mailbox.receive_message(message, sender_id)
+        sender_model.mailbox.clear_outbox()
 #
 # Main loop
 #
@@ -199,11 +205,20 @@ while not exp_done:
                     new_observations = []
                     loss = []
                     r = [] # place holder to extract the values from the reward
+                    # Collect all messages to be sent
+                    handle_communications(models)
+                    
                     for i, agent_model in enumerate(models):
                         new_observations.append(obs[i])
                         reward = rewards[i]
+                        # Handle sending and receiving messages here !!!
+                        
                         if not test:
-                            agent_model.store_transition(observations[i], actions[i], reward, new_observations[i], episode_done)
+                            agent_model.store_transition(observations[i], 
+                                                         actions[i],
+                                                         reward,
+                                                         new_observations[i],
+                                                         episode_done)
                             loss.append(agent_model.doubleQLearn())
                         epsilon.append(agent_model.epsilon)
                         r.append(reward[0])

@@ -11,6 +11,7 @@ import torch
 import torch.nn.functional as f
 import torch.optim as optim
 
+from .mailbox import Mailbox
 from .dqn_model import DQN
 from matplotlib import pyplot as plt
 
@@ -46,6 +47,8 @@ class Agent_DQN():
 
         #TODO: Clean up variables
         self.id = id
+        # Mailbox for inter-agent communications        
+        self.mailbox = Mailbox(self.id)
         self.action_size = num_actions
         self.options_per_action = num_action_options
         self.num_agents = num_agents
@@ -247,4 +250,5 @@ class Agent_DQN():
             if self.episode_num % self.update_target_freqency == 0:
                 print('------------ UPDATING TARGET -------------')
                 self.target_net.load_state_dict(self.policy_net.state_dict())
+                
     
