@@ -123,8 +123,8 @@ print("  num_actions =", params['num_actions'])
 model_file_path = 'python_code/Data/test/Models/'
 data_file_path = 'python_code/Data/test/Data/'
 # Create the models for multi-agent individual model
-models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
-
+#models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
+# Create Single Model
 if test:
     for i, agent_model in enumerate(models):
         file_name = 'Model_'+str(i)+'_Episode_60'
@@ -207,14 +207,14 @@ while not exp_done:
                     r = [] # place holder to extract the values from the reward
                     # Collect all messages to be sent
                     handle_communications(models)
-                    
+
                     for i, agent_model in enumerate(models):
                         new_observations.append(obs[i])
                         reward = rewards[i]
                         # Handle sending and receiving messages here !!!
-                        
+
                         if not test:
-                            agent_model.store_transition(observations[i], 
+                            agent_model.store_transition(observations[i],
                                                          actions[i],
                                                          reward,
                                                          new_observations[i],
