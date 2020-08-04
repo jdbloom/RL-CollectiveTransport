@@ -41,9 +41,9 @@
                   data_file = "data.csv"
                   num_robots = "2"
                   goal = "4.5, 0"
-                  threshold = "1"
+                  threshold = "2"
                   num_episodes = "5000"
-                  episode_time = "10"
+                  episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
                   pytorch_url = "tcp://localhost:55555" />

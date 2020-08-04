@@ -57,8 +57,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
-      m_fDecThreshold = 0.5;
-      m_unDecThresholdTime = 250; // Decrease Threshold every 250 episodes
+      m_fDecThreshold = 0.1;
+      m_unDecThresholdTime = 100; // Decrease Threshold every 250 episodes
       m_fMinThreshold = 0.5;
       /*
        * Connect to PyTorch
