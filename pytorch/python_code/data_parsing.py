@@ -5,7 +5,7 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-path = 'Data/2_agent_single_model_1/Data/'
+path = 'Data/8_agent_single_model_single_step_learning/Data/'
 num_robots = 2
 
 file_names = []
@@ -43,7 +43,7 @@ last_10_reward = [sum(reward[i:i + 10])/10
           for i in last_10_axis[0:len(last_10_axis)-1]]
 
 plt.figure(num=None, figsize=(10, 5), dpi=80, facecolor='w', edgecolor='k')
-plt.title('Two Agent Tandem Double Deep Q-Learning\n with Curiculum Leanring')
+plt.title('Eight Agent Tandem Double Deep Q-Learning\n with Curiculum Leanring')
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
 s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
@@ -54,4 +54,4 @@ for i in range(0, min(math.floor(len(reward)/100), len(s))):
     plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig('Data/Figures/2_agent_Tandem_DDQN_Curriculum_Learning_1.png')
+plt.savefig('Data/Figures/8_agent_single_model_single_step_learning.png')

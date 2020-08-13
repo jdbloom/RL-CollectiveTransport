@@ -120,26 +120,26 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/test/Models/'
-data_file_path = 'python_code/Data/test/Data/'
+model_file_path = 'python_code/Data/8_agent_single_model_single_step_learning/Models/'
+data_file_path = 'python_code/Data/8_agent_single_model_single_step_learning/Data/'
 # Create the models for multi-agent individual model
 #models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
 # Create Single Model
+model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
 if test:
-    for i, agent_model in enumerate(models):
-        file_name = 'Model_'+str(i)+'_Episode_60'
-        path = file_path+file_name
-        agent_model.load_model(path)
+    file_name = 'Model_0_Episode_60'
+    path = file_path+file_name
+    model.load_model(path)
 
 # Send acknowledgment
 ack()
 
-def handle_communications(agent_models):
-    for sender_id, sender_model in enumerate(models):
-        for recepient, messages in sender_model.mailbox.outbox.items():
-            for message in messages:
-                models[recepient].mailbox.receive_message(message, sender_id)
-        sender_model.mailbox.clear_outbox()
+#def handle_communications(agent_models):
+#    for sender_id, sender_model in enumerate(models):
+#        for recepient, messages in sender_model.mailbox.outbox.items():
+#            for message in messages:
+#                models[recepient].mailbox.receive_message(message, sender_id)
+#        sender_model.mailbox.clear_outbox()
 #
 # Main loop
 #
@@ -164,7 +164,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'loss', 'termination'])
+        writer.writerow(['reward', 'epsilon', 'termination'])
 
         if not exp_done:
             time_steps = 0
@@ -177,7 +177,7 @@ while not exp_done:
             actions_to_take = []
             running_reward = 0
 
-            for i , agent_model in enumerate(models):
+            for i in range(params['num_robots']):
                 observations.append(obs[i])
                 reward = rewards[i]
             running_reward+=reward
@@ -191,8 +191,8 @@ while not exp_done:
 
                     time_steps += 1
                     # Get Actions
-                    for i , agent_model in enumerate(models):
-                        action, action_num = agent_model.choose_action(observations[i])
+                    for i in range(params['num_robots']):
+                        action, action_num = model.choose_action(observations[i])
                         actions_to_take.append(action)
                         actions.append(action_num)
                     # Take Step
@@ -206,30 +206,31 @@ while not exp_done:
                     loss = []
                     r = [] # place holder to extract the values from the reward
                     # Collect all messages to be sent
-                    handle_communications(models)
+                    #handle_communications(model)
 
-                    for i, agent_model in enumerate(models):
+                    for i in range(params['num_robots']):
                         new_observations.append(obs[i])
                         reward = rewards[i]
                         # Handle sending and receiving messages here !!!
 
                         if not test:
-                            agent_model.store_transition(observations[i],
+                            model.store_transition(observations[i],
                                                          actions[i],
                                                          reward,
                                                          new_observations[i],
                                                          episode_done)
-                            loss.append(agent_model.doubleQLearn())
-                        epsilon.append(agent_model.epsilon)
-                        r.append(reward[0])
 
+                        epsilon.append(model.epsilon)
+                        r.append(reward[0])
+                    if not test:
+                        model.doubleQLearn()
                     running_reward += reward
                     # Store New Observations
                     observations = new_observations
                     actions = []
                     actions_to_take = []
 
-                    writer.writerow([r, epsilon, loss, reached_goal])
+                    writer.writerow([r, epsilon, reached_goal])
 
 
                     if episode_done:
@@ -240,26 +241,25 @@ while not exp_done:
                         else:
                             print("Episode", ep_counter ,"reached goal")
 
-                        for i, agent_model in enumerate(models):
+                        for i in range(params['num_robots']):
                             print('Agent', i, 'reward %.1f' % running_reward,
-                                  'epsilon:%.2f' % agent_model.epsilon,
-                                  'steps:', agent_model.learn_step_counter)
-                            if ep_counter % 10 == 0:
-                                exp_mean_rewards.append(np.mean(exp_rewards))
-                                exp_rewards = []
-                                if exp_mean_rewards[-1] > high_score:
-                                    high_score = exp_mean_rewards[-1]
-                                    print('****************************************')
-                                    print('         NEW HIGH SCORE: %.2f'%high_score)
-                                    print('****************************************')
-                                    for i, agent_model in enumerate(models):
-                                        file_name = 'Model_'+str(i)+'_High_Score'
-                                        path = model_file_path+file_name
-                                        agent_model.save_model(path)
-                                file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
+                                  'epsilon:%.2f' % model.epsilon,
+                                  'steps:', model.learn_step_counter)
+                        if ep_counter % 10 == 0:
+                            exp_mean_rewards.append(np.mean(exp_rewards))
+                            exp_rewards = []
+                            if exp_mean_rewards[-1] > high_score:
+                                high_score = exp_mean_rewards[-1]
+                                print('****************************************')
+                                print('         NEW HIGH SCORE: %.2f'%high_score)
+                                print('****************************************')
+                                file_name = 'Model_'+str(i)+'_High_Score'
                                 path = model_file_path+file_name
-                                agent_model.save_model(path)
-                                print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+                                model.save_model(path)
+                            file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
+                            path = model_file_path+file_name
+                            model.save_model(path)
+                            print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
 
                         running_reward = 0
                         ack()

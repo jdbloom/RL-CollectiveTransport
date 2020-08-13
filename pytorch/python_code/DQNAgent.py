@@ -23,7 +23,7 @@ class Agent_DQN():
         self.lr = 0.0001
         self.epsilon = 1.0
         self.eps_min = 0.01
-        self.eps_dec = 1e-5
+        self.eps_dec = 1e-6
 
         self.batch_size = 32
 
@@ -144,7 +144,7 @@ class Agent_DQN():
         self.learn_step_counter+=1
 
         self.decrement_epsilon()
-        return loss.item()
+        #return loss.item()
 
     def save_model(self, path):
         self.q_eval.save_model(path)

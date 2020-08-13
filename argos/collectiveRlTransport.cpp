@@ -90,7 +90,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_unEpisodeTicksLeft = m_unEpisodeTime;
       /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
-      m_vecRewards.resize(m_unNumObs, 0.0);
+      m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       /* Create a new RNG */
       m_pcRNG = CRandom::CreateRNG("argos");
@@ -328,8 +328,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
       m_vecRewards[i] = fReward;
-
    }
+
 }
 
 /****************************************/
@@ -555,6 +555,7 @@ void CCollectiveRLTransport::ZMQSendObservations() {
 /****************************************/
 /****************************************/
 void CCollectiveRLTransport::ZMQSendRewards(){
+
   if (zmq_send_const(
         m_ptZMQSocket,                        // the socket
         const_cast<float*>(&m_vecRewards[0]), // data pointer
