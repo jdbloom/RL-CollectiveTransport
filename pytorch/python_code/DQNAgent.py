@@ -38,9 +38,8 @@ class Agent_DQN():
         self.q_eval = DeepQNetwork(self.lr, self.num_actions, self.num_observations, self.num_ops_per_action)
         self.q_next = DeepQNetwork(self.lr, self.num_actions, self.num_observations, self.num_ops_per_action)
 
-    def choose_action(self, observation):
-
-        if np.random.random() > self.epsilon:
+    def choose_action(self, observation, test):
+        if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             actions = self.q_eval.forward(state)
             action = T.argmax(actions).item()

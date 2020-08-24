@@ -39,16 +39,16 @@
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
-                  num_robots = "8"
+                  num_robots = "2"
                   goal = "4.5, 0"
-                  threshold = "2"
-                  num_episodes = "3000"
-                  episode_time = "4500"
-                  time_out_reward = "0"
-                  goal_reward = "0"
-                  threshold_freq = "1"
+                  threshold = "0.5"
+                  threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "0.5"
+                  num_episodes = "10"
+                  episode_time = "1500"
+                  time_out_reward = "0"
+                  goal_reward = "0"
                   pytorch_url = "tcp://localhost:55555" />
 
   <!-- *********************** -->

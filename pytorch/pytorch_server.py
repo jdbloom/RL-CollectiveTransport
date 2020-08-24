@@ -105,7 +105,7 @@ def ack():
 #
 # Initialization
 #
-test = False
+test = True
 # Create context
 context = zmq.Context()
 # Create socket
@@ -120,15 +120,15 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/8_agent_single_model_single_step_learning_4/Models/'
-data_file_path = 'python_code/Data/8_agent_single_model_single_step_learning_4/Data/'
+model_file_path = 'python_code/Data/4_agent_single_model_single_step_learning_2/Models/'
+data_file_path = 'python_code/Data/4_agent_single_model_testing/Data/'
 # Create the models for multi-agent individual model
 #models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
 # Create Single Model
 model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
 if test:
-    file_name = 'Model_0_Episode_60'
-    path = file_path+file_name
+    file_name = 'Model_3_Episode_1700'
+    path = model_file_path+file_name
     model.load_model(path)
 
 # Send acknowledgment
@@ -192,7 +192,7 @@ while not exp_done:
                     time_steps += 1
                     # Get Actions
                     for i in range(params['num_robots']):
-                        action, action_num = model.choose_action(observations[i])
+                        action, action_num = model.choose_action(observations[i], test)
                         actions_to_take.append(action)
                         actions.append(action_num)
                     # Take Step
