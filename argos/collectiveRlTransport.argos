@@ -46,6 +46,9 @@
                   episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
+                  threshold_freq = "1"
+                  threshold_dec = "0.1"
+                  min_threshold = "0.5"
                   pytorch_url = "tcp://localhost:55555" />
 
   <!-- *********************** -->
@@ -85,7 +88,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-      <!--<qt-opengl>
+      <qt-opengl>
         <user_functions label="buzz_qt" />
         <camera>
           <placement idx="0" position="-11.3819,0.331892,4.83291" look_at="-10.6112,0.324185,4.19576" up="0.637119,-0.00637141,0.770739" lens_focal_length="20" />
@@ -96,7 +99,7 @@
           <placement idx="5" position="-7.3203,0.0512491,0.50409" look_at="-7.3203,0.0512491,-0.49591" up="1,1.05818e-16,3.46945e-18" lens_focal_length="20" />
         </camera>
 
-      </qt-opengl>-->
+      </qt-opengl>
   </visualization>
 
 </argos-configuration>
