@@ -105,7 +105,10 @@ def ack():
 #
 # Initialization
 #
-test = True
+# Test the code? or should we be learning?
+test = False
+# Flag for CSRL or ILRL
+SingleModel = False
 # Create context
 context = zmq.Context()
 # Create socket
@@ -120,16 +123,25 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/4_agent_single_model_single_step_learning_2/Models/'
-data_file_path = 'python_code/Data/4_agent_single_model_single_step_learning_2/Data/'
-# Create the models for multi-agent individual model
-#models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
-# Create Single Model
-model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
+model_file_path = 'python_code/Data/2_agent_multi_model/Models/'
+data_file_path = 'python_code/Data/2_agent_multi_model/Data/'
+if SingleModel:
+    # Create Single Model
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
+else:
+    # Create the models for multi-agent individual model
+    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
+
 if test:
-    file_name = 'Model_3_Episode_1920'
-    path = model_file_path+file_name
-    model.load_model(path)
+    if SingleModel:
+        file_name = 'Model_3_Episode_1920'
+        path = model_file_path+file_name
+        model.load_model(path)
+    else:
+        for i, agent_model in enumerate(models):
+            file_name = 'Model_'+str(i)+'_Episode_60'
+            path = file_path+file_name
+            agent_model.load_model(path)
 
 # Send acknowledgment
 ack()
@@ -191,10 +203,16 @@ while not exp_done:
 
                     time_steps += 1
                     # Get Actions
-                    for i in range(params['num_robots']):
-                        action, action_num = model.choose_action(observations[i], test)
-                        actions_to_take.append(action)
-                        actions.append(action_num)
+                    if SingleModel:
+                        for i in range(params['num_robots']):
+                            action, action_num = model.choose_action(observations[i], test)
+                            actions_to_take.append(action)
+                            actions.append(action_num)
+                    else:
+                        for i , agent_model in enumerate(models):
+                            action, action_num = agent_model.choose_action(observations[i], test)
+                            actions_to_take.append(action)
+                            actions.append(action_num)
                     # Take Step
                     socket.send(serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
@@ -212,18 +230,35 @@ while not exp_done:
                         new_observations.append(obs[i])
                         reward = rewards[i]
                         # Handle sending and receiving messages here !!!
+                        if SingleModel:
+                            if not test:
+                                model.store_transition(observations[i],
+                                                             actions[i],
+                                                             reward,
+                                                             new_observations[i],
+                                                             episode_done)
 
-                        if not test:
-                            model.store_transition(observations[i],
-                                                         actions[i],
-                                                         reward,
-                                                         new_observations[i],
-                                                         episode_done)
+                            epsilon.append(model.epsilon)
+                            r.append(reward[0])
 
-                        epsilon.append(model.epsilon)
-                        r.append(reward[0])
+                    if not SingleModel:
+                        for i, agent_model in enumerate(models):
+                            if not test:
+                                agent_model.store_transition(observations[i],
+                                                             actions[i],
+                                                             reward,
+                                                             new_observations[i],
+                                                             episode_done)
+                                loss.append(agent_model.doubleQLearn())
+                            epsilon.append(agent_model.epsilon)
+                            r.append(reward[0])
+
                     if not test:
-                        model.doubleQLearn()
+                        if SingleModel:
+                            model.doubleQLearn()
+                        else:
+                            for i, agent_model in enumerate(models):
+                                agent_model.doubleQLearn()
                     running_reward += reward
                     # Store New Observations
                     observations = new_observations
@@ -240,26 +275,47 @@ while not exp_done:
                             print("Episode", ep_counter ,"timed out")
                         else:
                             print("Episode", ep_counter ,"reached goal")
-
-                        for i in range(params['num_robots']):
-                            print('Agent', i, 'reward %.1f' % running_reward,
-                                  'epsilon:%.2f' % model.epsilon,
-                                  'steps:', model.learn_step_counter)
-                        if ep_counter % 10 == 0:
-                            exp_mean_rewards.append(np.mean(exp_rewards))
-                            exp_rewards = []
-                            if exp_mean_rewards[-1] > high_score:
-                                high_score = exp_mean_rewards[-1]
-                                print('****************************************')
-                                print('         NEW HIGH SCORE: %.2f'%high_score)
-                                print('****************************************')
-                                file_name = 'Model_'+str(i)+'_High_Score'
+                        if SingleModel:
+                            for i in range(params['num_robots']):
+                                print('Agent', i, 'reward %.1f' % running_reward,
+                                      'epsilon:%.2f' % model.epsilon,
+                                      'steps:', model.learn_step_counter)
+                            if ep_counter % 10 == 0:
+                                exp_mean_rewards.append(np.mean(exp_rewards))
+                                exp_rewards = []
+                                if exp_mean_rewards[-1] > high_score and ep_counter > 1500:
+                                    high_score = exp_mean_rewards[-1]
+                                    print('****************************************')
+                                    print('         NEW HIGH SCORE: %.2f'%high_score)
+                                    print('****************************************')
+                                    file_name = 'Model_'+str(i)+'_High_Score'
+                                    path = model_file_path+file_name
+                                    model.save_model(path)
+                                file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
                                 path = model_file_path+file_name
                                 model.save_model(path)
-                            file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
-                            path = model_file_path+file_name
-                            model.save_model(path)
-                            print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+                                print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+                        else:
+                            for i, agent_model in enumerate(models):
+                                print('Agent', i, 'reward %.1f' % running_reward,
+                                      'epsilon:%.2f' % agent_model.epsilon,
+                                      'steps:', agent_model.learn_step_counter)
+                            if ep_counter % 10 == 0:
+                                exp_mean_rewards.append(np.mean(exp_rewards))
+                                exp_rewards = []
+                                if exp_mean_rewards[-1] > high_score:
+                                    high_score = exp_mean_rewards[-1]
+                                    print('****************************************')
+                                    print('         NEW HIGH SCORE: %.2f'%high_score)
+                                    print('****************************************')
+                                    for i, agent_model in enumerate(models):
+                                        file_name = 'Model_'+str(i)+'_High_Score'
+                                        path = model_file_path+file_name
+                                        agent_model.save_model(path)
+                                file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
+                                path = model_file_path+file_name
+                                agent_model.save_model(path)
+                                print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
 
                         running_reward = 0
                         ack()
