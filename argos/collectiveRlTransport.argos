@@ -41,6 +41,8 @@
                   data_file = "data.csv"
                   num_robots = "2"
                   max_robot_failures = "1"
+		  latest_failure_time = "1000"
+		  chance_failure = "0.5"
                   goal = "4.5, 0"
                   threshold = "0.5"
                   threshold_freq = "100"

@@ -5,7 +5,7 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-path = 'Data/2_agent_multi_model/Data/'
+path = 'Data/test/Data/'
 
 file_names = []
 for file in os.listdir(path):
@@ -55,4 +55,4 @@ for i in range(0, min(math.floor(len(reward)/100), len(s))):
     plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig('Data/Figures/2_agents_multi_model.png')
+plt.savefig('Data/Figures/test.png')

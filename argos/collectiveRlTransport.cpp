@@ -51,6 +51,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
+      GetNodeAttribute(t_tree, "latest_failure_time", m_unLatestFailureTime);
+      GetNodeAttribute(t_tree, "chance_failure", m_fChanceFailure);
       GetNodeAttribute(t_tree, "goal",            m_cGoal);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
       GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
@@ -100,6 +102,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Create and place stuff */
       CreateEntities();
       PlaceEntities(0);
+      /* Initialize the vector of robot failure times */
+      GenerateRobotFailure();
       /* Call buzz Init() (HAS TO BE THE LAST LINE) */
       CBuzzLoopFunctions::Init(t_tree);
    }
@@ -212,10 +216,40 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
 
 void CCollectiveRLTransport::GenerateRobotFailure(){
   /*
-
+    Mutates m_vecRobotFailures to have a new set of values. The index in the vector corresponds to the
+    number of a robot. The entry determines at which timestep the robot will fail. A time of -1 indicates
+    that robot will not fail this experiment.
   */
-  for(size_t i = 0; i < m_unNumRobots; ++i) {
 
+  // Below is a sampling without replacement algorithm. Indices is a collection of all unused robot indices.
+  std::vector<UInt32> indices;
+  UInt32 remainingIndices = m_unNumRobots;
+  SInt32 *robotFailureTimes = (SInt32 *) malloc(sizeof(SInt32) * m_unNumRobots);
+  for(size_t i = 0; i < m_unNumRobots; ++i) {
+    indices.push_back(i);
+  }
+  
+  CRange<Real> probabilityRange = CRange<Real>(0.0, 1.0);
+  CRange<UInt32> failureTimeRange = CRange<UInt32>(0, m_unLatestFailureTime);
+  for(size_t i = 0; i < m_unNumRobots; ++i) {
+    // Select a robot
+    CRange<UInt32> robotsRange = CRange<UInt32>(0, remainingIndices);
+    size_t chosenIndex = m_pcRNG->Uniform(robotsRange);
+    size_t chosenRobot = indices[chosenIndex];
+    // Remove the selected robot's index from the list of available choices
+    auto iterator = indices.begin();
+    std::advance(iterator, chosenIndex);
+    indices.erase(iterator);
+    remainingIndices--;
+    // with m_fChanceFailure probability, assign the robot a failure time. Otherwise it will not fail.
+    if (m_pcRNG->Uniform(probabilityRange) < m_fChanceFailure) {
+      robotFailureTimes[chosenRobot] = m_pcRNG->Uniform(failureTimeRange);
+    } else {
+      robotFailureTimes[chosenRobot] = -1;
+    }
+  }
+  m_vecRobotFailures.assign(robotFailureTimes, robotFailureTimes + m_unNumRobots);
+  
 }
 
 /****************************************/
@@ -224,6 +258,7 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
 void CCollectiveRLTransport::Reset() {
    PlaceEntities(m_unEpisodeCounter);
    m_bReachedGoal = false;
+   GenerateRobotFailure();
 }
 
 /****************************************/

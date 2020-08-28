@@ -123,8 +123,8 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/2_agent_multi_model/Models/'
-data_file_path = 'python_code/Data/2_agent_multi_model/Data/'
+model_file_path = 'python_code/Data/test/Models/'
+data_file_path = 'python_code/Data/test/Data/'
 if SingleModel:
     # Create Single Model
     model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)

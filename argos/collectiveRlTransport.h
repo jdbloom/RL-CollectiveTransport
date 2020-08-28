@@ -126,6 +126,12 @@ private:
    /*Max Number of robot failures*/
    UInt32 m_unMaxRobotFailures;
 
+   /* Latest time at which a robot can fail */
+   UInt32 m_unLatestFailureTime;
+
+   /*Failure Risk Per Robot*/
+   Real m_fChanceFailure;
+
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
@@ -172,7 +178,7 @@ private:
    void* m_ptZMQSocket;
 
    /** List of robot failure times: -1 = no failure **/
-   std::vector <Int32> m_vecRobotFailures;
+   std::vector <SInt32> m_vecRobotFailures;
 
 private:
 
