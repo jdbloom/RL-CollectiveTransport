@@ -50,6 +50,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Parse XML tree */
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
+      GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
       GetNodeAttribute(t_tree, "goal",            m_cGoal);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
       GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
@@ -204,6 +205,17 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                  false,                               // not a check
                  true);                               // ignore collisions
    }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::GenerateRobotFailure(){
+  /*
+
+  */
+  for(size_t i = 0; i < m_unNumRobots; ++i) {
+
 }
 
 /****************************************/

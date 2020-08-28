@@ -40,6 +40,7 @@
                   label="collective_rl_transport"
                   data_file = "data.csv"
                   num_robots = "2"
+                  max_robot_failures = "1"
                   goal = "4.5, 0"
                   threshold = "0.5"
                   threshold_freq = "100"

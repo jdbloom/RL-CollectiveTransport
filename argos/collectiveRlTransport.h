@@ -123,6 +123,9 @@ private:
    /* Reward received upon reaching goal */
    Real m_fGoalReward;
 
+   /*Max Number of robot failures*/
+   UInt32 m_unMaxRobotFailures;
+
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
@@ -168,11 +171,16 @@ private:
    /** ZeroMQ communication socket */
    void* m_ptZMQSocket;
 
+   /** List of robot failure times: -1 = no failure **/
+   std::vector <Int32> m_vecRobotFailures;
+
 private:
 
    void CreateEntities();
 
    void PlaceEntities(UInt32 un_episode);
+
+   void GenerateRobotFailure();
 
    bool CylinderAtTarget();
 
