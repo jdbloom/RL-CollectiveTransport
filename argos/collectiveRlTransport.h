@@ -5,7 +5,9 @@
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
+#include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 //#include <server/ModelServerClient.hpp>
+using namespace argos;
 
 class CCollectiveRLTransport : public CBuzzLoopFunctions {
 
@@ -59,6 +61,15 @@ public:
     * @see Init()
     */
    virtual void Destroy();
+
+   /**
+   * Returns the position of the goal and the current threshold
+   *
+   * For use in drawing the threshold on the floor
+   */
+   inline CVector3 GetGoal() const {
+     return CVector3(m_cGoal.GetX(), m_cGoal.GetY(), m_fThreshold);
+   }
 
 private:
 

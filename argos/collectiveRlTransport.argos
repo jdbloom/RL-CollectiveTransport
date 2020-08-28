@@ -39,7 +39,7 @@
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
-                  num_robots = "2"
+                  num_robots = "3"
                   goal = "4.5, 0"
                   threshold = "0.5"
                   threshold_freq = "100"
@@ -89,7 +89,7 @@
   <!-- ****************** -->
   <visualization>
       <qt-opengl>
-        <user_functions label="buzz_qt" />
+        <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
           <placement idx="0" position="-11.3819,0.331892,4.83291" look_at="-10.6112,0.324185,4.19576" up="0.637119,-0.00637141,0.770739" lens_focal_length="20" />
           <placement idx="1" position="-0.37833,-0.0908867,16.468" look_at="-0.37833,-0.0908867,15.468" up="0.999999,-0.00159265,0" lens_focal_length="20" />

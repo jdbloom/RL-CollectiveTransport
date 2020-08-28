@@ -3,7 +3,10 @@
 #
 add_library(collectiveRlTransport SHARED
   collectiveRlTransport.h
-  collectiveRlTransport.cpp)
+  collectiveRlTransport_qtuser_functions.h
+  collectiveRlTransport.cpp
+  collectiveRlTransport_qtuser_functions.cpp)
+  
 target_link_libraries(collectiveRlTransport
   ${BUZZ_LIBRARY}
   ${ZeroMQ_LINK_LIBRARIES}

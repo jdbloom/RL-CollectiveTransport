@@ -1,7 +1,8 @@
 #include "collectiveRlTransport.h"
-
 #include <buzz/buzzvm.h>
 #include <zmq.h>
+
+using namespace argos;
 
 /****************************************/
 /****************************************/

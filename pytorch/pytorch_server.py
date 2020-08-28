@@ -121,13 +121,13 @@ print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
 model_file_path = 'python_code/Data/4_agent_single_model_single_step_learning_2/Models/'
-data_file_path = 'python_code/Data/4_agent_single_model_testing/Data/'
+data_file_path = 'python_code/Data/4_agent_single_model_single_step_learning_2/Data/'
 # Create the models for multi-agent individual model
 #models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
 # Create Single Model
 model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
 if test:
-    file_name = 'Model_3_Episode_1700'
+    file_name = 'Model_3_Episode_1920'
     path = model_file_path+file_name
     model.load_model(path)
 
