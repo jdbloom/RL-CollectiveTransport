@@ -104,6 +104,10 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       PlaceEntities(0);
       /* Initialize the vector of robot failure times */
       GenerateRobotFailure();
+      for(size_t i = 0; i < m_unNumRobots; i++){
+        LOG<< m_vecRobotFailures[i]<<" ";
+      }
+      LOG<<std::endl;
       /* Call buzz Init() (HAS TO BE THE LAST LINE) */
       CBuzzLoopFunctions::Init(t_tree);
    }
@@ -222,13 +226,14 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
   */
 
   // Below is a sampling without replacement algorithm. Indices is a collection of all unused robot indices.
+  LOG<<"GENERATING FAILURES"<<std::endl;
   std::vector<UInt32> indices;
   UInt32 remainingIndices = m_unNumRobots;
   SInt32 *robotFailureTimes = (SInt32 *) malloc(sizeof(SInt32) * m_unNumRobots);
   for(size_t i = 0; i < m_unNumRobots; ++i) {
     indices.push_back(i);
   }
-  
+
   CRange<Real> probabilityRange = CRange<Real>(0.0, 1.0);
   CRange<UInt32> failureTimeRange = CRange<UInt32>(0, m_unLatestFailureTime);
   for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -249,7 +254,7 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
     }
   }
   m_vecRobotFailures.assign(robotFailureTimes, robotFailureTimes + m_unNumRobots);
-  
+
 }
 
 /****************************************/
@@ -259,6 +264,10 @@ void CCollectiveRLTransport::Reset() {
    PlaceEntities(m_unEpisodeCounter);
    m_bReachedGoal = false;
    GenerateRobotFailure();
+   for(size_t i = 0; i < m_unNumRobots; i++){
+     LOG<< m_vecRobotFailures[i]<<" ";
+   }
+   LOG<<std::endl;
 }
 
 /****************************************/
@@ -277,14 +286,17 @@ void CCollectiveRLTransport::Destroy() {
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
-                std::vector<Real>& vec_r_increase) :
+                std::vector<Real>& vec_r_increase,
+                std::vector<UInt32>& vec_faiulure) :
       LIncrease(vec_l_increase),
-      RIncrease(vec_r_increase) {}
+      RIncrease(vec_r_increase),
+      Failure(vec_faiulure) {}
 
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
+      BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
@@ -294,6 +306,7 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
+   std::vector<UInt32> Failure;
 };
 
 /****************************************/
@@ -346,11 +359,11 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Check if the robot has failed */
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
-      if (m_vecRobotFailures[i] != -1 && m_vecRobotFailures[i] > ticksElapsed) {
-	hasFailed = 1;
+      if (m_vecRobotFailures[i] != -1 && m_vecRobotFailures[i] <= ticksElapsed) {
+	       hasFailed = 1;
       }
-      
-      
+
+
       /* Calculate reward */
       Real fReward;
       switch(e_state) {
@@ -425,12 +438,14 @@ void CCollectiveRLTransport::PreStep() {
    }*/
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
+   std::vector<UInt32> vecFailure(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       vecLIncrease[i] = pfAction[0];
       vecRIncrease[i] = pfAction[1];
+      vecFailure[i] = pfAction[2];
    }
-   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease));
+   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure));
 }
 
 /****************************************/

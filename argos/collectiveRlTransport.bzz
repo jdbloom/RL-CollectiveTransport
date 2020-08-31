@@ -9,6 +9,7 @@ function init(){
   L_wheel = MAX_SPEED
   set_wheels(L_wheel, R_wheel)
   gripped = 0
+  failure = 0
 }
 
 function step(){
@@ -29,7 +30,12 @@ function step(){
       turret_disable()
       gripped = 1
     }
-  }  
+  }
+  # If the robot fails, open the gripper and set the wheel speeds to 0.
+  if(failure){
+    gripper_unlock()
+    set_wheels(0.0, 0.0)
+  }
 }
 
 function reset() {

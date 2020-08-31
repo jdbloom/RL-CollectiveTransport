@@ -33,7 +33,7 @@ class Agent_DQN():
 
         # If the robot is failed, it will always perform it's "failure_action"
         self.failed = False
-        self.failure_action = [] # !!! ENCODE A REAL FAILURE ACTION
+        self.failure_action = [0, 0, 1] #failure action (wheel increases dont matter, failure code is in buzz)
 
         self.learn_step_counter = 0
 
@@ -46,10 +46,10 @@ class Agent_DQN():
         # The last observation indicates whether the robot has failed or not
         if observation[-1] != 0:
             self.failed = True
-            return self.failure_action
-        
+            return self.failure_action, 9
+
         if test or np.random.random() > self.epsilon:
-            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
             actions = self.q_eval.forward(state)
             action = T.argmax(actions).item()
         else:

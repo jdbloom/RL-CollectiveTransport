@@ -24,7 +24,7 @@ OBS_FMT = '8f'
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
 # Actions
-ACTIONS_FIELDS = ['lwheel', 'rwheel', 'gripper']
+ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
 ACTIONS_FMT = '3f'
 
 #
@@ -108,7 +108,7 @@ def ack():
 # Test the code? or should we be learning?
 test = False
 # Flag for CSRL or ILRL
-SingleModel = False
+SingleModel = True
 # Create context
 context = zmq.Context()
 # Create socket
@@ -126,7 +126,7 @@ print("  num_actions =", params['num_actions'])
 model_file_path = 'python_code/Data/test/Models/'
 data_file_path = 'python_code/Data/test/Data/'
 
-# num_obs - 1 is to exclude the "failed" observation from the neural network 
+# num_obs - 1 is to exclude the "failed" observation from the neural network
 if SingleModel:
     # Create Single Model
     model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'], 3, 0)
@@ -237,7 +237,7 @@ while not exp_done:
                                 model.store_transition(observations[i][:-1],
                                                              actions[i],
                                                              reward,
-                                                             new_observations[i],
+                                                             new_observations[i][:-1],
                                                              episode_done)
 
                             epsilon.append(model.epsilon)
