@@ -36,8 +36,8 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(7),
-   m_unNumActions(2),
+   m_unNumObs(8),
+   m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
 }
@@ -342,6 +342,15 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
                           (cVecCylinder2Goal.Length()*cMotion.Length());
 
       }
+
+      /* Check if the robot has failed */
+      float hasFailed = 0;
+      UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
+      if (m_vecRobotFailures[i] != -1 && m_vecRobotFailures[i] > ticksElapsed) {
+	hasFailed = 1;
+      }
+      
+      
       /* Calculate reward */
       Real fReward;
       switch(e_state) {
@@ -376,6 +385,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
+      m_vecObs[i * m_unNumObs + 7] = hasFailed;
       m_vecRewards[i] = fReward;
    }
 

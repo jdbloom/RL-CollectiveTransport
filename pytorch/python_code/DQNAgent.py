@@ -31,6 +31,10 @@ class Agent_DQN():
 
         self.action_space = [i for i in range(self.num_ops_per_action**self.num_actions)]
 
+        # If the robot is failed, it will always perform it's "failure_action"
+        self.failed = False
+        self.failure_action = [] # !!! ENCODE A REAL FAILURE ACTION
+
         self.learn_step_counter = 0
 
         self.memory = ReplayBuffer(100000, num_observations) # accounting for reward in msg
@@ -39,6 +43,11 @@ class Agent_DQN():
         self.q_next = DeepQNetwork(self.lr, self.num_actions, self.num_observations, self.num_ops_per_action)
 
     def choose_action(self, observation, test):
+        # The last observation indicates whether the robot has failed or not
+        if observation[-1] != 0:
+            self.failed = True
+            return self.failure_action
+        
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             actions = self.q_eval.forward(state)
@@ -67,10 +76,11 @@ class Agent_DQN():
         '''
         l_wheel = (math.floor(action_num/self.num_ops_per_action) - 1)/10.0
         r_wheel = (action_num%self.num_ops_per_action - 1)/10.0
-        return np.array([l_wheel, r_wheel], dtype=np.float32)
+        return np.array([l_wheel, r_wheel, 0], dtype=np.float32)
 
     def store_transition(self, state, action, reward, state_, done):
-        self.memory.store_transition(state, action, reward, state_, done)
+        if not self.failed:
+            self.memory.store_transition(state, action, reward, state_, done)
 
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
@@ -91,7 +101,7 @@ class Agent_DQN():
         return states, actions, rewards, states_, dones
 
     def learn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < self.batch_size or self.failed:
             return
         self.q_eval.optimizer.zero_grad()
 
@@ -116,7 +126,7 @@ class Agent_DQN():
         self.decrement_epsilon()
 
     def doubleQLearn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < self.batch_size or self.failed:
             return
         self.q_eval.optimizer.zero_grad()
 

@@ -18,14 +18,14 @@ PARAMS_FMT = '3I'
 EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
 EXPERIMENT_FMT = '3B'
 # Observations
-OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal']
-OBS_FMT = '7f'
+OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal', 'failed']
+OBS_FMT = '8f'
 # Rewards
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
 # Actions
-ACTIONS_FIELDS = ['lwheel', 'rwheel']
-ACTIONS_FMT = '2f'
+ACTIONS_FIELDS = ['lwheel', 'rwheel', 'gripper']
+ACTIONS_FMT = '3f'
 
 #
 # Other constants
@@ -125,12 +125,14 @@ print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
 model_file_path = 'python_code/Data/test/Models/'
 data_file_path = 'python_code/Data/test/Data/'
+
+# num_obs - 1 is to exclude the "failed" observation from the neural network 
 if SingleModel:
     # Create Single Model
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, 0)
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'], 3, 0)
 else:
     # Create the models for multi-agent individual model
-    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'],params['num_actions'] , 3, i) for i in range(params['num_robots'])]
+    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1,params['num_actions'] , 3, i) for i in range(params['num_robots'])]
 
 if test:
     if SingleModel:
@@ -232,7 +234,7 @@ while not exp_done:
                         # Handle sending and receiving messages here !!!
                         if SingleModel:
                             if not test:
-                                model.store_transition(observations[i],
+                                model.store_transition(observations[i][:-1],
                                                              actions[i],
                                                              reward,
                                                              new_observations[i],
@@ -244,7 +246,7 @@ while not exp_done:
                     if not SingleModel:
                         for i, agent_model in enumerate(models):
                             if not test:
-                                agent_model.store_transition(observations[i],
+                                agent_model.store_transition(observations[i][:-1],
                                                              actions[i],
                                                              reward,
                                                              new_observations[i],
