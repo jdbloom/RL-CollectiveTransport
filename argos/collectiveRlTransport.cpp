@@ -101,13 +101,12 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
       CreateEntities();
-      PlaceEntities(0);
-      /* Initialize the vector of robot failure times */
-      GenerateRobotFailure();
+      //Print first failure set
       for(size_t i = 0; i < m_unNumRobots; i++){
-        LOG<< m_vecRobotFailures[i]<<" ";
+        LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
       }
       LOG<<std::endl;
+      PlaceEntities(0);
       /* Call buzz Init() (HAS TO BE THE LAST LINE) */
       CBuzzLoopFunctions::Init(t_tree);
    }
@@ -166,6 +165,8 @@ void CCollectiveRLTransport::CreateEntities() {
                m_pcRNG->Uniform(cYRange),
                0.0);
       m_vecCylinderPos.push_back(cPos);
+      //Generate Failure Times for all episodes
+      m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
@@ -218,7 +219,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::GenerateRobotFailure(){
+std::vector<SInt32> CCollectiveRLTransport::GenerateRobotFailure(){
   /*
     Mutates m_vecRobotFailures to have a new set of values. The index in the vector corresponds to the
     number of a robot. The entry determines at which timestep the robot will fail. A time of -1 indicates
@@ -226,17 +227,18 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
   */
 
   // Below is a sampling without replacement algorithm. Indices is a collection of all unused robot indices.
-  LOG<<"GENERATING FAILURES"<<std::endl;
+  std::vector<SInt32> failures;
   std::vector<UInt32> indices;
   UInt32 remainingIndices = m_unNumRobots;
   SInt32 *robotFailureTimes = (SInt32 *) malloc(sizeof(SInt32) * m_unNumRobots);
   for(size_t i = 0; i < m_unNumRobots; ++i) {
     indices.push_back(i);
+    robotFailureTimes[i] = -1;
   }
 
   CRange<Real> probabilityRange = CRange<Real>(0.0, 1.0);
   CRange<UInt32> failureTimeRange = CRange<UInt32>(0, m_unLatestFailureTime);
-  for(size_t i = 0; i < m_unNumRobots; ++i) {
+  for(size_t i = 0; i < m_unMaxRobotFailures; ++i) {
     // Select a robot
     CRange<UInt32> robotsRange = CRange<UInt32>(0, remainingIndices);
     size_t chosenIndex = m_pcRNG->Uniform(robotsRange);
@@ -253,7 +255,8 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
       robotFailureTimes[chosenRobot] = -1;
     }
   }
-  m_vecRobotFailures.assign(robotFailureTimes, robotFailureTimes + m_unNumRobots);
+  failures.assign(robotFailureTimes, robotFailureTimes + m_unNumRobots);
+  return failures;
 
 }
 
@@ -261,13 +264,13 @@ void CCollectiveRLTransport::GenerateRobotFailure(){
 /****************************************/
 
 void CCollectiveRLTransport::Reset() {
-   PlaceEntities(m_unEpisodeCounter);
-   m_bReachedGoal = false;
-   GenerateRobotFailure();
    for(size_t i = 0; i < m_unNumRobots; i++){
-     LOG<< m_vecRobotFailures[i]<<" ";
+     LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
    }
    LOG<<std::endl;
+   PlaceEntities(m_unEpisodeCounter);
+   m_bReachedGoal = false;
+
 }
 
 /****************************************/
@@ -359,7 +362,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Check if the robot has failed */
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
-      if (m_vecRobotFailures[i] != -1 && m_vecRobotFailures[i] <= ticksElapsed) {
+      if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
 	       hasFailed = 1;
       }
 

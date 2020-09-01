@@ -178,7 +178,7 @@ private:
    void* m_ptZMQSocket;
 
    /** List of robot failure times: -1 = no failure **/
-   std::vector <SInt32> m_vecRobotFailures;
+   std::vector <std::vector<SInt32>> m_vecRobotFailures;
 
 private:
 
@@ -186,7 +186,7 @@ private:
 
    void PlaceEntities(UInt32 un_episode);
 
-   void GenerateRobotFailure();
+   std::vector<SInt32> GenerateRobotFailure();
 
    bool CylinderAtTarget();
 

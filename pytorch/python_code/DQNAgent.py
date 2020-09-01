@@ -47,6 +47,7 @@ class Agent_DQN():
         if observation[-1] != 0:
             self.failed = True
             return self.failure_action, 9
+        else: self.failed = False
 
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
