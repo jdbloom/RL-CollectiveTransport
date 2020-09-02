@@ -363,6 +363,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
       if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
+         LOG<<"HAS FAILED"<<std::endl;
 	       hasFailed = 1;
       }
 

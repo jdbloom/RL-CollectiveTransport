@@ -5,7 +5,7 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-path = 'Data/test/Data/'
+path = 'Data/Failure/4_agents_0_failure_1/Data/'
 
 file_names = []
 for file in os.listdir(path):
@@ -44,7 +44,7 @@ if len(last_10_axis) > 150:
     print('The Best Model is:', 150+np.argmax(last_10_reward[150:]))
 
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.title('2 Agent Double Deep Q-Learning\n with Curiculum Leanring')
+plt.title('4 Agent Double Deep Q-Learning\n with 0 Failure Leanring')
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
 s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
@@ -55,4 +55,4 @@ for i in range(0, min(math.floor(len(reward)/100), len(s))):
     plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig('Data/Figures/test.png')
+plt.savefig('Data/Figures/4_agents_0_failure_1.png')

@@ -46,6 +46,7 @@ class Agent_DQN():
         # The last observation indicates whether the robot has failed or not
         if observation[-1] != 0:
             self.failed = True
+            print('Failed')
             return self.failure_action, 9
         else: self.failed = False
 
@@ -80,8 +81,7 @@ class Agent_DQN():
         return np.array([l_wheel, r_wheel, 0], dtype=np.float32)
 
     def store_transition(self, state, action, reward, state_, done):
-        if not self.failed:
-            self.memory.store_transition(state, action, reward, state_, done)
+        self.memory.store_transition(state, action, reward, state_, done)
 
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
@@ -102,7 +102,7 @@ class Agent_DQN():
         return states, actions, rewards, states_, dones
 
     def learn(self):
-        if self.memory.mem_ctr < self.batch_size or self.failed:
+        if self.memory.mem_ctr < self.batch_size:
             return
         self.q_eval.optimizer.zero_grad()
 
@@ -127,13 +127,14 @@ class Agent_DQN():
         self.decrement_epsilon()
 
     def doubleQLearn(self):
-        if self.memory.mem_ctr < self.batch_size or self.failed:
+        if self.memory.mem_ctr < self.batch_size:
             return
         self.q_eval.optimizer.zero_grad()
 
         self.replace_target_network()
 
         states, actions, rewards, states_, dones = self.sample_memory()
+        print(states, actions, rewards, states_, dones)
 
         indices = np.arange(self.batch_size)
 

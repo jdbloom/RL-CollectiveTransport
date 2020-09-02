@@ -123,8 +123,8 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/test/Models/'
-data_file_path = 'python_code/Data/test/Data/'
+model_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Models/'
+data_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
 if SingleModel:
@@ -234,11 +234,14 @@ while not exp_done:
                         # Handle sending and receiving messages here !!!
                         if SingleModel:
                             if not test:
-                                model.store_transition(observations[i][:-1],
-                                                             actions[i],
-                                                             reward,
-                                                             new_observations[i][:-1],
-                                                             episode_done)
+                                if not observations[i][-1] and not new_observations[i][-1]:
+                                    model.store_transition(observations[i][:-1],
+                                                                 actions[i],
+                                                                 reward,
+                                                                 new_observations[i][:-1],
+                                                                 episode_done)
+                                else:
+                                    'Not Saving Transition'
 
                             epsilon.append(model.epsilon)
                             r.append(reward[0])
