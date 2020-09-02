@@ -127,12 +127,13 @@ model_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Models/'
 data_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
+# num_actions -1 is to exclude control of the gripper from the neural network
 if SingleModel:
     # Create Single Model
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'], 3, 0)
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'] - 1, 3, 0)
 else:
     # Create the models for multi-agent individual model
-    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1,params['num_actions'] , 3, i) for i in range(params['num_robots'])]
+    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1,params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
 
 if test:
     if SingleModel:
