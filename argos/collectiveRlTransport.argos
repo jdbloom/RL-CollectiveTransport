@@ -39,7 +39,7 @@
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
-                  num_robots = "4"
+                  num_robots = "1"
                   max_robot_failures = "0"
 		              latest_failure_time = "1000"
 		              chance_failure = "0.5"

@@ -23,6 +23,9 @@ OBS_FMT = '8f'
 # Rewards
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
+# Stats
+REWARDS_FIELDS = ['magnatude', 'angle']
+REWARDS_FMT = '2f'
 # Actions
 ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
 ACTIONS_FMT = '3f'
@@ -87,6 +90,19 @@ def parse_rewards(msg):
         rewards.append(nparr)
     return rewards
 
+def parse_stats(msg):
+    stats = []
+    for r in range(0, params['num_robots']):
+        # Get message bytes for this robot
+        m = msg[r*FLOAT_SIZE:(r+1)*FLOAT_SIZE]
+        # Parse the bytes into a dictionary
+        data = parse_msg(m, 'stats', STATS_FIELDS, STATS_FMT)
+        # Make a numpy array
+        nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
+        # Append it to the rewards
+        stats.append(nparr)
+    return stats
+
 def serialize_actions(actions):
     packer = Struct(ACTIONS_FMT)
     msg = bytearray(FLOAT_SIZE * params['num_actions'] * params['num_robots'])
@@ -123,8 +139,8 @@ print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Models/'
-data_file_path = 'python_code/Data/Failure/4_agents_0_failure_1/Data/'
+model_file_path = 'python_code/Data/Failure/4_agents_0_failure_2/Models/'
+data_file_path = 'python_code/Data/Failure/4_agents_0_failure_2/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
 # num_actions -1 is to exclude control of the gripper from the neural network
@@ -179,13 +195,14 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'force maganatude', 'force angle'])
 
         if not exp_done:
             time_steps = 0
             # Recieve initial Observation
             obs = parse_obs(msgs[1])
             rewards = parse_rewards(msgs[2])
+            force_mag, force_ang = parse_stats(msgs[3])
 
             observations = []
             actions = []
@@ -222,6 +239,7 @@ while not exp_done:
                     exp_done, episode_done, reached_goal = parse_status(msgs[0])
                     obs = parse_obs(msgs[1])
                     rewards = parse_rewards(msgs[2])
+                    force_mag, force_ang = parse_stats(msgs[3])
                     # Store Transitions and Learn
                     new_observations = []
                     loss = []
@@ -241,8 +259,6 @@ while not exp_done:
                                                                  reward,
                                                                  new_observations[i][:-1],
                                                                  episode_done)
-                                else:
-                                    'Not Saving Transition'
 
                             epsilon.append(model.epsilon)
                             r.append(reward[0])
@@ -270,8 +286,11 @@ while not exp_done:
                     observations = new_observations
                     actions = []
                     actions_to_take = []
+                    print('********************')
+                    print(force_mag, force_ang)
+                    print('********************')
 
-                    writer.writerow([r, epsilon, reached_goal])
+                    writer.writerow([r, epsilon, reached_goal, force_mag, force_ang])
 
 
                     if episode_done:

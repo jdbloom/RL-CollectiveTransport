@@ -1,6 +1,7 @@
 #include "collectiveRlTransport.h"
 #include <buzz/buzzvm.h>
 #include <zmq.h>
+#include <cmath>
 
 using namespace argos;
 
@@ -65,6 +66,12 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
 
+      /* Footbot dynamic equation parameters*/
+      m_fFootbotAxelLength = 0.14; // m
+      m_fFootbotWheelRadius = 0.029112741; // m
+
+      /* Stats to be sent to Data: Force vector (direction and magnatude) for every robot*/
+      m_unNumStats = 2;
       /*
        * Connect to PyTorch
        */
@@ -96,6 +103,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
       m_vecRewards.resize(m_unNumRobots, 0.0);
+      m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       /* Create a new RNG */
       m_pcRNG = CRandom::CreateRNG("argos");
@@ -363,7 +371,6 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
       if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
-         LOG<<"HAS FAILED"<<std::endl;
 	       hasFailed = 1;
       }
 
@@ -413,6 +420,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 
 void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
+   CalculateRobotStats();
    m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       for(size_t j = 0; j < m_unNumObs; ++j) {
@@ -429,6 +437,7 @@ void CCollectiveRLTransport::PreStep() {
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
    ZMQSendRewards();
+   ZMQSendRobotStats();
    /* Get actions from PyTorch */
    ZMQGetActions();
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -504,6 +513,7 @@ void CCollectiveRLTransport::PostStep() {
 
       eState = m_bReachedGoal ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
       GetObservations(eState);
+      CalculateRobotStats();
       /*for(size_t i = 0; i < m_unNumRobots; ++i) {
          for(size_t j = 0; j < m_unNumObs; ++j) {
             DEBUG("[E%u] [t=%u] %s = %f\n", m_unEpisodeCounter, GetSpace().GetSimulationClock(), OBS_DESCRIPTIONS[j].c_str(), m_vecObs[i * m_unNumObs + j]);
@@ -514,6 +524,7 @@ void CCollectiveRLTransport::PostStep() {
       ZMQSendEpisodeState(eState);
       ZMQSendObservations();
       ZMQSendRewards();
+      ZMQSendRobotStats();
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -550,6 +561,39 @@ bool CCollectiveRLTransport::IsEpisodeFinished() {
    }
    return false;
 }
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::CalculateRobotStats(){
+  for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+     /* Get robot pose */
+     CVector3& cRobotPos =
+        m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Position;
+     /* Get robot orientation*/
+     CQuaternion& cRobotOrient =
+        m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+     CRadians cRobotZ, cRobotY, cRobotX;
+     cRobotOrient.ToEulerAngles(cRobotZ, cRobotY, cRobotX);
+     /* Get the wheel speeds*/
+     GetWheelSpeeds cGWS;
+     BuzzForeachVM(cGWS);
+     Real fLWheel = cGWS.LWheels[i];
+     Real fRWheel = cGWS.RWheels[i];
+
+     /*Calculate force vector*/
+     Real deltaX = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
+     Real deltaY = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
+
+     Real magnatude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
+                            + (cRobotPos.GetY() - deltaY)*(cRobotPos.GetY() - deltaY));
+
+     m_vecStats[i * m_unNumStats + 0] = magnatude;
+     m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
+   }
+}
+
+
 
 /****************************************/
 /****************************************/
@@ -638,12 +682,24 @@ void CCollectiveRLTransport::ZMQSendRewards(){
         m_ptZMQSocket,                        // the socket
         const_cast<float*>(&m_vecRewards[0]), // data pointer
         sizeof(float)*m_vecRewards.size(),    //data size in bytes
-        0)                                    // no special flags
+        ZMQ_SNDMORE)                          // another message will follow (Stats)
      < 0) {                                   // >= means success
        THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
    }
 }
 
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendRobotStats(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecStats[0]),  // data pointer
+    sizeof(float)*m_vecStats.size(),      // data size in bytes
+    0)                                    //no special flags
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
 
 /****************************************/
 /****************************************/

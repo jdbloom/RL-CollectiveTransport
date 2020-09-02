@@ -168,6 +168,18 @@ private:
    /** The vector of rewards */
    std::vector<float> m_vecRewards;
 
+   /** The axel length of the footbot*/
+   Real m_fFootbotAxelLength;
+
+   /** The radius of the wheel of the footbot*/
+   Real m_fFootbotWheelRadius;
+
+   /** Number of stats per robot */
+   UInt32 m_unNumStats;
+
+   /** The vector of robot stats */
+   std::vector<float> m_vecStats;
+
    /** The vector of actions */
    std::vector<float> m_vecActions;
 
@@ -194,6 +206,8 @@ private:
 
    void GetObservations(EEpisodeState e_state);
 
+   void CalculateRobotStats();
+
    void ZMQSendEpisodeState(EEpisodeState e_state);
 
    void ZMQSendTermination();
@@ -203,6 +217,8 @@ private:
    void ZMQSendObservations();
 
    void ZMQSendRewards();
+
+   void ZMQSendRobotStats();
 
    void ZMQGetActions();
 

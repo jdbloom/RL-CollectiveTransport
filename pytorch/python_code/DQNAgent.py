@@ -46,7 +46,6 @@ class Agent_DQN():
         # The last observation indicates whether the robot has failed or not
         if observation[-1] != 0:
             self.failed = True
-            print('Failed')
             return self.failure_action, 9
         else: self.failed = False
 
@@ -92,7 +91,6 @@ class Agent_DQN():
 
     def sample_memory(self):
         state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
-
         states = T.tensor(state).to(self.q_eval.device)
         actions = T.tensor(action).to(self.q_eval.device)
         rewards = T.tensor(reward).to(self.q_eval.device)
@@ -134,7 +132,6 @@ class Agent_DQN():
         self.replace_target_network()
 
         states, actions, rewards, states_, dones = self.sample_memory()
-        print(states, actions, rewards, states_, dones)
 
         indices = np.arange(self.batch_size)
 
