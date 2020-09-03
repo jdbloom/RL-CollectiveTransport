@@ -4,6 +4,7 @@ import python_code.DQNAgent as Agent_DQN
 from collections import namedtuple
 from struct import pack, unpack, Struct
 import numpy as np
+import math
 import copy
 import zmq
 import csv
@@ -12,8 +13,8 @@ import csv
 # Message fields
 #
 # Parameters
-PARAMS_FIELDS = ['num_robots','num_obs','num_actions']
-PARAMS_FMT = '3I'
+PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats']
+PARAMS_FMT = '4I'
 # Episode state
 EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
 EXPERIMENT_FMT = '3B'
@@ -24,7 +25,7 @@ OBS_FMT = '8f'
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
 # Stats
-STATS_FIELDS = ['magnatude', 'angle']
+STATS_FIELDS = ['magnitude', 'angle']
 STATS_FMT = '2f'
 # Actions
 ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
@@ -81,7 +82,7 @@ def parse_rewards(msg):
     rewards = []
     for r in range(0, params['num_robots']):
         # Get message bytes for this robot
-        m = msg[r*FLOAT_SIZE:(r+1)*FLOAT_SIZE]
+        m = msg[r * FLOAT_SIZE:(r+1)*FLOAT_SIZE]
         # Parse the bytes into a dictionary
         data = parse_msg(m, 'reward', REWARDS_FIELDS, REWARDS_FMT)
         # Make a numpy array
@@ -94,7 +95,7 @@ def parse_stats(msg):
     stats = []
     for r in range(0, params['num_robots']):
         # Get message bytes for this robot
-        m = msg[r*FLOAT_SIZE:(r+1)*FLOAT_SIZE*len(STATS_FIELDS)]
+        m = msg[r * params['num_stats'] * FLOAT_SIZE:(r+1) * params['num_stats'] * FLOAT_SIZE]
         # Parse the bytes into a dictionary
         data = parse_msg(m, 'stats', STATS_FIELDS, STATS_FMT)
         # Make a numpy array
@@ -139,9 +140,10 @@ print("PARAMETERS:")
 print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
+print("  num_stats   =", params['num_stats'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/Failure/4_agents_0_failure_2/Models/'
-data_file_path = 'python_code/Data/Failure/4_agents_0_failure_2/Data/'
+model_file_path = 'python_code/Data/Failure/2_agents_0_failure/Models/'
+data_file_path = 'python_code/Data/Failure/2_agents_0_failure/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
 # num_actions -1 is to exclude control of the gripper from the neural network
@@ -196,23 +198,27 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'force maganatude', 'force angle'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'force magnitude', 'force angle', 'average force vector'])
 
         if not exp_done:
             time_steps = 0
             # Recieve initial Observation
             obs = parse_obs(msgs[1])
             rewards = parse_rewards(msgs[2])
-            force_mag, force_angs = parse_stats(msgs[3])
+            stats = parse_stats(msgs[3])
 
             observations = []
             actions = []
+            force_mags = []
+            force_angs = []
             actions_to_take = []
             running_reward = 0
 
             for i in range(params['num_robots']):
                 observations.append(obs[i])
                 reward = rewards[i]
+                force_mags.append(stats[i][0][0])
+                force_angs.append(stats[i][0][1])
             running_reward+=reward
 
             while not episode_done:
@@ -240,10 +246,12 @@ while not exp_done:
                     exp_done, episode_done, reached_goal = parse_status(msgs[0])
                     obs = parse_obs(msgs[1])
                     rewards = parse_rewards(msgs[2])
-                    force_mags, force_angs = parse_stats(msgs[3])
+                    stats = parse_stats(msgs[3])
                     # Store Transitions and Learn
                     new_observations = []
                     loss = []
+                    force_mags = []
+                    force_angs = []
                     r = [] # place holder to extract the values from the reward
                     # Collect all messages to be sent
                     #handle_communications(model)
@@ -251,6 +259,8 @@ while not exp_done:
                     for i in range(params['num_robots']):
                         new_observations.append(obs[i])
                         reward = rewards[i]
+                        force_mags.append(stats[i][0][0])
+                        force_angs.append(stats[i][0][1])
                         # Handle sending and receiving messages here !!!
                         if SingleModel:
                             if not test:
@@ -287,11 +297,21 @@ while not exp_done:
                     observations = new_observations
                     actions = []
                     actions_to_take = []
-                    print('********************')
-                    print(force_mags, force_angs)
-                    print('********************')
 
-                    writer.writerow([r, epsilon, reached_goal, force_mags, force_angs])
+                    # Calculate average force vector
+                    average_force_mag = None
+                    average_force_ang = None
+                    for i in range(params['num_robots']):
+                        if average_force_mag is None:
+                            average_force_mag = force_mags[i]
+                            average_force_ang = force_angs[i]
+                        else:
+                            angle = abs(average_force_ang - force_angs[i])
+                            average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
+                            average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
+
+                    writer.writerow([r, epsilon, reached_goal, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
+
 
 
                     if episode_done:

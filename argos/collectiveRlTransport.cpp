@@ -70,7 +70,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_fFootbotAxelLength = 0.14; // m
       m_fFootbotWheelRadius = 0.029112741; // m
 
-      /* Stats to be sent to Data: Force vector (direction and magnatude) for every robot*/
+      /* Stats to be sent to Data: Force vector (direction and magnitude) for every robot*/
       m_unNumStats = 2;
       /*
        * Connect to PyTorch
@@ -585,10 +585,10 @@ void CCollectiveRLTransport::CalculateRobotStats(){
      Real deltaX = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
      Real deltaY = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
 
-     Real magnatude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
+     Real magnitude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
                             + (cRobotPos.GetY() - deltaY)*(cRobotPos.GetY() - deltaY));
 
-     m_vecStats[i * m_unNumStats + 0] = magnatude;
+     m_vecStats[i * m_unNumStats + 0] = magnitude;
      m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
    }
 }
@@ -644,6 +644,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unNumRobots);
    vecParams.push_back(m_unNumObs);
    vecParams.push_back(m_unNumActions);
+   vecParams.push_back(m_unNumStats);
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
    DEBUG("m_unNumActions = %u\n", m_unNumActions);*/
