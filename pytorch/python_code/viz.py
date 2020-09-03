@@ -23,7 +23,6 @@ losses = []
 epsilons = []
 terminals = []
 for episode in df_list:
-    print(episode[0])
     rewards = []
     terminal = []
     for t in range(len(episode[1])):
@@ -35,6 +34,7 @@ for episode in df_list:
     for robot in range(len(rewards[0])):
         reward.append(sum(float(row[robot]) for row in rewards))
     episode_rewards.append(reward)
+    print(episode[0], reward[0])
 
 reward = [row[0] for row in episode_rewards]
 last_10_axis = np.arange(0, len(reward), 10)

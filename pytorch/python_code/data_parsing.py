@@ -3,9 +3,10 @@ import numpy as np
 import math
 import json
 import os
+import sys
 import matplotlib.pyplot as plt
 
-episode = '35'
+episode = str(sys.argv[1])
 
 path = 'Data/Failure/2_agents_0_failure/Data/'
 
@@ -28,26 +29,47 @@ for t in range(len(df)):
     force_mags.append(df['force magnitude'][t].strip('][').split(','))
     force_angs.append(df['force angle'][t].strip('][').split(','))
     average_force_vec.append(df['average force vector'][t].strip('][').split(','))
+reward = []
+for robot in range(len(rewards[0])):
+    reward.append(sum(float(row[robot]) for row in rewards))
+
 robot_forces = []
+robot_angles = []
 for i in range(len(force_mags[0])):
     forces = []
+    angles = []
     for j in range(len(force_mags)):
         forces.append(float(force_mags[j][i]))
+        angles.append(float(force_angs[j][i]))
     robot_forces.append(forces)
+    robot_angles.append(angles)
 mag = []
 ang = []
 for t in range(len(average_force_vec)):
     mag.append(float(average_force_vec[t][0]))
-    ang.append(average_force_vec[t][1])
+    ang.append(float(average_force_vec[t][1]))
 axis = np.arange(0, len(mag))
 
-plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+#plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+fig, ax = plt.subplots(2, 1)
+fig.set_figheight(12)
+fig.set_figwidth(20)
+fig.suptitle('Episode '+episode+' had Reward: %.2f' % reward[0])
 for i in range(len(robot_forces)):
     l = 'robot '+str(i+1) + 'force'
-    plt.plot(robot_forces[i], label = l)
-plt.plot(axis, mag, c='k', label = 'Cumulative Force')
+    ax[0].plot(robot_forces[i], label = l)
+    l = 'robot '+str(i+1) + 'heading'
+    ax[1].plot(robot_angles[i], label = l)
+ax[0].plot(mag, c='k', label = 'Cumulative Force')
+ax[1].plot(ang, c = 'k', label = 'Average Heading')
 plt.xlabel('Time')
-plt.title('Force over Time for Episode '+episode)
-plt.ylabel('Force')
-plt.legend()
-plt.savefig('Data/Figures/2_agents_0_failure_Force_episode_'+episode+'.png')
+ax[0].set_title('Force over Time for Episode '+episode)
+ax[1].set_title('Heading over Time for Episode '+episode)
+ax[0].set_ylabel('Force')
+ax[1].set_ylabel('Heading (deg)')
+ax[1].set_yticks(np.arange(-180, 181, 90))
+ax[0].legend()
+ax[1].legend()
+
+
+plt.savefig('Data/Figures/testing/2_agents_0_failure_Force_episode_'+episode+'.png')
