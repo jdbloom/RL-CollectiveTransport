@@ -24,8 +24,8 @@ OBS_FMT = '8f'
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
 # Stats
-REWARDS_FIELDS = ['magnatude', 'angle']
-REWARDS_FMT = '2f'
+STATS_FIELDS = ['magnatude', 'angle']
+STATS_FMT = '2f'
 # Actions
 ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
 ACTIONS_FMT = '3f'
@@ -94,14 +94,15 @@ def parse_stats(msg):
     stats = []
     for r in range(0, params['num_robots']):
         # Get message bytes for this robot
-        m = msg[r*FLOAT_SIZE:(r+1)*FLOAT_SIZE]
+        m = msg[r*FLOAT_SIZE:(r+1)*FLOAT_SIZE*len(STATS_FIELDS)]
         # Parse the bytes into a dictionary
         data = parse_msg(m, 'stats', STATS_FIELDS, STATS_FMT)
         # Make a numpy array
         nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
         # Append it to the rewards
         stats.append(nparr)
-    return stats
+    # the [::2] means a slice picking ever other element
+    return stats[::2], stats[1::2]
 
 def serialize_actions(actions):
     packer = Struct(ACTIONS_FMT)
@@ -202,7 +203,7 @@ while not exp_done:
             # Recieve initial Observation
             obs = parse_obs(msgs[1])
             rewards = parse_rewards(msgs[2])
-            force_mag, force_ang = parse_stats(msgs[3])
+            force_mag, force_angs = parse_stats(msgs[3])
 
             observations = []
             actions = []
@@ -239,7 +240,7 @@ while not exp_done:
                     exp_done, episode_done, reached_goal = parse_status(msgs[0])
                     obs = parse_obs(msgs[1])
                     rewards = parse_rewards(msgs[2])
-                    force_mag, force_ang = parse_stats(msgs[3])
+                    force_mags, force_angs = parse_stats(msgs[3])
                     # Store Transitions and Learn
                     new_observations = []
                     loss = []
@@ -287,10 +288,10 @@ while not exp_done:
                     actions = []
                     actions_to_take = []
                     print('********************')
-                    print(force_mag, force_ang)
+                    print(force_mags, force_angs)
                     print('********************')
 
-                    writer.writerow([r, epsilon, reached_goal, force_mag, force_ang])
+                    writer.writerow([r, epsilon, reached_goal, force_mags, force_angs])
 
 
                     if episode_done:
