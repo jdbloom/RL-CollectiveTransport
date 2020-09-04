@@ -113,8 +113,7 @@ def parse_stats(msg):
         nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
         # Append it to the rewards
         stats.append(nparr)
-    # the [::2] means a slice picking ever other element
-    return stats[::2], stats[1::2]
+    return stats
 
 def serialize_actions(actions):
     packer = Struct(ACTIONS_FMT)
@@ -224,8 +223,8 @@ while not exp_done:
             for i in range(params['num_robots']):
                 observations.append(obs[i])
                 reward = rewards[i]
-                force_mags.append(stats[i][0][0])
-                force_angs.append(stats[i][0][1])
+                force_mags.append(stats[i][0])
+                force_angs.append(stats[i][1])
             running_reward+=reward
 
             while not episode_done:
@@ -266,8 +265,8 @@ while not exp_done:
                     for i in range(params['num_robots']):
                         new_observations.append(obs[i])
                         reward = rewards[i]
-                        force_mags.append(stats[i][0][0])
-                        force_angs.append(stats[i][0][1])
+                        force_mags.append(stats[i][0])
+                        force_angs.append(stats[i][1])
                         # Handle sending and receiving messages here !!!
                         if SingleModel:
                             if not test:
@@ -322,7 +321,7 @@ while not exp_done:
 
 
                     if episode_done:
-                        ep_counter += 1
+
                         exp_rewards.append(running_reward)
                         if not reached_goal:
                             print("Episode", ep_counter ,"timed out")
@@ -369,6 +368,8 @@ while not exp_done:
                                 path = model_file_path+file_name
                                 agent_model.save_model(path)
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+
+                        ep_counter += 1
 
                         running_reward = 0
                         ack()

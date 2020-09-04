@@ -502,7 +502,7 @@ void CCollectiveRLTransport::PostStep() {
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
-      LOG << "Episode " << m_unEpisodeCounter + 1 << " is done" << std::endl;
+      LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
       /* check to see if we need to decrease the threshold */
       if((m_unEpisodeCounter+1) % m_unDecThresholdTime == 0){
         if(m_fThreshold > m_fMinThreshold){

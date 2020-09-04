@@ -5,7 +5,7 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-path = 'Data/Failure/2_agents_0_failure/Data/'
+path = 'Data/Failure/8_agents_6_failure/Data/'
 
 file_names = []
 for file in os.listdir(path):
@@ -44,15 +44,15 @@ if len(last_10_axis) > 150:
     print('The Best Model is:', 150+np.argmax(last_10_reward[150:]))
 
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.title('2 Agent Double Deep Q-Learning\n with 0 Failure Leanring')
+plt.title('8 Agent Double Deep Q-Learning\n with 6 Failure Leanring')
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
-s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
-x = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500]
+#s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
+#x = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500]
 #[250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750]
-y = [-9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200]
-for i in range(0, min(math.floor(len(reward)/100), len(s))):
-    plt.text(x[i], y[i], s[i], c='gray')
+#y = [-9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200, -9200]
+#for i in range(0, min(math.floor(len(reward)/100), len(s))):
+#    plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig('Data/Figures/2_agents_0_failure.png')
+plt.savefig('Data/Figures/8_agents_6_failure.png')

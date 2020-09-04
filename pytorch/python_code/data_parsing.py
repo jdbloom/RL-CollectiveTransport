@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 episode = str(sys.argv[1])
 
-path = 'Data/Failure/2_agents_0_failure/Data/'
+path = 'Data/Failure/8_agents_6_failure/Data/'
 
 
 
@@ -56,9 +56,9 @@ fig.set_figheight(12)
 fig.set_figwidth(20)
 fig.suptitle('Episode '+episode+' had Reward: %.2f' % reward[0])
 for i in range(len(robot_forces)):
-    l = 'robot '+str(i+1) + 'force'
+    l = 'Robot '+str(i+1) + ' Force'
     ax[0].plot(robot_forces[i], label = l)
-    l = 'robot '+str(i+1) + 'heading'
+    l = 'Robot '+str(i+1) + ' Heading'
     ax[1].plot(robot_angles[i], label = l)
 ax[0].plot(mag, c='k', label = 'Cumulative Force')
 ax[1].plot(ang, c = 'k', label = 'Average Heading')
@@ -72,4 +72,4 @@ ax[0].legend()
 ax[1].legend()
 
 
-plt.savefig('Data/Figures/testing/2_agents_0_failure_Force_episode_'+episode+'.png')
+plt.savefig('Data/Failure/8_agents_6_failure/Figures/8_agents_6_failure_Force_episode_'+episode+'.png')
