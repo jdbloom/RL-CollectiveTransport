@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import python_code.DQNAgent as Agent_DQN
+
+import argparse
 from collections import namedtuple
 from struct import pack, unpack, Struct
 import numpy as np
@@ -8,6 +10,15 @@ import math
 import copy
 import zmq
 import csv
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("recording_path")
+parser.add_argument("--test", default=False, action="store_true")
+parser.add_argument("--model_path")
+args = parser.parse_args()
+
+recording_path = args.recording_path
 
 #
 # Message fields
@@ -124,7 +135,7 @@ def ack():
 # Initialization
 #
 # Test the code? or should we be learning?
-test = False
+test = args.test
 # Flag for CSRL or ILRL
 SingleModel = True
 # Create context
@@ -142,8 +153,8 @@ print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 print("  num_stats   =", params['num_stats'])
 # Path to save/ load models:
-model_file_path = 'python_code/Data/Failure/2_agents_0_failure/Models/'
-data_file_path = 'python_code/Data/Failure/2_agents_0_failure/Data/'
+model_file_path = args.model_path
+data_file_path = recording_path + '/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
 # num_actions -1 is to exclude control of the gripper from the neural network
@@ -156,14 +167,10 @@ else:
 
 if test:
     if SingleModel:
-        file_name = 'Model_3_Episode_1920'
-        path = model_file_path+file_name
-        model.load_model(path)
+        model.load_model(model_file_path)
     else:
         for i, agent_model in enumerate(models):
-            file_name = 'Model_'+str(i)+'_Episode_60'
-            path = file_path+file_name
-            agent_model.load_model(path)
+            model.load_model(model_file_path)
 
 # Send acknowledgment
 ack()
