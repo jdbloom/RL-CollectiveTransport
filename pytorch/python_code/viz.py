@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 import math
@@ -5,7 +6,12 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-path = 'Data/Failure/8_agents_6_failure/Data/'
+parser = argparse.ArgumentParser()
+parser.add_argument("data_path")
+parser.add_argument("figure_path")
+args = parser.parse_args()
+
+path = args.data_path
 
 file_names = []
 for file in os.listdir(path):
@@ -55,4 +61,5 @@ plt.ylabel('Reward')
 #    plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig('Data/Figures/8_agents_6_failure.png')
+plt.savefig(args.figure_path)
+
