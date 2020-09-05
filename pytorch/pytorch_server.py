@@ -344,7 +344,7 @@ while not exp_done:
                                     path = model_file_path+file_name
                                     model.save_model(path)
                                 file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
-                                path = model_file_path+file_name
+                                path = recording_path + "/Models/" +file_name
                                 model.save_model(path)
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         else:
@@ -362,10 +362,10 @@ while not exp_done:
                                     print('****************************************')
                                     for i, agent_model in enumerate(models):
                                         file_name = 'Model_'+str(i)+'_High_Score'
-                                        path = model_file_path+file_name
+                                        path = recording_path+"/Models/"+file_name
                                         agent_model.save_model(path)
                                 file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
-                                path = model_file_path+file_name
+                                path = recording_path+"/Models/"+file_name
                                 agent_model.save_model(path)
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
 
