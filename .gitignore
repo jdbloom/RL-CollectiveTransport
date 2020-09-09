@@ -2,3 +2,16 @@ build
 /pytorch/python_code/Data/*
 /pytorch/python_code/__pycache__/*
 pytorch/__pycache__
+#*~ excludes emacs auto-gen'd backup files
+*~
+# The below file is now auto generated
+argos/collectiveRlTransport.argos
+# Exclude CMAKE related things
+*CMakeCache.txt
+*cmake_install.cmake
+argos/Makefile
+argos/CMakeFiles
+argos/argos/*
+# Just to make sure we don't commit build artifacts anymore...
+*.bdb
+*.bo
