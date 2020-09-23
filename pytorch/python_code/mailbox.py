@@ -5,26 +5,46 @@ Created on Mon Jul 27 23:47:07 2020
 @author: aaaambition
 """
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 class Mailbox:
-    def __init__(self):
+    Message = namedtuple('Message', 'sender recepient contents')
+    def __init__(self, contacts):
         # Format of boxes is box[id] -> [message1, message2, ...]
+        # An iterable describing who may contact who. Entries in format {sender: [receivers]}
+        self.contacts = contacts
         self.inbox = defaultdict(lambda: [])
+        # prefill everyone's mailbox with an initial message
+        for sender, recepients in self.contacts.items():
+            for recepient in recepients:
+                self.inbox[recepient].append(self.Message(sender, recepient, 0))
+            
         self.outbox = defaultdict(lambda: [])
-        
-    def send_message(self, message, recepient_id):
-        """
-        Queues up message in the outbox to be sent, note actual sending is done
-        by the pytorch server
-        """
-        self.outbox[recepient_id].append(message)
 
-    def receive_message(self, message, sender_id):
+    def schedule_message(self, sender, recepient, contents):
         """
-        Adds a message to the inbox
+        Moves an item to an agent's outbox. It will be sent the next time
+        carry_mail is called.
         """
-        self.inbox[sender_id].append(message)
+        assert(recepient in self.contacts[sender])
+        self.outbox[sender].append(self.Message(sender, recepient, contents))
+
+    def carry_mail(self):
+        """
+        Routes each message from its sender's outbox to its recepient's inbox.
+        All outboxes should be empty after this funtion runs.
+        """
+        for sender, messages in self.outbox.items():
+            for message in messages:
+                self.send_message(sender, message.recepient, message.contents)
+            self.clear_outbox(sender)
+        
+    def send_message(self, sender, recepient, contents):
+        """
+        Moves an item into an agent's inbox, if the contact is permitted
+        """
+        assert(recepient in self.contacts[sender])
+        self.inbox[recepient].append(self.Message(sender, recepient, contents))
         
     def get_inbox_messages(self):
         """
@@ -37,10 +57,10 @@ class Mailbox:
         
         return msg_list
         
-    def clear_inbox(self):
-        self.inbox = defaultdict(lambda: [])
+    def clear_inbox(self, id):
+        self.inbox[id] = []
         
-    def clear_outbox(self):
-        self.outbox = defaultdict(lambda: [])
+    def clear_outbox(self, id):
+        self.outbox[id] = []
         
         

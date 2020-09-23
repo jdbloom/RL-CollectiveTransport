@@ -1,11 +1,11 @@
 from .deep_q_network import DeepQNetwork
 from .replay_buffer import ReplayBuffer
 
+from collections import namedtuple
 import numpy as np
 import torch as T
-
+from .mailbox import Mailbox
 import math
-
 
 
 class Agent_DQN():
@@ -19,6 +19,11 @@ class Agent_DQN():
         self.num_ops_per_action = num_ops_per_action
         self.num_observations = num_observations
 
+        self.alphabet_size = 8
+        # An iterable describing who may contact who. Entries in format {sender: [receivers]}
+        self.contacts = {0: [1], 1: [2], 2: [3], 3: [0]}
+        self.mailbox = Mailbox(self.contacts)
+        
         self.gamma = 0.99997
         self.lr = 0.0001
         self.epsilon = 1.0
@@ -39,8 +44,9 @@ class Agent_DQN():
 
         self.memory = ReplayBuffer(100000, num_observations) # accounting for reward in msg
 
-        self.q_eval = DeepQNetwork(self.lr, self.num_actions, self.num_observations, self.num_ops_per_action)
-        self.q_next = DeepQNetwork(self.lr, self.num_actions, self.num_observations, self.num_ops_per_action)
+        nn_args = [self.lr, self.num_actions, self.num_observations, self.num_ops_per_action, self.alphabet_size]
+        self.q_eval = DeepQNetwork(*nn_args)
+        self.q_next = DeepQNetwork(*nn_args)
 
     def choose_action(self, observation, test):
         # The last observation indicates whether the robot has failed or not
@@ -56,28 +62,46 @@ class Agent_DQN():
         else:
             action = np.random.choice(self.action_space)
 
-        actions = self.parse_action(action)
+        actions, outgoing_message = self.parse_action(action)
 
-        return actions, action
+        return actions, action, outgoing_message
 
     def parse_action(self, action_num):
         '''
         This function will parse the number action to
         a set of wheel actions:
 
-        0 - (- 1,-1)
-        1 - (-1, 0)
-        2 - (-1, 1)
-        3 - (0, -1)
-        4 - (0, 0)
-        5 - (0, 1)
-        6 - (1, -1)
-        7 - (1, 0)
-        8 - (1, 1)
+        0 - (- 1,-1, 0)
+        1 - (- 1,-1, 1)
+        2 - (- 1,-1, 2)
+        ...
+        7 - (- 1,-1, 7)
+        8 - (- 1, 0, 0)
         '''
-        l_wheel = (math.floor(action_num/self.num_ops_per_action) - 1)/10.0
-        r_wheel = (action_num%self.num_ops_per_action - 1)/10.0
-        return np.array([l_wheel, r_wheel, 0], dtype=np.float32)
+        outgoing_message = action_num % self.alphabet_size
+        # l_wheel changes every 24 action nums
+        l_wheel = (action_num - outgoing_message)//(8 * self.num_ops_per_action)
+        r_wheel = (action_num - outgoing_message)//8 # r_wheel changes every 8 action nums
+
+        # Trailing zero is hardcoded control for gripper
+        return np.array([l_wheel, r_wheel, 0], dtype=np.float32), outgoing_message
+
+    def get_agent_incoming_communications(self, agent_id):
+        messages = self.mailbox.inbox[agent_id]
+        return [message.contents for message in messages]
+
+    def clear_agent_inbox(self, agent_id):
+        self.mailbox.clear_inbox(agent_id)
+
+    def schedule_message_to_all_contacts(self, sender, contents):
+        '''
+        The sender sends a message containing contents to everyone it can contact
+        '''
+        for receiver in self.mailbox.contacts[sender]:
+            self.mailbox.schedule_message(sender, receiver, contents)
+
+    def carry_mail(self):
+        self.mailbox.carry_mail()
 
     def store_transition(self, state, action, reward, state_, done):
         self.memory.store_transition(state, action, reward, state_, done)

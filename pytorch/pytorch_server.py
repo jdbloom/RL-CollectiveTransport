@@ -39,6 +39,7 @@ REWARDS_FMT = '1f'
 STATS_FIELDS = ['magnitude', 'angle']
 STATS_FMT = '2f'
 # Actions
+#ACTIONS_FIELDS = ['lwheel', 'rwheel', 'broadcast', 'failure']
 ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
 ACTIONS_FMT = '3f'
 
@@ -159,10 +160,11 @@ data_file_path = recording_path + '/Data/'
 # num_actions -1 is to exclude control of the gripper from the neural network
 if SingleModel:
     # Create Single Model
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'] - 1, 3, 0)
+    # +1 extra obs for communications, -1 for failure code
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0)
 else:
     # Create the models for multi-agent individual model
-    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1,params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
+    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
 
 if test:
     if SingleModel:
@@ -174,12 +176,15 @@ if test:
 # Send acknowledgment
 ack()
 
-#def handle_communications(agent_models):
-#    for sender_id, sender_model in enumerate(models):
-#        for recepient, messages in sender_model.mailbox.outbox.items():
-#            for message in messages:
-#                models[recepient].mailbox.receive_message(message, sender_id)
-#        sender_model.mailbox.clear_outbox()
+def insert_communications(obs, agent_id):
+    # Insert incoming comms into obs
+    incoming_comms = model.get_agent_incoming_communications(agent_id)
+    if len(obs) <= len(OBS_FIELDS):
+        obs = np.concatenate([obs[:-1],
+                              incoming_comms,
+                              [obs[-1]]])
+    return obs
+
 #
 # Main loop
 #
@@ -238,7 +243,19 @@ while not exp_done:
                     # Get Actions
                     if SingleModel:
                         for i in range(params['num_robots']):
-                            action, action_num = model.choose_action(observations[i], test)
+                            # Insert incoming comms into obs
+                            """
+                            incoming_comms = model.get_agent_incoming_communications(i)
+                            model.clear_agent_inbox(i)
+                            observations[i] = np.concatenate([observations[i][:-1],
+                                                              incoming_comms,
+                                                              [observations[i][-1]]])
+                            """
+                            observations[i] = insert_communications(observations[i], i)
+                            model.clear_agent_inbox(i)
+                            action, action_num, outgoing_message = model.choose_action(observations[i], test)
+                            # Schedule this agent's messages to send
+                            model.schedule_message_to_all_contacts(i, outgoing_message)
                             actions_to_take.append(action)
                             actions.append(action_num)
                     else:
@@ -246,6 +263,11 @@ while not exp_done:
                             action, action_num = agent_model.choose_action(observations[i], test)
                             actions_to_take.append(action)
                             actions.append(action_num)
+
+                    # Once everyone's acted, deliver the mail
+                    if SingleModel:
+                        model.carry_mail()
+
                     # Take Step
                     socket.send(serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
@@ -259,15 +281,22 @@ while not exp_done:
                     force_mags = []
                     force_angs = []
                     r = [] # place holder to extract the values from the reward
-                    # Collect all messages to be sent
-                    #handle_communications(model)
 
                     for i in range(params['num_robots']):
+                        # Insert incoming comms into obs
+                        obs[i] = insert_communications(obs[i], i)
+                        # Don't clear the inbox this time, we'll use those messages next timestep
+                        """
+                        incoming_comms = model.get_agent_incoming_communications(i)
+                        obs[i] = np.concatenate([obs[i][:-1],
+                                                 incoming_comms,
+                                                 [obs[i][-1]]])
+                        """
                         new_observations.append(obs[i])
+                                                
                         reward = rewards[i]
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
-                        # Handle sending and receiving messages here !!!
                         if SingleModel:
                             if not test:
                                 if not observations[i][-1] and not new_observations[i][-1]:

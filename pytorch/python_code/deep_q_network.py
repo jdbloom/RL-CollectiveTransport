@@ -7,11 +7,11 @@ import torch.optim as optim
 import numpy as np
 
 class DeepQNetwork(nn.Module):
-    def __init__(self, lr, num_actions, observation_size, num_ops_per_action):
+    def __init__(self, lr, num_actions, observation_size, num_ops_per_action, alphabet_size):
         super(DeepQNetwork, self).__init__()
 
-        output_dims = num_ops_per_action**num_actions
-
+        output_dims = (num_ops_per_action**num_actions) * alphabet_size
+        
         self.fc1 = nn.Linear(observation_size, 64)
         self.fc2 = nn.Linear(64, 128)
         self.fc3 = nn.Linear(128, output_dims)
@@ -28,7 +28,6 @@ class DeepQNetwork(nn.Module):
         x = F.relu(self.fc1(state))
         x1 = F.relu(self.fc2(x))
         actions = self.fc3(x1)
-
         return actions
 
     def save_model(self, file_path):
