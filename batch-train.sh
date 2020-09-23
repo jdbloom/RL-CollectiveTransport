@@ -5,7 +5,7 @@ set -e
 num_robots=12
 
 until [ $num_robots -gt 12 ]; do
-    fourths_robot_failures=0
+    fourths_robot_failures=2
     until [ $fourths_robot_failures -gt 3 ]; do
 	# Bash doesn't play nice with fractions/floats
 	max_num_robot_failures=$(($fourths_robot_failures*$num_robots/4))
