@@ -10,7 +10,7 @@ class DeepQNetwork(nn.Module):
     def __init__(self, lr, num_actions, observation_size, num_ops_per_action, alphabet_size):
         super(DeepQNetwork, self).__init__()
 
-        output_dims = (num_ops_per_action**num_actions) * alphabet_size
+        output_dims = (num_ops_per_action**num_actions) + alphabet_size
         
         self.fc1 = nn.Linear(observation_size, 64)
         self.fc2 = nn.Linear(64, 128)

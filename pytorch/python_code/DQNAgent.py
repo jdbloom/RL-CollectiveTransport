@@ -10,7 +10,7 @@ import math
 
 class Agent_DQN():
     def __init__(self, num_agents, num_observations, num_actions,
-                 num_ops_per_action, id):
+                 num_ops_per_action, id, comm_scheme="None"):
 
         self.id = id
 
@@ -20,8 +20,31 @@ class Agent_DQN():
         self.num_observations = num_observations
 
         self.alphabet_size = 8
+        self.alphabet_space = [i for i in range(self.alphabet_size)]
+        self.dead_channel_code = self.alphabet_size
+        if comm_scheme == 'None':
+            self.left_contacts = {i:[] for i in range(num_agents)}
+            self.right_contacts = self.left_contacts
+        elif comm_scheme == 'left':
+            self.left_contacts = {i:[i+1] for i in range(num_agents)}
+            self.left_contacts[num_agents - 1] = [0]
+            self.right_contacts = {i:[] for i in range(num_agents)}
+        elif comm_scheme == 'right':
+            self.right_contacts = {i:[i-1] for i in range(num_agents)}
+            self.right_contacts[0] = [num_agents - 1]
+            self.left_contacts = {i:[] for i in range(num_agents)}
+        elif comm_scheme == 'neighbors':
+            self.left_contacts = {i:[i+1] for i in range(num_agents)}
+            self.left_contacts[num_agents - 1] = [0]
+            self.right_contacts = {i:[i-1] for i in range(num_agents)}
+            self.right_contacts[0] = [num_agents - 1]
+        else:
+            raise Exception('Unknown comm_scheme ' + comm_scheme)
+            
         # An iterable describing who may contact who. Entries in format {sender: [receivers]}
-        self.contacts = {0: [1], 1: [2], 2: [3], 3: [0]}
+        # Merge left and right contacts into a master dictionary
+        self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
+        
         self.mailbox = Mailbox(self.contacts)
         
         self.gamma = 0.99997
@@ -58,11 +81,13 @@ class Agent_DQN():
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
             actions = self.q_eval.forward(state)
-            action = T.argmax(actions).item()
+            action = T.argmax(actions[0][:10]).item()
+            outgoing_message = T.argmax(actions[0][10:]).item()
         else:
             action = np.random.choice(self.action_space)
+            outgoing_message = np.random.choice(self.alphabet_space)
 
-        actions, outgoing_message = self.parse_action(action)
+        actions = self.parse_action(action)
 
         return actions, action, outgoing_message
 
@@ -70,25 +95,37 @@ class Agent_DQN():
         '''
         This function will parse the number action to
         a set of wheel actions:
-
-        0 - (- 1,-1, 0)
-        1 - (- 1,-1, 1)
-        2 - (- 1,-1, 2)
-        ...
-        7 - (- 1,-1, 7)
-        8 - (- 1, 0, 0)
+        
+        0 - (- 1,-1)
+        1 - (-1, 0)
+        2 - (-1, 1)
+        3 - (0, -1)
+        4 - (0, 0)
+        5 - (0, 1)
+        6 - (1, -1)
+        7 - (1, 0)
+        8 - (1, 1)
         '''
-        outgoing_message = action_num % self.alphabet_size
-        # l_wheel changes every 24 action nums
-        l_wheel = (action_num - outgoing_message)//(8 * self.num_ops_per_action)
-        r_wheel = (action_num - outgoing_message)//8 # r_wheel changes every 8 action nums
-
+        l_wheel = (math.floor(action_num/self.num_ops_per_action) - 1)/10.0
+        r_wheel = (action_num%self.num_ops_per_action - 1)/10.0
         # Trailing zero is hardcoded control for gripper
-        return np.array([l_wheel, r_wheel, 0], dtype=np.float32), outgoing_message
+        return np.array([l_wheel, r_wheel, 0], dtype=np.float32)
 
     def get_agent_incoming_communications(self, agent_id):
+        '''
+        Returns the specified agent's communications as a namedtuple
+        (left_comm, right_comm)
+        '''
         messages = self.mailbox.inbox[agent_id]
-        return [message.contents for message in messages]
+        incoming_comms = namedtuple('incoming_comms', 'left_comm right_comm')
+        left_comm = self.dead_channel_code
+        right_comm = self.dead_channel_code
+        for message in messages:
+            if agent_id in self.left_contacts[message.sender]:
+                left_comm = message.contents
+            elif agent_id in self.right_contacts[message.sender]:
+                right_comm = message.contents
+        return incoming_comms(left_comm, right_comm)
 
     def clear_agent_inbox(self, agent_id):
         self.mailbox.clear_inbox(agent_id)

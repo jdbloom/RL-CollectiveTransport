@@ -16,9 +16,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--test", default=False, action="store_true")
 parser.add_argument("--model_path")
+parser.add_argument("--comm_scheme", default="None")
 args = parser.parse_args()
 
 recording_path = args.recording_path
+comm_scheme = args.comm_scheme
 
 #
 # Message fields
@@ -160,8 +162,8 @@ data_file_path = recording_path + '/Data/'
 # num_actions -1 is to exclude control of the gripper from the neural network
 if SingleModel:
     # Create Single Model
-    # +1 extra obs for communications, -1 for failure code
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0)
+    # +2 extra obs for communications, -1 for failure code
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] + 1, params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme)
 else:
     # Create the models for multi-agent individual model
     models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
@@ -181,7 +183,7 @@ def insert_communications(obs, agent_id):
     incoming_comms = model.get_agent_incoming_communications(agent_id)
     if len(obs) <= len(OBS_FIELDS):
         obs = np.concatenate([obs[:-1],
-                              incoming_comms,
+                              [incoming_comms.left_comm, incoming_comms.right_comm],
                               [obs[-1]]])
     return obs
 
@@ -285,13 +287,8 @@ while not exp_done:
                     for i in range(params['num_robots']):
                         # Insert incoming comms into obs
                         obs[i] = insert_communications(obs[i], i)
+                        print(obs[i])
                         # Don't clear the inbox this time, we'll use those messages next timestep
-                        """
-                        incoming_comms = model.get_agent_incoming_communications(i)
-                        obs[i] = np.concatenate([obs[i][:-1],
-                                                 incoming_comms,
-                                                 [obs[i][-1]]])
-                        """
                         new_observations.append(obs[i])
                                                 
                         reward = rewards[i]
