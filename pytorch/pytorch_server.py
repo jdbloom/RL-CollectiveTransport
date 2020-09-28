@@ -246,13 +246,6 @@ while not exp_done:
                     if SingleModel:
                         for i in range(params['num_robots']):
                             # Insert incoming comms into obs
-                            """
-                            incoming_comms = model.get_agent_incoming_communications(i)
-                            model.clear_agent_inbox(i)
-                            observations[i] = np.concatenate([observations[i][:-1],
-                                                              incoming_comms,
-                                                              [observations[i][-1]]])
-                            """
                             observations[i] = insert_communications(observations[i], i)
                             model.clear_agent_inbox(i)
                             action, action_num, outgoing_message = model.choose_action(observations[i], test)
@@ -287,7 +280,7 @@ while not exp_done:
                     for i in range(params['num_robots']):
                         # Insert incoming comms into obs
                         obs[i] = insert_communications(obs[i], i)
-                        print(obs[i])
+                        
                         # Don't clear the inbox this time, we'll use those messages next timestep
                         new_observations.append(obs[i])
                                                 

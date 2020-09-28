@@ -75,7 +75,7 @@ class Agent_DQN():
         # The last observation indicates whether the robot has failed or not
         if observation[-1] != 0:
             self.failed = True
-            return self.failure_action, 9
+            return self.failure_action, 9, self.dead_channel_code
         else: self.failed = False
 
         if test or np.random.random() > self.epsilon:
