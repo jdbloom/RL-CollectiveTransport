@@ -111,6 +111,9 @@ private:
    /* Number of robots */
    UInt32 m_unNumRobots;
 
+   /* Alphabet size of robot communications */
+   UInt32 m_unAlphabetSize;
+
    /* Number of episodes */
    UInt32 m_unNumEpisodes;
 

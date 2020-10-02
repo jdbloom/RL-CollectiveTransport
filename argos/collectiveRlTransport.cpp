@@ -65,6 +65,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
+      GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -645,6 +646,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unNumObs);
    vecParams.push_back(m_unNumActions);
    vecParams.push_back(m_unNumStats);
+   vecParams.push_back(m_unAlphabetSize);
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
    DEBUG("m_unNumActions = %u\n", m_unNumActions);*/

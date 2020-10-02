@@ -10,24 +10,31 @@ import math
 import copy
 import zmq
 import csv
+import os
 
+# get path to containing folder so this works whereever it's used
+containing_folder = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--test", default=False, action="store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--comm_scheme", default="None")
+parser.add_argument("--port", default="55555")
 args = parser.parse_args()
 
-recording_path = args.recording_path
+recording_path = os.path.join(containing_folder, args.recording_path)
+if args.model_path is not None:
+    model_file_path = os.path.join(containing_folder, args.model_path)
 comm_scheme = args.comm_scheme
+port = args.port
 
 #
 # Message fields
 #
 # Parameters
-PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats']
-PARAMS_FMT = '4I'
+PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats', 'alphabet_size']
+PARAMS_FMT = '5I'
 # Episode state
 EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
 EXPERIMENT_FMT = '3B'
@@ -144,8 +151,8 @@ SingleModel = True
 context = zmq.Context()
 # Create socket
 socket = context.socket(zmq.REP)
-# Wait for connections on port 55555
-socket.bind("tcp://*:55555")
+# Wait for connections on specified port, defaults to 55555
+socket.bind("tcp://*:" + port)
 print("Server started")
 # Get parameters
 params = parse_msg(socket.recv(), 'params', PARAMS_FIELDS, PARAMS_FMT)
@@ -155,15 +162,14 @@ print("  num_obs     =", params['num_obs'])
 print("  num_actions =", params['num_actions'])
 print("  num_stats   =", params['num_stats'])
 # Path to save/ load models:
-model_file_path = args.model_path
 data_file_path = recording_path + '/Data/'
 
 # num_obs - 1 is to exclude the "failed" observation from the neural network
 # num_actions -1 is to exclude control of the gripper from the neural network
 if SingleModel:
     # Create Single Model
-    # +2 extra obs for communications, -1 for failure code
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] + 1, params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme)
+    # -1 for failure code
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] + (2*params['alphabet_size']) - 1, params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme, alphabet_size=params['alphabet_size'])
 else:
     # Create the models for multi-agent individual model
     models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
@@ -181,9 +187,16 @@ ack()
 def insert_communications(obs, agent_id):
     # Insert incoming comms into obs
     incoming_comms = model.get_agent_incoming_communications(agent_id)
+    '''
+    #Uncomment for debugging communications
+    print(obs[:-1])
+    print(incoming_comms.left_comm)
+    print(incoming_comms.right_comm)
+    '''
     if len(obs) <= len(OBS_FIELDS):
         obs = np.concatenate([obs[:-1],
-                              [incoming_comms.left_comm, incoming_comms.right_comm],
+                              incoming_comms.left_comm,
+                              incoming_comms.right_comm,
                               [obs[-1]]])
     return obs
 

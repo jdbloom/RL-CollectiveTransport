@@ -10,8 +10,8 @@ import math
 
 class Agent_DQN():
     def __init__(self, num_agents, num_observations, num_actions,
-                 num_ops_per_action, id, comm_scheme="None"):
-
+                 num_ops_per_action, id, comm_scheme="None", alphabet_size=4):
+        # !!! We have too many arguments here, turn into kwarg based function
         self.id = id
 
         self.num_agents = num_agents
@@ -19,9 +19,13 @@ class Agent_DQN():
         self.num_ops_per_action = num_ops_per_action
         self.num_observations = num_observations
 
-        self.alphabet_size = 8
-        self.alphabet_space = [i for i in range(self.alphabet_size)]
-        self.dead_channel_code = self.alphabet_size
+        self.alphabet_size = alphabet_size
+        #self.alphabet_space = [i for i in range(self.alphabet_size)]
+        self.alphabet_space = [np.zeros(self.alphabet_size) for i in range(self.alphabet_size + 1)]
+        for i in range(self.alphabet_size):
+            self.alphabet_space[i+1][i] = 1 
+            
+        self.dead_channel_code = self.alphabet_space[0]
         if comm_scheme == 'None':
             self.left_contacts = {i:[] for i in range(num_agents)}
             self.right_contacts = self.left_contacts
@@ -45,7 +49,7 @@ class Agent_DQN():
         # Merge left and right contacts into a master dictionary
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
         
-        self.mailbox = Mailbox(self.contacts)
+        self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
         
         self.gamma = 0.99997
         self.lr = 0.0001
@@ -82,13 +86,15 @@ class Agent_DQN():
             state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
             actions = self.q_eval.forward(state)
             action = T.argmax(actions[0][:10]).item()
-            outgoing_message = T.argmax(actions[0][10:]).item()
+            outgoing_message_code = T.argmax(actions[0][10:]).item()
+            # Alphabet_space[0] is the dead_channel_code
+            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
         else:
             action = np.random.choice(self.action_space)
-            outgoing_message = np.random.choice(self.alphabet_space)
+            #outgoing_message = np.random.choice(self.alphabet_space)
+            outgoing_message = self.alphabet_space[np.random.choice(self.alphabet_size) + 1]
 
         actions = self.parse_action(action)
-
         return actions, action, outgoing_message
 
     def parse_action(self, action_num):

@@ -9,7 +9,7 @@ from collections import defaultdict, namedtuple
 
 class Mailbox:
     Message = namedtuple('Message', 'sender recepient contents')
-    def __init__(self, contacts):
+    def __init__(self, contacts, dead_channel_code):
         # Format of boxes is box[id] -> [message1, message2, ...]
         # An iterable describing who may contact who. Entries in format {sender: [receivers]}
         self.contacts = contacts
@@ -17,7 +17,7 @@ class Mailbox:
         # prefill everyone's mailbox with an initial message
         for sender, recepients in self.contacts.items():
             for recepient in recepients:
-                self.inbox[recepient].append(self.Message(sender, recepient, 0))
+                self.inbox[recepient].append(self.Message(sender, recepient, dead_channel_code))
             
         self.outbox = defaultdict(lambda: [])
 
