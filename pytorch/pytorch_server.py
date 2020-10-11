@@ -10,16 +10,22 @@ import math
 import copy
 import zmq
 import csv
+import os
 
+# get path to containing folder so this works whereever it's used
+containing_folder = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--test", default=False, action="store_true")
 parser.add_argument("--model_path")
+parser.add_argument("--port", default="55555")
 args = parser.parse_args()
 
-recording_path = args.recording_path
-
+recording_path = os.path.join(containing_folder, args.recording_path)
+if args.model_path is not None:
+    model_file_path = os.path.join(containing_folder, args.model_path)
+port = args.port
 #
 # Message fields
 #
@@ -142,7 +148,7 @@ context = zmq.Context()
 # Create socket
 socket = context.socket(zmq.REP)
 # Wait for connections on port 55555
-socket.bind("tcp://*:55555")
+socket.bind("tcp://*:" + port)
 print("Server started")
 # Get parameters
 params = parse_msg(socket.recv(), 'params', PARAMS_FIELDS, PARAMS_FMT)
