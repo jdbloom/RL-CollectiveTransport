@@ -71,7 +71,7 @@ class Agent_DQN():
 
         self.memory = ReplayBuffer(100000, num_observations) # accounting for reward in msg
 
-        nn_args = [self.lr, self.num_actions, self.num_observations, self.num_ops_per_action, self.alphabet_size]
+        nn_args = [self.lr, self.num_actions, self.num_observations, self.num_ops_per_action]
         self.q_eval = DeepQNetwork(*nn_args)
         self.q_next = DeepQNetwork(*nn_args)
 
@@ -85,17 +85,17 @@ class Agent_DQN():
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
             actions = self.q_eval.forward(state)
-            action = T.argmax(actions[0][:10]).item()
-            outgoing_message_code = T.argmax(actions[0][10:]).item()
+            action = T.argmax(actions[0]).item()
+            #!outgoing_message_code = T.argmax(actions[0][10:]).item()
             # Alphabet_space[0] is the dead_channel_code
-            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+            #!outgoing_message = self.alphabet_space[outgoing_message_code + 1]
         else:
             action = np.random.choice(self.action_space)
-            #outgoing_message = np.random.choice(self.alphabet_space)
-            outgoing_message = self.alphabet_space[np.random.choice(self.alphabet_size) + 1]
+            #!outgoing_message = self.alphabet_space[np.random.choice(self.alphabet_size) + 1]
 
         actions = self.parse_action(action)
-        return actions, action, outgoing_message
+        #!return actions, action, outgoing_message
+        return actions, action, 0
 
     def parse_action(self, action_num):
         '''

@@ -34,6 +34,25 @@ if [ ! -f train_progress.csv ]; then
     done	    
 fi
 
+
+# Load progress file into an associative array
+declare -A progress_dict
+while IFS=, read -r communication_scheme num_robots proportion_failures status
+do
+    progress_dict["${communication_scheme},${num_robots},${proportion_failures}"]=$status
+done < train_progress.csv
+
+# Writes progress_dict to train_progress.csv
+function update_progress() {
+    # Write column headers
+    echo "comm_scheme, num_robots, proportion_failures, status" > train_progress.csv
+    while IFS=, read -r communication_scheme num_robots proportion_failures; do
+	local_key="${communication_scheme},${num_robots},${proportion_failures}"
+	echo "${local_key},${progress_dict[$local_key]}" >> train_progress.csv	
+    done < <(printf "%s\n" "${!progress_dict[@]}")
+    exit
+}
+
 function train_model() {
     # comm_scheme - 1
     # num_robots - 2
@@ -67,22 +86,7 @@ function train_model() {
     python pytorch/python_code/viz.py pytorch/$recording_path/Data/ $figure_path
 }
 
-# Load progress file into an associative array
-declare -A progress_dict
-while IFS=, read -r communication_scheme num_robots proportion_failures status
-do
-    progress_dict["${communication_scheme},${num_robots},${proportion_failures}"]=$status
-done < train_progress.csv
-
-# Writes progress_dict to train_progress.csv
-function update_progress() {
-    # Write column headers
-    echo "comm_scheme, num_robots, proportion_failures, status" > train_progress.csv
-    while IFS=, read -r communication_scheme num_robots proportion_failures; do
-	local_key="${communication_scheme},${num_robots},${proportion_failures}"
-	echo "${local_key},${progress_dict[$local_key]}" >> train_progress.csv	
-    done < <(printf "%s\n" "${!progress_dict[@]}")
-}
+trap save_model SIGINT
 
 task_counter=0
 while IFS=, read -r communication_scheme num_robots proportion_failures;
@@ -151,7 +155,9 @@ do
 	done
 	#echo "${communication_scheme} ${num_robots} ${proportion_failures} ${status}"
     fi    
-done < <(
+done<train_progress.csv
+
+< <(
     printf "%s\n" "${!progress_dict[@]}"
 )
 

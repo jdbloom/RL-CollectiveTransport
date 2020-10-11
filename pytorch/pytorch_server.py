@@ -178,6 +178,7 @@ params = parse_msg(socket.recv(), 'params', PARAMS_FIELDS, PARAMS_FMT)
 print("PARAMETERS:")
 print("  num_robots  =", params['num_robots'])
 print("  num_obs     =", params['num_obs'])
+print("  alphabet_size  =", params['alphabet_size'])
 print("  num_actions =", params['num_actions'])
 print("  num_stats   =", params['num_stats'])
 # Path to save/ load models:
@@ -208,15 +209,16 @@ def insert_communications(obs, agent_id):
     incoming_comms = model.get_agent_incoming_communications(agent_id)
     '''
     #Uncomment for debugging communications
-    print(obs[:-1])
-    print(incoming_comms.left_comm)
-    print(incoming_comms.right_comm)
+    print("Observations (no comms):\n", obs[:])
+    print("Left comms:\n", incoming_comms.left_comm)
+    print("right_comm:\n",incoming_comms.right_comm)
     '''
     if len(obs) <= len(OBS_FIELDS):
         obs = np.concatenate([obs[:-1],
                               incoming_comms.left_comm,
                               incoming_comms.right_comm,
                               [obs[-1]]])
+    #print("Observations (with comms):\n", obs)
     return obs
 
 #

@@ -15,3 +15,4 @@ argos/argos/*
 # Just to make sure we don't commit build artifacts anymore...
 *.bdb
 *.bo
+*.fasl
