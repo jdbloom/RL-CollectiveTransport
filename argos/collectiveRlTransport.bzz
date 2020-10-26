@@ -10,18 +10,21 @@ function init(){
   set_wheels(L_wheel, R_wheel)
   gripped = 0
   failure = 0
+  angle_buffer = 5 # degrees
 }
 
 function step(){
   if(gripped){
-    # Grab R_increase and L_increase from PreStep() in the loopfunctions code.
-    # Make sure R_wheel and L_wheel are within bounds
-    L_wheel = L_wheel + L_increase
-    L_wheel = math.max(math.min(L_wheel, MAX_SPEED), MIN_SPEED)
-    R_wheel = R_wheel + R_increase
-    R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
-    # Set the wheel speeds
-    set_wheels(L_wheel, R_wheel)
+    # Are we within angle_buffer of goal:
+    AngleToGoal = AngleToGoal + 180.0
+    if(AngleToGoal < angle_buffer or (360 - AngleToGoal) < angle_buffer){
+      set_wheels(0.0, 0.0)
+      set_wheels(-10.0, -10.0)
+    }
+    # Otherwise rotate
+    else {
+      set_wheels(-5.0, 5.0)
+    }
   }
   else {
     if (proximity[0].value > 0.6){

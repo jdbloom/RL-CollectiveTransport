@@ -298,26 +298,31 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase,
-                std::vector<UInt32>& vec_faiulure) :
+                std::vector<UInt32>& vec_faiulure,
+                std::vector<Real>& vec_angle_to_goal) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
-      Failure(vec_faiulure) {}
+      Failure(vec_faiulure),
+      AngleToGoal(vec_angle_to_goal) {}
 
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
-      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
+      BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
+      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f,%f\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
-            RIncrease[t_vm->robot]);*/
+            RIncrease[t_vm->robot],
+            AngleToGoal[t_vm->robot]);*/
    }
 
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
    std::vector<UInt32> Failure;
+   std::vector<Real> AngleToGoal;
 };
 
 /****************************************/
@@ -452,13 +457,12 @@ void CCollectiveRLTransport::PreStep() {
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
    std::vector<UInt32> vecFailure(m_unNumRobots);
+   std::vector<Real> vecAngleToGoal(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
-      float* pfAction = &m_vecActions[0] + i * m_unNumActions;
-      vecLIncrease[i] = pfAction[0];
-      vecRIncrease[i] = pfAction[1];
-      vecFailure[i] = pfAction[2];
+      float* pfAction = &m_vecObs[0] + i * m_unNumObs;
+      vecAngleToGoal[i] = pfAction[1];
    }
-   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure));
+   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure, vecAngleToGoal));
 }
 
 /****************************************/
