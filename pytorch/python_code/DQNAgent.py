@@ -10,9 +10,10 @@ import math
 
 class Agent_DQN():
     def __init__(self, num_agents, num_observations, num_actions,
-                 num_ops_per_action, id):
+                 num_ops_per_action, id, base_case=False):
 
         self.id = id
+        self.base_case = base_case
 
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -49,6 +50,9 @@ class Agent_DQN():
             return self.failure_action, 9
         else: self.failed = False
 
+        if self.base_case:
+            return self.get_base_case_action(observation)
+        
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
             actions = self.q_eval.forward(state)
@@ -159,3 +163,27 @@ class Agent_DQN():
 
     def load_model(self, path):
         self.q_eval.load_model(path)
+
+    def get_base_case_action(self, observation):
+        """The control action to measure the neural network against. If more than 10 degrees
+        from goal, slow down. If you're halted, adjust your angle the right direction. If you're 
+        facing the goal, speed up.
+        """
+        robot_angle2goal = observation[1]
+        left_wheel_speed = observation[2]
+        right_wheel_speed = observation[3]
+        clockwise_rotation = left_wheel_speed > right_wheel_speed
+        counterclockwise_rotation = left_wheel_speed < right_wheel_speed
+        if -10 < robot_angle2goal:
+            if not clockwise_rotation:
+                return np.array([1,-1,0])
+            else:
+                return np.array([0,0,0])
+        elif robot_angle2goal < 10:
+            if counterclockwise_rotation:
+                return np.array([0,0,0])
+            else:
+                return np.array([-1,1,0])
+        else:
+            return np.array([1,1,0])
+        pass

@@ -18,6 +18,7 @@ containing_folder = os.path.dirname(os.path.realpath(__file__))
 parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--test", default=False, action="store_true")
+parser.add_argument("--base_case", default=False, action="store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--port", default="55555")
 args = parser.parse_args()
@@ -143,6 +144,8 @@ def ack():
 test = args.test
 # Flag for CSRL or ILRL
 SingleModel = True
+# base_case behavior or Neural Networked based?
+base_case = args.base_case
 # Create context
 context = zmq.Context()
 # Create socket
@@ -165,7 +168,8 @@ data_file_path = recording_path + '/Data/'
 # num_actions -1 is to exclude control of the gripper from the neural network
 if SingleModel:
     # Create Single Model
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'] - 1, 3, 0)
+    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1, params['num_actions'] - 1, 3, 0,
+                                base_case=base_case)
 else:
     # Create the models for multi-agent individual model
     models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'] - 1,params['num_actions'] - 1, 3, i) for i in range(params['num_robots'])]
