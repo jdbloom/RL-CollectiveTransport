@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.17.3)
 project(collective_RL_Transport)
 
+option(CLUSTER "whether we are running on the cluster" OFF)
+
 # Leave for apple computers so that they can debug the code.
 if(APPLE)
   # Add address sanitizer support for CLang
@@ -30,9 +32,11 @@ include_directories(${CMAKE_SOURCE_DIR} ${ARGOS_INCLUDE_DIRS})
 # Set ARGoS link dir
 link_directories(${ARGOS_LIBRARY_DIRS})
 
-# Find Lua
-find_package(Lua53)
-include_directories(${LUA_INCLUDE_DIR})
+if(NOT CLUSTER)
+  # Find Lua
+  find_package(Lua53)
+  include_directories(${LUA_INCLUDE_DIR})
+endif(NOT CLUSTER)
 
 # Check for Buzz
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} /usr/local/share/buzz/cmake)
