@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17.3)
+cmake_minimum_required(VERSION 3.16.2)
 project(collective_RL_Transport)
 
 option(CLUSTER "whether we are running on the cluster" OFF)
@@ -39,7 +39,8 @@ if(NOT CLUSTER)
 endif(NOT CLUSTER)
 
 # Check for Buzz
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} /usr/local/share/buzz/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH};/usr/local/share/buzz/cmake;/home/jdbloom/buzzbundle/share/buzz/cmake)
+message("CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 find_package(Buzz REQUIRED)
 include_directories(${BUZZ_C_INCLUDE_DIR})
 
