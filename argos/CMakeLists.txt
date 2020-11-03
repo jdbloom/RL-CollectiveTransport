@@ -3,9 +3,13 @@
 #
 add_library(collectiveRlTransport SHARED
   collectiveRlTransport.h
-  collectiveRlTransport_qtuser_functions.h
-  collectiveRlTransport.cpp
-  collectiveRlTransport_qtuser_functions.cpp)
+  collectiveRlTransport.cpp)
+
+if(NOT CLUSTER)
+    add_library(collectiveRlTransport SHARED
+    collectiveRlTransport_qtuser_functions.h
+    collectiveRlTransport_qtuser_functions.cpp)
+endif(NOT CLUSTER)
 
   target_link_libraries(collectiveRlTransport
   ${BUZZ_LIBRARY}

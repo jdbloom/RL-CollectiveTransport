@@ -5,7 +5,9 @@
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
-#include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
+#ifdef ARGOS_COMPILE_QTOPENGL
+  #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
+#endif
 //#include <server/ModelServerClient.hpp>
 using namespace argos;
 
