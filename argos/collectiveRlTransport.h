@@ -5,6 +5,7 @@
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
+#include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
@@ -196,6 +197,9 @@ private:
 
    /** List of robot failure times: -1 = no failure **/
    std::vector <std::vector<SInt32>> m_vecRobotFailures;
+
+   /** Pointer to the proximity sensor **/
+   CCI_ProximitySensor* m_pcProximity;
 
 private:
 

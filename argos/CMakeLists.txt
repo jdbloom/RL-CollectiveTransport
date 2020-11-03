@@ -1,15 +1,13 @@
 #
 # Loop functions
 #
-add_library(collectiveRlTransport SHARED
-  collectiveRlTransport.h
-  collectiveRlTransport.cpp)
+set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
 
 if(NOT CLUSTER)
-    add_library(collectiveRlTransport SHARED
-    collectiveRlTransport_qtuser_functions.h
-    collectiveRlTransport_qtuser_functions.cpp)
+    set(LIBRARY_FILES ${LIBRARY_FILES} collectiveRlTransport_qtuser_functions.h collectiveRlTransport_qtuser_functions.cpp)
 endif(NOT CLUSTER)
+
+add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
 
   target_link_libraries(collectiveRlTransport
   ${BUZZ_LIBRARY}

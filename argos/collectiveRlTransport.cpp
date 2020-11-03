@@ -40,6 +40,7 @@ CCollectiveRLTransport::CCollectiveRLTransport() :
    m_unNumObs(8),
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
+   m_pcProximity(NULL),
    m_ptZMQSocket(nullptr) {
 }
 
