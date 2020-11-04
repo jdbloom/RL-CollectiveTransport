@@ -39,8 +39,10 @@ PARAMS_FMT = '5I'
 EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
 EXPERIMENT_FMT = '3B'
 # Observations
-OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal', 'failed']
-OBS_FMT = '8f'
+OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal', 'failed',
+              'ProxVal 0', 'ProxVal 1', 'ProxVal 2', 'ProxVal 3', 'ProxVal 4', 'ProxVal 5', 'ProxVal 6', 'ProxVal 7', 'ProxVal 8', 'ProxVal 9', 'ProxVal 10', 'ProxVal 11',
+              'ProxVal 12', 'ProxVal 13', 'ProxVal 14', 'ProxVal 15', 'ProxVal 16', 'ProxVal 17', 'ProxVal 18', 'ProxVal 19', 'ProxVal 20', 'ProxVal 21', 'ProxVal 22', 'ProxVal 23']
+OBS_FMT = '32f'
 # Rewards
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
@@ -97,6 +99,7 @@ def parse_obs(msg):
         nparr = np.fromiter(data.values(), dtype=np.float32, count=len(data))
         # Append it to the observations
         obs.append(nparr)
+    import ipdb; ipdb.set_trace()
     return obs
 
 def parse_rewards(msg):
@@ -293,10 +296,10 @@ while not exp_done:
                     for i in range(params['num_robots']):
                         # Insert incoming comms into obs
                         obs[i] = insert_communications(obs[i], i)
-                        
+
                         # Don't clear the inbox this time, we'll use those messages next timestep
                         new_observations.append(obs[i])
-                                                
+
                         reward = rewards[i]
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])

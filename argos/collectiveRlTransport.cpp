@@ -37,10 +37,9 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(8),
+   m_unNumObs(8+24),
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
-   m_pcProximity(NULL),
    m_ptZMQSocket(nullptr) {
 }
 
@@ -395,6 +394,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
             break;
          }
       }
+
+
       //DEBUG("cMotion = (%f,%f)\n", cMotion.GetX(), cMotion.GetY());
       //DEBUG("cVecCylinder2Goal = (%f,%f)\n", cVecCylinder2Goal.GetX(), cVecCylinder2Goal.GetY());
       //DEBUG("fDirection = %f\n", fDirection);
@@ -412,6 +413,14 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
       m_vecObs[i * m_unNumObs + 7] = hasFailed;
+
+      // Get the proximity sensor values
+      const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
+        m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
+      for(size_t t = 0; t < tReadings.size(); t++){
+        m_vecObs[i * m_unNumObs + 8 + t] = tReadings[t].Value;
+      }
+
       m_vecRewards[i] = fReward;
    }
 
