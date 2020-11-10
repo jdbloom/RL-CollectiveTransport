@@ -23,8 +23,8 @@ class Agent_DQN():
         #self.alphabet_space = [i for i in range(self.alphabet_size)]
         self.alphabet_space = [np.zeros(self.alphabet_size) for i in range(self.alphabet_size + 1)]
         for i in range(self.alphabet_size):
-            self.alphabet_space[i+1][i] = 1 
-            
+            self.alphabet_space[i+1][i] = 1
+
         self.dead_channel_code = self.alphabet_space[0]
         if comm_scheme == 'None':
             self.left_contacts = {i:[] for i in range(num_agents)}
@@ -44,13 +44,13 @@ class Agent_DQN():
             self.right_contacts[0] = [num_agents - 1]
         else:
             raise Exception('Unknown comm_scheme ' + comm_scheme)
-            
+
         # An iterable describing who may contact who. Entries in format {sender: [receivers]}
         # Merge left and right contacts into a master dictionary
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
-        
+
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
-        
+
         self.gamma = 0.99997
         self.lr = 0.0001
         self.epsilon = 1.0
@@ -75,9 +75,9 @@ class Agent_DQN():
         self.q_eval = DeepQNetwork(*nn_args)
         self.q_next = DeepQNetwork(*nn_args)
 
-    def choose_action(self, observation, test):
+    def choose_action(self, observation, failure, test):
         # The last observation indicates whether the robot has failed or not
-        if observation[-1] != 0:
+        if failure != 0:
             self.failed = True
             return self.failure_action, 9, self.dead_channel_code
         else: self.failed = False
@@ -101,7 +101,7 @@ class Agent_DQN():
         '''
         This function will parse the number action to
         a set of wheel actions:
-        
+
         0 - (- 1,-1)
         1 - (-1, 0)
         2 - (-1, 1)

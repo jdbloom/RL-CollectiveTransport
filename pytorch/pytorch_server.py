@@ -39,10 +39,13 @@ PARAMS_FMT = '5I'
 EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
 EXPERIMENT_FMT = '3B'
 # Observations
-OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal', 'failed',
-              'ProxVal 0', 'ProxVal 1', 'ProxVal 2', 'ProxVal 3', 'ProxVal 4', 'ProxVal 5', 'ProxVal 6', 'ProxVal 7', 'ProxVal 8', 'ProxVal 9', 'ProxVal 10', 'ProxVal 11',
-              'ProxVal 12', 'ProxVal 13', 'ProxVal 14', 'ProxVal 15', 'ProxVal 16', 'ProxVal 17', 'ProxVal 18', 'ProxVal 19', 'ProxVal 20', 'ProxVal 21', 'ProxVal 22', 'ProxVal 23']
-OBS_FMT = '32f'
+OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel', 'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal',
+              'ProxVal_0', 'ProxVal_1', 'ProxVal_2', 'ProxVal_3', 'ProxVal_4', 'ProxVal_5', 'ProxVal_6', 'ProxVal_7', 'ProxVal_8', 'ProxVal_9', 'ProxVal_10', 'ProxVal_11',
+              'ProxVal_12', 'ProxVal_13', 'ProxVal_14', 'ProxVal_15', 'ProxVal_16', 'ProxVal_17', 'ProxVal_18', 'ProxVal_19', 'ProxVal_20', 'ProxVal_21', 'ProxVal_22', 'ProxVal_23']
+OBS_FMT = '31f'
+# Failures
+FAILURE_FIELDS = ['failure']
+FAILURE_FMT = '1I'
 # Rewards
 REWARDS_FIELDS = ['reward']
 REWARDS_FMT = '1f'
@@ -59,7 +62,8 @@ ACTIONS_FMT = '3f'
 #
 # Byte size of float in C++
 FLOAT_SIZE = 4
-
+# Byte size of int in C++
+INT_SIZE = 4
 #
 # Parse the fields from a message
 # Returns a dictionary
@@ -99,8 +103,20 @@ def parse_obs(msg):
         nparr = np.fromiter(data.values(), dtype=np.float32, count=len(data))
         # Append it to the observations
         obs.append(nparr)
-    import ipdb; ipdb.set_trace()
     return obs
+
+def parse_failures(msg):
+    failures = []
+    for r in range(0, params['num_robots']):
+        # Get message bytes for this robot
+        m = msg[r * INT_SIZE:(r+1)*INT_SIZE]
+        # Parse the bytes into a dictionary
+        data = parse_msg(m, 'failure', FAILURE_FIELDS, FAILURE_FMT)
+        # Make a numpy array
+        nparr = np.fromiter(data.values(), dtype=np.intc, count = len(data))
+        # Append it to the rewards
+        failures.append(nparr)
+    return failures
 
 def parse_rewards(msg):
     rewards = []
@@ -233,8 +249,9 @@ while not exp_done:
             time_steps = 0
             # Recieve initial Observation
             obs = parse_obs(msgs[1])
-            rewards = parse_rewards(msgs[2])
-            stats = parse_stats(msgs[3])
+            failures = parse_failures(msgs[2])
+            rewards = parse_rewards(msgs[3])
+            stats = parse_stats(msgs[4])
 
             observations = []
             actions = []
@@ -246,6 +263,7 @@ while not exp_done:
             for i in range(params['num_robots']):
                 observations.append(obs[i])
                 reward = rewards[i]
+                failure = failures[i]
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
             running_reward+=reward
@@ -264,14 +282,14 @@ while not exp_done:
                             # Insert incoming comms into obs
                             observations[i] = insert_communications(observations[i], i)
                             model.clear_agent_inbox(i)
-                            action, action_num, outgoing_message = model.choose_action(observations[i], test)
+                            action, action_num, outgoing_message = model.choose_action(observations[i], failure, test)
                             # Schedule this agent's messages to send
                             model.schedule_message_to_all_contacts(i, outgoing_message)
                             actions_to_take.append(action)
                             actions.append(action_num)
                     else:
                         for i , agent_model in enumerate(models):
-                            action, action_num = agent_model.choose_action(observations[i], test)
+                            action, action_num = agent_model.choose_action(observations[i], failure, test)
                             actions_to_take.append(action)
                             actions.append(action_num)
 
@@ -284,8 +302,9 @@ while not exp_done:
                     msgs = socket.recv_multipart()
                     exp_done, episode_done, reached_goal = parse_status(msgs[0])
                     obs = parse_obs(msgs[1])
-                    rewards = parse_rewards(msgs[2])
-                    stats = parse_stats(msgs[3])
+                    failures = parse_failures(msgs[2])
+                    rewards = parse_rewards(msgs[3])
+                    stats = parse_stats(msgs[4])
                     # Store Transitions and Learn
                     new_observations = []
                     loss = []

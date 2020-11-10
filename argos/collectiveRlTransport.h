@@ -173,6 +173,9 @@ private:
    /** The vector of observations */
    std::vector<float> m_vecObs;
 
+   /** The vector of failure flags*/
+   std::vector<int> m_vecFailures;
+
    /** The vector of rewards */
    std::vector<float> m_vecRewards;
 
@@ -224,6 +227,8 @@ private:
    void ZMQSendParams();
 
    void ZMQSendObservations();
+
+   void ZMQSendFailures();
 
    void ZMQSendRewards();
 

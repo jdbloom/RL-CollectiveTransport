@@ -12,7 +12,7 @@ function train_model() {
     local experiment_name="comm_scheme-${1}-num_robots-${2}-prop_failures-${3}"
     local recording_path="python_code/Data/train/$experiment_name"
     local figure_path="pytorch/python_code/Data/Figures/$experiment_name.png"
-    
+
     # Create the relevant records of the training
     cp -r pytorch/python_code/Data/template pytorch/$recording_path
     # Start the python server
@@ -26,7 +26,7 @@ function train_model() {
 
     # Wait on argos and pytorch server to finish
     wait
-    
+
     # Visualize your creation
     python pytorch/python_code/viz.py Data/train/$experiment_name/Data/ $figure_path
     python pytorch/python_code/viz.py pytorch/$recording_path/Data/ $figure_path

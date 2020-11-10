@@ -37,7 +37,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(8+24),
+   m_unNumObs(7+24),
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -103,6 +103,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_unEpisodeTicksLeft = m_unEpisodeTime;
       /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
+      m_vecFailures.resize(m_unNumRobots, 0);
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
@@ -412,14 +413,14 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
-      m_vecObs[i * m_unNumObs + 7] = hasFailed;
-
       // Get the proximity sensor values
       const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
       for(size_t t = 0; t < tReadings.size(); t++){
-        m_vecObs[i * m_unNumObs + 8 + t] = tReadings[t].Value;
+        m_vecObs[i * m_unNumObs + 7 + t] = tReadings[t].Value;
       }
+      // Failure flag must always be at the end of the observations
+      m_vecFailures[i] = hasFailed;
 
       m_vecRewards[i] = fReward;
    }
@@ -447,6 +448,7 @@ void CCollectiveRLTransport::PreStep() {
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
+   ZMQSendFailures();
    ZMQSendRewards();
    ZMQSendRobotStats();
    /* Get actions from PyTorch */
@@ -534,6 +536,7 @@ void CCollectiveRLTransport::PostStep() {
       /* Send observations to PyTorch */
       ZMQSendEpisodeState(eState);
       ZMQSendObservations();
+      ZMQSendFailures();
       ZMQSendRewards();
       ZMQSendRobotStats();
       ZMQGetAck();
@@ -681,6 +684,20 @@ void CCollectiveRLTransport::ZMQSendObservations() {
          m_ptZMQSocket,                    // the socket
          const_cast<float*>(&m_vecObs[0]), // data pointer
          sizeof(float) * m_vecObs.size(),  // data size in bytes
+         ZMQ_SNDMORE)                      // another message will follow (rewards)
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendFailures() {
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<int*>(&m_vecFailures[0]), // data pointer
+         sizeof(int) * m_vecFailures.size(),  // data size in bytes
          ZMQ_SNDMORE)                      // another message will follow (rewards)
       < 0) {                               // >= 0 means success
       THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
