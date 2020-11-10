@@ -181,6 +181,10 @@ class Agent_DQN():
         if self.learn_step_counter % self.replace_target_cnt == 0:
             self.q_next.load_state_dict(self.q_eval.state_dict())
 
+    def replace_target_comms_network(self):
+        if self.learn_step_counter % self.replace_target_cnt == 0:
+            self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())
+
     def sample_memory(self):
         state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
         states = T.tensor(state).to(self.q_eval.device)
@@ -188,6 +192,16 @@ class Agent_DQN():
         rewards = T.tensor(reward).to(self.q_eval.device)
         states_ = T.tensor(new_state).to(self.q_eval.device)
         dones = T.tensor(done).to(self.q_eval.device)
+
+        return states, actions, rewards, states_, dones
+
+    def sample_comms_memory(self):
+        state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size)
+        states = T.tensor(state).to(self.q_comms_eval.device)
+        actions = T.tensor(action).to(self.q_comms_eval.device)
+        rewards = T.tensor(reward).to(self.q_comms_eval.device)
+        states_ = T.tensor(new_state).to(self.q_comms_eval.device)
+        dones = T.tensor(done).to(self.q_comms_eval.device)
 
         return states, actions, rewards, states_, dones
 
@@ -244,6 +258,36 @@ class Agent_DQN():
         self.learn_step_counter+=1
 
         self.decrement_epsilon()
+        #return loss.item()
+
+    def doubleQLearnComms(self):
+        if self.comms_memory.mem_ctr < self.batch_size:
+            return
+        self.q_comms_eval.optimizer.zero_grad()
+
+        self.replace_target_comms_network()
+
+        states, message, rewards, states_, dones = self.sample_memory()
+
+        indices = np.arange(self.batch_size)
+
+        q_pred = self.q_comms_eval.forward(states)[indices, actions]
+
+        q_next = self.q_comms_next.forward(states_)
+        q_eval = self.q_comms_eval.forward(states_)
+
+        max_actions = T.argmax(q_comms_eval, dim=1)
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next[indices, max_actions]
+
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device)
+        loss.backward()
+        self.q_comms_eval.optimizer.step()
+        #self.learn_step_counter+=1
+
+        #self.decrement_epsilon()
         #return loss.item()
 
     def save_model(self, path):
