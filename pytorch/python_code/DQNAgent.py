@@ -1,4 +1,5 @@
 from .deep_q_network import DeepQNetwork
+from .deep_q_comms import DeepQComms
 from .replay_buffer import ReplayBuffer
 
 from collections import namedtuple
@@ -66,36 +67,57 @@ class Agent_DQN():
         # If the robot is failed, it will always perform it's "failure_action"
         self.failed = False
         self.failure_action = [0, 0, 1] #failure action (wheel increases dont matter, failure code is in buzz)
+        self.failure_action_code = len(self.action_space)
 
         self.learn_step_counter = 0
 
         self.memory = ReplayBuffer(100000, num_observations) # accounting for reward in msg
+        self.comms_memory = ReplayBuffer(100000, num_observations + 2*alphabet_size) # accounting for reward in msg
 
         nn_args = [self.lr, self.num_actions, self.num_observations, self.num_ops_per_action]
         self.q_eval = DeepQNetwork(*nn_args)
         self.q_next = DeepQNetwork(*nn_args)
+        comms_nn_args = {'lr':self.lr, 'observation_size':self.num_observations, 'alphabet_size':alphabet_size}
+        self.q_comms_eval = DeepQComms(**comms_nn_args)
+        self.q_comms_next = DeepQComms(**comms_nn_args)
 
     def choose_action(self, observation, failure, test):
         # The last observation indicates whether the robot has failed or not
-        if failure != 0:
+        if failure:
             self.failed = True
-            return self.failure_action, 9, self.dead_channel_code
-        else: self.failed = False
+            return self.failure_action, self.failure_action_code
+        else:
+            self.failed = False
 
         if test or np.random.random() > self.epsilon:
-            state = T.tensor([observation[:-1]], dtype = T.float).to(self.q_eval.device) #Need the [:-1] to strip the failure flag
+            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             actions = self.q_eval.forward(state)
             action = T.argmax(actions[0]).item()
-            #!outgoing_message_code = T.argmax(actions[0][10:]).item()
-            # Alphabet_space[0] is the dead_channel_code
-            #!outgoing_message = self.alphabet_space[outgoing_message_code + 1]
         else:
             action = np.random.choice(self.action_space)
-            #!outgoing_message = self.alphabet_space[np.random.choice(self.alphabet_size) + 1]
-
+            
         actions = self.parse_action(action)
         #!return actions, action, outgoing_message
-        return actions, action, 0
+        return actions, action
+
+    def choose_message(self, observation, failure, test):
+        if failure:
+            self.failed = True
+            return self.dead_channel_code
+        else:
+            self.failed = False
+
+        if test or np.random.random() > self.epsilon:
+            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            messages = self.q_comms_eval.forward(state)
+            outgoing_message_code = T.argmax(messages[0]).item()
+            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+            # Alphabet_space[0] is the dead_channel_code
+        else:
+            outgoing_message_code = np.random.choice(self.alphabet_size) + 1
+            outgoing_message = self.alphabet_space[outgoing_message_code]
+
+        return outgoing_message, outgoing_message_code
 
     def parse_action(self, action_num):
         '''
@@ -148,6 +170,9 @@ class Agent_DQN():
 
     def store_transition(self, state, action, reward, state_, done):
         self.memory.store_transition(state, action, reward, state_, done)
+
+    def store_comms_transition(self, state, message, reward, state_, done):
+        self.comms_memory.store_transition(state, message, reward, state_, done)
 
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
