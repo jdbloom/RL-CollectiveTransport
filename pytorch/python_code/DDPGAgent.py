@@ -11,6 +11,8 @@ from .replay_buffer import ReplayBuffer
 from .mailbox import Mailbox
 
 
+Loss = nn.MSELoss()
+
 class Agent_DDPG:
     def __init__(self, num_agents, num_observation, num_actions,
                  num_ops_per_action, id, comm_scheme = "None",
@@ -54,6 +56,9 @@ class Agent_DDPG:
         self.failure_action_code = len(self.action_space)
 
         self.learn_step_counter = 0
+        self.replace_target_cnt = 1000
+
+
 
     def init_comm_scheme(self, comm_scheme, num_agents):
         self.alphabet_space = [np.zeros(self.alphabet_size) for i in range(self.alphabet_size+1)]
@@ -132,14 +137,14 @@ class Agent_DDPG:
         self.critic.zero_grad()
         actions = T.unsqueeze(actions, 1)
         q_value = self.critic([states, actions])
-        value_loss = nn.MSELoss(q_value, target)
+        value_loss = Loss(q_value, target)
         value_loss.backward()
         self.critic_optimizer.step()
 
         # Actor Update
         self.actor.zero_grad()
-        new_policy_actions = self.actor(states)
-        actor_loss = -self.critic([state, new_policy_actions])
+        new_policy_actions = T.unsqueeze(T.argmax(self.actor(states), 1), 1)
+        actor_loss = -self.critic([states, new_policy_actions])
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -156,7 +161,7 @@ class Agent_DDPG:
         states, message, rewards, states_, dones = self.sample_memory()
 
         indices = np.arange(self.batch_size)
-
+        import ipdb; ipdb.set_trace()
         q_pred = self.q_comms_eval.forward(states)[indices, actions]
 
         q_next = self.q_comms_next.forward(states_)
