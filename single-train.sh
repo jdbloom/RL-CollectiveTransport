@@ -32,5 +32,5 @@ function train_model() {
     python pytorch/python_code/viz.py pytorch/$recording_path/Data/ $figure_path
 }
 
-
-train_model "None" 4 0 0
+#Comms Scheme choices: "None", "left", "right", "neighbors"
+train_model "neighbors" 4 0 0

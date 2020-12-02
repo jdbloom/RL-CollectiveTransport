@@ -36,6 +36,7 @@
   <!-- ****************** -->
   <!-- * Loop functions * -->
   <!-- ****************** -->
+  <!-- Setting proximity_range = 0 will keep it at default -->
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
@@ -47,13 +48,14 @@
                   threshold = "2"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
-                  min_threshold = "0.5"
-                  num_episodes = "1000"
+                  min_threshold = "2"
+                  num_episodes = "5000"
                   episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
                   pytorch_url = "tcp://localhost:55555"
-		              alphabet_size = "4"/>
+		              alphabet_size = "4"
+                  proximity_range = "1"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
@@ -98,7 +100,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <qt-opengl>
+    <!--<qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
            <placement idx="0" position="-11.3819,0.331892,4.83291" look_at="-10.6112,0.324185,4.19576" up="0.637119,-0.00637141,0.770739" lens_focal_length="20" />
@@ -114,7 +116,7 @@
            <placement idx="10" position="-2,0,2" look_at="0,0,0" up="0.707107,0,0.707107" lens_focal_length="20" />
            <placement idx="11" position="-2,0,2" look_at="0,0,0" up="0.707107,0,0.707107" lens_focal_length="20" />
         </camera>
-      </qt-opengl>
+      </qt-opengl>-->
   </visualization>
 
 </argos-configuration>

@@ -207,9 +207,9 @@ ack()
 def insert_communications(obs, agent_id):
     # Insert incoming comms into obs
     incoming_comms = model.get_agent_incoming_communications(agent_id)
-    
+
     #Uncomment for debugging communications
-    
+
     print("Observations (no comms):\n", obs[:])
     print("Left comms:\n", incoming_comms.left_comm)
     print("right_comm:\n",incoming_comms.right_comm)
@@ -224,9 +224,9 @@ def get_communications_input(obs, agent_id):
     #assert(len(obs) == )
     # Insert incoming comms into obs
     incoming_comms = model.get_agent_incoming_communications(agent_id)
-    
+
     #Uncomment for debugging communications
-    
+
     #print("Observations (no comms):\n", obs[:])
     #print("Left comms:\n", incoming_comms.left_comm)
     #print("right_comm:\n",incoming_comms.right_comm)
@@ -423,13 +423,13 @@ while not exp_done:
                             if ep_counter % 10 == 0:
                                 exp_mean_rewards.append(np.mean(exp_rewards))
                                 exp_rewards = []
-                                if exp_mean_rewards[-1] > high_score and ep_counter > 1500:
+                                if exp_mean_rewards[-1] > high_score and ep_counter > 1500 and not test_mode:
                                     high_score = exp_mean_rewards[-1]
                                     print('****************************************')
                                     print('         NEW HIGH SCORE: %.2f'%high_score)
                                     print('****************************************')
                                     file_name = 'Model_'+str(i)+'_High_Score'
-                                    path = model_file_path+file_name
+                                    path = recording_path+file_name
                                     model.save_model(path)
                                 file_name = 'Model_'+str(i)+'_Episode_'+str(ep_counter)
                                 path = recording_path + "/Models/" +file_name
@@ -443,7 +443,7 @@ while not exp_done:
                             if ep_counter % 10 == 0:
                                 exp_mean_rewards.append(np.mean(exp_rewards))
                                 exp_rewards = []
-                                if exp_mean_rewards[-1] > high_score:
+                                if exp_mean_rewards[-1] > high_score and not test_mode:
                                     high_score = exp_mean_rewards[-1]
                                     print('****************************************')
                                     print('         NEW HIGH SCORE: %.2f'%high_score)

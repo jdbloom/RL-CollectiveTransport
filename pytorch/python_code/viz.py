@@ -46,11 +46,11 @@ reward = [row[0] for row in episode_rewards]
 last_10_axis = np.arange(0, len(reward), 10)
 last_10_reward = [sum(reward[i:i + 10])/10
           for i in last_10_axis[0:len(last_10_axis)-1]]
-if len(last_10_axis) > 150:
-    print('The Best Model is:', 150+np.argmax(last_10_reward[150:]))
+#if len(last_10_axis) > 150:
+#    print('The Best Model is:', 150+np.argmax(last_10_reward[150:]))
 
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.title('4 Agent Double Deep Q-Learning\n with Obstacle and No Communication')
+plt.title('4 Agent Double Deep Q-Learning\n with Obstacle and Communication')
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
 #s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
