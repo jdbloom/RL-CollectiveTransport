@@ -207,9 +207,9 @@ ack()
 def insert_communications(obs, agent_id):
     # Insert incoming comms into obs
     incoming_comms = model.get_agent_incoming_communications(agent_id)
-    
+
     #Uncomment for debugging communications
-    
+
     print("Observations (no comms):\n", obs[:])
     print("Left comms:\n", incoming_comms.left_comm)
     print("right_comm:\n",incoming_comms.right_comm)
@@ -224,9 +224,9 @@ def get_communications_input(obs, agent_id):
     #assert(len(obs) == )
     # Insert incoming comms into obs
     incoming_comms = model.get_agent_incoming_communications(agent_id)
-    
+
     #Uncomment for debugging communications
-    
+
     #print("Observations (no comms):\n", obs[:])
     #print("Left comms:\n", incoming_comms.left_comm)
     #print("right_comm:\n",incoming_comms.right_comm)
@@ -383,6 +383,7 @@ while not exp_done:
                     if train_mode:
                         if SingleModel:
                             model.doubleQLearn()
+                            model.doubleQLearnComms()
                         else:
                             for i, agent_model in enumerate(models):
                                 agent_model.doubleQLearn()
