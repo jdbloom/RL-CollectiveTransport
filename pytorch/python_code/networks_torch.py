@@ -57,7 +57,7 @@ class CriticNetwork(nn.Module):
         self.fc1_dims = 400
         self.fc2_dims = 300
 
-        self.fc1 = nn.Linear(observation_size+num_actions, self.fc1_dims)
+        self.fc1 = nn.Linear(observation_size+1, self.fc1_dims) #! 1 represents the action number. Change this to num_actions when we move to continuous
         self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
         self.q = nn.Linear(self.fc2_dims, 1)
 

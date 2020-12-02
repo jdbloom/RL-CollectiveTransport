@@ -16,7 +16,7 @@ class Agent_DDPG:
                  num_ops_per_action, id, comm_scheme = "None",
                  alphabet_size = 4, min_max_action = 1, alpha = 0.001,
                  beta = 0.002, lr = 0.0001, gamma = 0.99, max_size = 1000000,
-                 tau = 0.005, batch_size = 64, noise = 0.1):
+                 tau = 0.005, batch_size = 32, noise = 0.1):
 
         self.id = id
 
@@ -112,23 +112,25 @@ class Agent_DDPG:
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
     def DDPGlearn(self):
-        if self.mem_cntr < self.batch_size:
+        if self.memory.mem_ctr < self.batch_size:
             return
-
+        '''
         state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
-        states = T.tensor(state).to(self.q_eval.device)
-        actions = T.tensor(action).to(self.q_eval.device)
-        rewards = T.tensor(reward).to(self.q_eval.device)
-        states_ = T.tensor(new_state).to(self.q_eval.device)
-        dones = T.tensor(done).to(self.q_eval.device)
-
-        target_actions = self.target_actor(states_)
+        states = T.tensor(state).to(self.actor.device)
+        actions = T.tensor(action).to(self.actor.device)
+        rewards = T.tensor(reward).to(self.actor.device)
+        states_ = T.tensor(new_state).to(self.actor.device)
+        dones = T.tensor(done).to(self.actor.device)
+        '''
+        states, actions, rewards, states_, dones = self.sample_memory()
+        target_actions = T.unsqueeze(T.argmax(self.target_actor(states_), 1), 1) #! remove argmax for continuous actions
         q_value_ = self.target_critic([states_, target_actions])
-        target = rewards + self.gamma*q_value_*(1-dones)
-
+        q_value_[dones] = 0.0
+        target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
 
         # Critic Update
         self.critic.zero_grad()
+        actions = T.unsqueeze(actions, 1)
         q_value = self.critic([states, actions])
         value_loss = nn.MSELoss(q_value, target)
         value_loss.backward()
@@ -288,11 +290,11 @@ class Agent_DDPG:
 
     def sample_memory(self):
         state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
-        states = T.tensor(state).to(self.q_eval.device)
-        actions = T.tensor(action).to(self.q_eval.device)
-        rewards = T.tensor(reward).to(self.q_eval.device)
-        states_ = T.tensor(new_state).to(self.q_eval.device)
-        dones = T.tensor(done).to(self.q_eval.device)
+        states = T.tensor(state).to(self.actor.device)
+        actions = T.tensor(action).to(self.actor.device)
+        rewards = T.tensor(reward).to(self.actor.device)
+        states_ = T.tensor(new_state).to(self.actor.device)
+        dones = T.tensor(done).to(self.actor.device)
 
         return states, actions, rewards, states_, dones
 
