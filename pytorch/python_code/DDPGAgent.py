@@ -13,12 +13,13 @@ from .mailbox import Mailbox
 
 Loss = nn.MSELoss()
 
+
 class Agent_DDPG:
     def __init__(self, num_agents, num_observation, num_actions,
-                 num_ops_per_action, id, comm_scheme = "None",
-                 alphabet_size = 4, min_max_action = 1, alpha = 0.001,
-                 beta = 0.002, lr = 0.0001, gamma = 0.99, max_size = 1000000,
-                 tau = 0.005, batch_size = 32, noise = 0.1):
+                 num_ops_per_action, id, comm_scheme="None",
+                 alphabet_size=4, min_max_action=1, alpha=0.001,
+                 beta=0.002, lr=0.0001, gamma=0.99, max_size=1000000,
+                 tau=0.005, batch_size=32, noise=0.1):
 
         self.id = id
 
@@ -29,13 +30,15 @@ class Agent_DDPG:
 
         # An iterable describing who may contact who. Entries in format {sender: [receivers]}
         # Merge left and right contacts into a master dictionary
-        self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
+        self.contacts = {key: val+self.right_contacts[key]
+                         for (key, val) in self.left_contacts.items()}
 
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
 
         self.gamma = gamma
         self.tau = tau
-        self.memory = ReplayBuffer(max_size, num_observation) #! We will need to add in the number of actions when we switch to continuous
+        # ! We will need to add in the number of actions when we switch to continuous
+        self.memory = ReplayBuffer(max_size, num_observation)
         self.comms_memory = ReplayBuffer(max_size, num_observation + 2*alphabet_size)
         self.batch_size = batch_size
         self.noise = noise
@@ -52,7 +55,8 @@ class Agent_DDPG:
 
         # If the robot is failed, it will always perform it's "failure_action"
         self.failed = False
-        self.failure_action = [0, 0, 1] #failure action (wheel increases dont matter, failure code is in buzz)
+        # failure action (wheel increases dont matter, failure code is in buzz)
+        self.failure_action = [0, 0, 1]
         self.failure_action_code = len(self.action_space)
 
         self.learn_step_counter = 0
@@ -162,10 +166,10 @@ class Agent_DDPG:
 
         indices = np.arange(self.batch_size)
         import ipdb; ipdb.set_trace()
-        q_pred = self.q_comms_eval.forward(states)[indices, actions]
+        q_pred = self.q_comms_eval.forward(states)[indices, message]
 
         q_next = self.q_comms_next.forward(states_)
-        q_eval = self.q_comms_eval.forward(states_)
+        q_comms_eval = self.q_comms_eval.forward(states_)
 
         max_actions = T.argmax(q_comms_eval, dim=1)
 
