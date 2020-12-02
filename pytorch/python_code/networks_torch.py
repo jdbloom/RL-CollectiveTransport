@@ -1,14 +1,14 @@
 import numpy as np
 
-import torch
+import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-def fanin_init(self, fanin = None):
+def fanin_init(size, fanin = None):
     fanin = fanin or size[0]
     v = 1. / np.sqrt(fanin)
-    return torch.Tensor(size).uniform_(-v, v)
+    return T.Tensor(size).uniform_(-v, v)
 
 class ActorNetwork(nn.Module):
     def __init__(self, num_actions, observation_size, num_ops_per_action, min_max_action = 1):
@@ -45,7 +45,7 @@ class ActorNetwork(nn.Module):
         prob = self.relu(prob)
         mu = self.mu(prob)
         # out = self.min_max_action*self.tanh(out) # This is needed for continuous action space
-        return out
+        return mu
 
 
 class CriticNetwork(nn.Module):
@@ -71,7 +71,7 @@ class CriticNetwork(nn.Module):
 
     def forward(self, X):
         state, action = X
-        action_value = self.fc1(torch.cat([state, action], 1))
+        action_value = self.fc1(T.cat([state, action], 1))
         action_value = self.relu(action_value)
         action_value = self.fc2(action_value)
         action_value = self.relu(action_value)

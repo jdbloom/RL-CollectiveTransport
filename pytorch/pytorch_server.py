@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import python_code.DQNAgent as Agent_DQN
+import python_code.DDPGAgent as Agent_DDPG
 
 import argparse
 from collections import namedtuple
@@ -189,10 +189,10 @@ data_file_path = recording_path + '/Data/'
 if SingleModel:
     # Create Single Model
     # -1 for failure code
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme, alphabet_size=params['alphabet_size'])
+    model = Agent_DDPG.Agent_DDPG(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme, alphabet_size=params['alphabet_size'])
 else:
     # Create the models for multi-agent individual model
-    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, i) for i in range(params['num_robots'])]
+    models = [Agent_DDPG.Agent_DDPG(params['num_robots'], params['num_obs'], params['num_actions'], 3, i) for i in range(params['num_robots'])]
 
 if test_mode:
     if SingleModel:
@@ -376,16 +376,17 @@ while not exp_done:
                                                              reward,
                                                              new_observations[i],
                                                              episode_done)
-                                loss.append(agent_model.doubleQLearn())
+                                loss.append(agent_model.DDPGlearn())
                             epsilon.append(agent_model.epsilon)
                             r.append(reward[0])
 
                     if train_mode:
                         if SingleModel:
-                            model.doubleQLearn()
+                            model.DDPGlearn()
+                            model.doubleQLearnComms()
                         else:
                             for i, agent_model in enumerate(models):
-                                agent_model.doubleQLearn()
+                                agent_model.DDPGlearn()
                     running_reward += reward
                     # Store New Observations
                     observations = new_observations
