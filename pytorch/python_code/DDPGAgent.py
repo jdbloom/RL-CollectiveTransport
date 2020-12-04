@@ -19,7 +19,7 @@ class Agent_DDPG:
                  num_ops_per_action, id, comm_scheme="None",
                  alphabet_size=4, min_max_action=1, alpha=0.001,
                  beta=0.002, lr=0.0001, gamma=0.99, max_size=1000000,
-                 tau=0.005, batch_size=32, noise=0.1):
+                 tau=0.005, batch_size=64, noise=0.1):
 
         self.id = id
 
@@ -131,6 +131,8 @@ class Agent_DDPG:
         states_ = T.tensor(new_state).to(self.actor.device)
         dones = T.tensor(done).to(self.actor.device)
         '''
+        self.learn_step_counter += 1
+
         states, actions, rewards, states_, dones = self.sample_memory()
         target_actions = T.unsqueeze(T.argmax(self.target_actor(states_), 1), 1) #! remove argmax for continuous actions
         q_value_ = self.target_critic([states_, target_actions])
@@ -155,6 +157,8 @@ class Agent_DDPG:
 
         self.update_network_parameters()
 
+        self.learn_step_counter += 1
+
     def doubleQLearnComms(self):
         if self.comms_memory.mem_ctr < self.batch_size:
             return
@@ -162,10 +166,9 @@ class Agent_DDPG:
 
         self.replace_target_comms_network()
 
-        states, message, rewards, states_, dones = self.sample_memory()
+        states, message, rewards, states_, dones = self.sample_comms_memory()
 
         indices = np.arange(self.batch_size)
-        import ipdb; ipdb.set_trace()
         q_pred = self.q_comms_eval.forward(states)[indices, message]
 
         q_next = self.q_comms_next.forward(states_)
@@ -192,8 +195,7 @@ class Agent_DDPG:
         else: self.failed = False
 
         if evaluate or np.random.random() > self.epsilon:
-            import ipdb; ipdb.set_trace()
-            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            state = T.tensor([observation], dtype = T.float).to(self.actor.device)
             actions = self.actor(state)
             action = T.argmax(actions[0]).item()
         else:
@@ -242,9 +244,8 @@ class Agent_DDPG:
             return self.dead_channel_code
         else:
             self.failed = False
-
         if test or np.random.random() > self.epsilon:
-            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            state = T.tensor([observation], dtype = T.float).to(self.actor.device)
             messages = self.q_comms_eval.forward(state)
             outgoing_message_code = T.argmax(messages[0]).item()
             outgoing_message = self.alphabet_space[outgoing_message_code + 1]
@@ -319,10 +320,10 @@ class Agent_DDPG:
 
     def load_weights(self, output):
         if output is None: return
-        self.actor.load_state_dict(T.load('{}/actor.pkl'.format(output)))
-        self.critic.load_state_dict(T.load('{}/critic.pkl'.format(output)))
+        self.actor.load_state_dict(T.load('actor.pkl'.format(output)))
+        self.critic.load_state_dict(T.load('critic.pkl'.format(output)))
 
 
-    def save_model(self,output):
-        T.save(self.actor.state_dict(),'{}/actor.pkl'.format(output))
-        T.save(self.critic.state_dict(), '{}/critic.pkl'.format(output))
+    def save_model(self, output):
+        T.save(self.actor.state_dict(),output+'_actor.pkl')
+        T.save(self.critic.state_dict(), output+'_critic.pkl')
