@@ -166,13 +166,20 @@ void CCollectiveRLTransport::CreateEntities() {
           stay at default */
       AddEntity(*pcFB);
       if(m_fProximityRange > 0.0){
+        printf("Inside Proximity Sensor\n");
         CProximitySensorEquippedEntity& cPSEE = pcFB->GetProximitySensorEquippedEntity();
         CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
+        printf("Got List of Sensors\n");
         for(auto itSensor = listPS.begin(); itSensor != listPS.end(); ++itSensor){
+          printf("[DEBUG] sensor = %p\n", (*itSensor));
           (*itSensor)->Direction.Normalize();
           (*itSensor)->Direction *= m_fProximityRange;
+          printf("[DEBUG] direction = %f,%f\n", (*itSensor)->Direction.GetX(), (*itSensor)->Direction.GetY());
         }
+        printf("[DEBUG] done here\n");
       }
+
+      printf("Added Footbot Entity\n");
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
