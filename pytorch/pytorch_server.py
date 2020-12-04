@@ -360,7 +360,7 @@ while not exp_done:
                                     #print(messages)
                                     #print(messages[i])
                                     model.store_comms_transition(comms_observations[i],
-                                                                 messages[i],
+                                                                 messages[i] - 1,
                                                                  reward,
                                                                  new_comms_observations[i],
                                                                  episode_done)

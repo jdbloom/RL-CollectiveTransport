@@ -58,7 +58,7 @@ class Agent_DQN():
         self.eps_min = 0.01
         self.eps_dec = 1e-6
 
-        self.batch_size = 32
+        self.batch_size = 64
 
         self.replace_target_cnt = 1000
 
@@ -95,7 +95,7 @@ class Agent_DQN():
             action = T.argmax(actions[0]).item()
         else:
             action = np.random.choice(self.action_space)
-            
+
         actions = self.parse_action(action)
         #!return actions, action, outgoing_message
         return actions, action
@@ -267,16 +267,16 @@ class Agent_DQN():
 
         self.replace_target_comms_network()
 
-        states, message, rewards, states_, dones = self.sample_memory()
+        states, message, rewards, states_, dones = self.sample_comms_memory()
 
         indices = np.arange(self.batch_size)
 
-        q_pred = self.q_comms_eval.forward(states)[indices, actions]
+        q_pred = self.q_comms_eval.forward(states)[indices, message]
 
         q_next = self.q_comms_next.forward(states_)
         q_eval = self.q_comms_eval.forward(states_)
 
-        max_actions = T.argmax(q_comms_eval, dim=1)
+        max_actions = T.argmax(q_eval, dim=1)
 
         q_next[dones] = 0.0
 

@@ -8,6 +8,7 @@
 #include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
 #include <argos3/core/control_interface/ci_controller.h>
 #include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
+#include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
@@ -118,6 +119,9 @@ private:
 
    /* Alphabet size of robot communications */
    UInt32 m_unAlphabetSize;
+
+   /** range for the proximity sensors*/
+   Real m_fProximityRange;
 
    /* Number of episodes */
    UInt32 m_unNumEpisodes;

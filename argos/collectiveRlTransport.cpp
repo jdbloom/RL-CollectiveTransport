@@ -66,6 +66,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
+      GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -111,12 +112,14 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
       CreateEntities();
+      LOG<<"Added Entities\n";
       //Print first failure set
       for(size_t i = 0; i < m_unNumRobots; i++){
         LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
       }
       LOG<<std::endl;
       PlaceEntities(0);
+      LOG<<"Placed Entities\n";
       /* Call buzz Init() (HAS TO BE THE LAST LINE) */
       CBuzzLoopFunctions::Init(t_tree);
    }
@@ -158,7 +161,25 @@ void CCollectiveRLTransport::CreateEntities() {
          CQuaternion(-cSlice, CVector3::Z)
          );
       m_vecRobots.push_back(pcFB);
+      /** Need to chage the range of the proximity sensor
+          If m_fProximityRange = 0 then the sensor range will
+          stay at default */
       AddEntity(*pcFB);
+      if(m_fProximityRange > 0.0){
+        printf("Inside Proximity Sensor\n");
+        CProximitySensorEquippedEntity& cPSEE = pcFB->GetProximitySensorEquippedEntity();
+        CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
+        printf("Got List of Sensors\n");
+        for(auto itSensor = listPS.begin(); itSensor != listPS.end(); ++itSensor){
+          printf("[DEBUG] sensor = %p\n", (*itSensor));
+          (*itSensor)->Direction.Normalize();
+          (*itSensor)->Direction *= m_fProximityRange;
+          printf("[DEBUG] direction = %f,%f\n", (*itSensor)->Direction.GetX(), (*itSensor)->Direction.GetY());
+        }
+        printf("[DEBUG] done here\n");
+      }
+
+      printf("Added Footbot Entity\n");
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */

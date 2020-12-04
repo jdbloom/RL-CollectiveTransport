@@ -10,7 +10,7 @@ function train_model() {
     local port_number=55555
     local argos_filename="collectiveRlTransport${4}.argos"
     local experiment_name="comm_scheme-${1}-num_robots-${2}-prop_failures-${3}"
-    local recording_path="python_code/Data/train/$experiment_name"
+    local recording_path="python_code/Data/train/$experiment_name/"
     local figure_path="pytorch/python_code/Data/Figures/$experiment_name.png"
 
     # Create the relevant records of the training
@@ -33,4 +33,4 @@ function train_model() {
 }
 
 
-train_model "None" 4 0 0
+train_model "neighbors" 4 0 0
