@@ -18,7 +18,7 @@ class Agent_DQN():
         self.num_agents = num_agents
         self.num_actions = num_actions
         self.num_ops_per_action = num_ops_per_action
-        self.num_observations = num_observations
+        self.num_observations = num_observations + 2*alphabet_size
 
         self.alphabet_size = alphabet_size
         #self.alphabet_space = [i for i in range(self.alphabet_size)]
@@ -71,8 +71,8 @@ class Agent_DQN():
 
         self.learn_step_counter = 0
 
-        self.memory = ReplayBuffer(100000, num_observations) # accounting for reward in msg
-        self.comms_memory = ReplayBuffer(100000, num_observations + 2*alphabet_size) # accounting for reward in msg
+        self.memory = ReplayBuffer(100000, num_observations + 2*alphabet_size)
+        self.comms_memory = ReplayBuffer(100000, num_observations + 2*alphabet_size)
 
         nn_args = [self.lr, self.num_actions, self.num_observations, self.num_ops_per_action]
         self.q_eval = DeepQNetwork(*nn_args)
@@ -106,7 +106,6 @@ class Agent_DQN():
             return self.dead_channel_code
         else:
             self.failed = False
-
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             messages = self.q_comms_eval.forward(state)

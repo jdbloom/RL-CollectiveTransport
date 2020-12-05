@@ -10,8 +10,10 @@ class DeepQComms(nn.Module):
     def __init__(self, *, lr=None, observation_size=None, alphabet_size=None):
         super().__init__()
         output_dims = alphabet_size
-        
-        self.fc1 = nn.Linear(observation_size + 2*alphabet_size, 64)
+
+        print('Comms Network has input size = ', observation_size, 'and output size = ', output_dims)
+
+        self.fc1 = nn.Linear(observation_size, 64)
         self.fc2 = nn.Linear(64, 128)
         self.fc3 = nn.Linear(128, output_dims)
 

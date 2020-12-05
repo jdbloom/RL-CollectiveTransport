@@ -352,13 +352,15 @@ while not exp_done:
                         if SingleModel:
                             if train_mode:
                                 if not old_failures[i] and not failures[i]:
-                                    model.store_transition(observations[i],
+                                    print('Agent', i, 'message obs:', comms_observations[i][31:])
+                                    model.store_transition(comms_observations[i],
                                                                  actions[i],
                                                                  reward,
-                                                                 new_observations[i],
+                                                                 new_comms_observations[i],
                                                                  episode_done)
                                     #print(messages)
                                     #print(messages[i])
+                                    print(i, comms_observations[i], messages[i]-1)
                                     model.store_comms_transition(comms_observations[i],
                                                                  messages[i] - 1,
                                                                  reward,
