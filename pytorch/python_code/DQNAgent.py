@@ -100,7 +100,7 @@ class Agent_DQN():
         #!return actions, action, outgoing_message
         return actions, action
 
-    def choose_message(self, observation, failure, test):
+    def choose_message(self, observation, failure, test, id):
         if failure:
             self.failed = True
             return self.dead_channel_code
@@ -115,7 +115,7 @@ class Agent_DQN():
         else:
             outgoing_message_code = np.random.choice(self.alphabet_size) + 1
             outgoing_message = self.alphabet_space[outgoing_message_code]
-
+        #print('Outgoing Message for agent', id,'is:', outgoing_message)
         return outgoing_message, outgoing_message_code
 
     def parse_action(self, action_num):
@@ -152,7 +152,14 @@ class Agent_DQN():
                 left_comm = message.contents
             elif agent_id in self.right_contacts[message.sender]:
                 right_comm = message.contents
-        return incoming_comms(left_comm, right_comm)
+        m = incoming_comms(left_comm, right_comm)
+        #print('Incoming Comms for agent ', agent_id, m.left_comm, m.right_comm)
+        return m
+
+    def make_agent_state(self, env_obs, agent_id):
+        communications = self.get_agent_incoming_communications(agent_id)
+        agent_state = np.concatenate((env_obs, communications.left_comm, communications.right_comm))
+        return agent_state
 
     def clear_agent_inbox(self, agent_id):
         self.mailbox.clear_inbox(agent_id)
@@ -165,6 +172,7 @@ class Agent_DQN():
             self.mailbox.schedule_message(sender, receiver, contents)
 
     def carry_mail(self):
+        self.mailbox.clear_inbox()
         self.mailbox.carry_mail()
 
     def store_transition(self, state, action, reward, state_, done):

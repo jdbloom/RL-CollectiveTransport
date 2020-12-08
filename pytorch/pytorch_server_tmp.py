@@ -12,8 +12,6 @@ import zmq
 import csv
 import os
 
-from ipdb import set_trace as debug
-
 # get path to containing folder so this works whereever it's used
 containing_folder = os.path.dirname(os.path.realpath(__file__))
 
@@ -205,6 +203,42 @@ if test_mode:
 
 # Send acknowledgment
 ack()
+'''
+def insert_communications(obs, agent_id):
+    # Insert incoming comms into obs
+    incoming_comms = model.get_agent_incoming_communications(agent_id)
+
+    #Uncomment for debugging communications
+
+    print("Observations (no comms):\n", obs[:])
+    print("Left comms:\n", incoming_comms.left_comm)
+    print("right_comm:\n",incoming_comms.right_comm)
+    if len(obs) <= len(OBS_FIELDS):
+        obs = np.concatenate([obs,
+                              incoming_comms.left_comm,
+                              incoming_comms.right_comm])
+    #print("Observations (with comms):\n", obs)
+    return obs
+'''
+def get_communications_input(obs, agent_id):
+    #assert(len(obs) == )
+    # Insert incoming comms into obs
+    incoming_comms = model.get_agent_incoming_communications(agent_id)
+
+    #Uncomment for debugging communications
+
+    print("Observations (no comms):\n", obs[:])
+    print("Left comms:\n", incoming_comms.left_comm)
+    print("right_comm:\n",incoming_comms.right_comm)
+    '''
+    '''
+    if len(obs) <= len(OBS_FIELDS):
+        obs = np.concatenate([obs,
+                              incoming_comms.left_comm,
+                              incoming_comms.right_comm])
+    #print("Observations (with comms):\n", obs)
+    return obs
+
 #
 # Main loop
 #
@@ -233,13 +267,14 @@ while not exp_done:
 
         if not exp_done:
             time_steps = 0
-            # Recieve initial Observation from environment
-            env_observations = parse_obs(msgs[1])
+            # Recieve initial Observation
+            obs = parse_obs(msgs[1])
             failures = parse_failures(msgs[2])
             rewards = parse_rewards(msgs[3])
             stats = parse_stats(msgs[4])
-            # This will be the communication messages observed
-            agent_states = []
+
+            observations = []
+            comms_observations = []
             actions = []
             messages = []
             message_codes = []
@@ -249,12 +284,12 @@ while not exp_done:
             running_reward = 0
 
             for i in range(params['num_robots']):
-                agent_state = model.make_agent_state(env_observations[i], i)
-                agent_states.append(agent_state)
+                observations.append(obs[i])
+                reward = rewards[i]
+                failure = failures[i]
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
-            running_reward+=rewards[0]
-            failure = failures[0]
+            running_reward+=reward
 
             while not episode_done:
                 if not exp_done:
@@ -265,18 +300,27 @@ while not exp_done:
 
                     time_steps += 1
                     # Get Actions
-                    for i in range(params['num_robots']):
-                        # Choose an action
-                        action, action_num = model.choose_action(agent_states[i], failure, test_mode)
-                        # Choose a message
-                        outgoing_message, message_num = model.choose_message(agent_states[i], failure, test_mode, i)
-                        # Schedule this agent's messages to send
-                        model.schedule_message_to_all_contacts(i, outgoing_message)
-                        message_codes.append(message_num)
-                        actions_to_take.append(action)
-                        actions.append(action_num)
-                    # Clear old inbox and carry new mail
-                    model.carry_mail()
+                    if SingleModel:
+                        for i in range(params['num_robots']):
+                            model.clear_agent_inbox(i)
+                            action, action_num = model.choose_action(observations[i], failure, test_mode)
+                            # Insert incoming comms into obs
+                            observations_comms = get_communications_input(observations[i], i)
+                            comms_observations.append(observations_comms)
+                            outgoing_message, message_num = model.choose_message(observations_comms, failure, test_mode)
+                            # Schedule this agent's messages to send
+                            model.schedule_message_to_all_contacts(i, outgoing_message)
+                            message_codes.append(message_num)
+                            actions_to_take.append(action)
+                            actions.append(action_num)
+                    else:
+                        for i , agent_model in enumerate(models):
+                            action, action_num = agent_model.choose_action(observations[i], failure, test_mode)
+                            actions_to_take.append(action)
+                            actions.append(action_num)
+
+                    if SingleModel:
+                        model.carry_mail()
 
                     # Back up failure information
                     old_failures = failures[:]
@@ -284,50 +328,70 @@ while not exp_done:
                     socket.send(serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
                     exp_done, episode_done, reached_goal = parse_status(msgs[0])
-                    env_observations = parse_obs(msgs[1])
+                    obs = parse_obs(msgs[1])
+                    import ipdb; ipdb.set_trace()
+                    new_comms_observations = [np.concatenate([o, messages[i]]) for i,o in enumerate(obs)]
                     failures = parse_failures(msgs[2])
                     rewards = parse_rewards(msgs[3])
                     stats = parse_stats(msgs[4])
                     # Store Transitions and Learn
-                    new_agent_states= []
+                    new_observations = []
                     loss = []
                     force_mags = []
                     force_angs = []
                     r = [] # place holder to extract the values from the reward
 
                     for i in range(params['num_robots']):
+                        # Don't clear the inbox this time, we'll use those messages next timestep
+                        new_observations.append(obs[i])
                         reward = rewards[i]
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
-                        new_agent_state = model.make_agent_state(env_observations[i], i)
-                        new_agent_states.append(new_agent_state)
-                        if train_mode:
-                            if not old_failures[i] and not failures[i]:
-                                model.store_transition(agent_states[i],
+                        if SingleModel:
+                            if train_mode:
+                                if not old_failures[i] and not failures[i]:
+                                    print('Agent', i, 'message obs:', comms_observations[i][31:])
+                                    model.store_transition(comms_observations[i],
+                                                                 actions[i],
+                                                                 reward,
+                                                                 new_comms_observations[i],
+                                                                 episode_done)
+                                    #print(messages)
+                                    #print(messages[i])
+                                    print(i, comms_observations[i], message_codes[i]-1)
+                                    model.store_comms_transition(comms_observations[i],
+                                                                 message_codes[i] - 1,
+                                                                 reward,
+                                                                 new_comms_observations[i],
+                                                                 episode_done)
+
+                            epsilon.append(model.epsilon)
+                            r.append(reward[0])
+
+                    if not SingleModel:
+                        for i, agent_model in enumerate(models):
+                            if train_mode:
+                                agent_model.store_transition(observations[i],
                                                              actions[i],
                                                              reward,
-                                                             new_agent_states[i],
+                                                             new_observations[i],
                                                              episode_done)
-
-                                model.store_comms_transition(agent_states[i],
-                                                             message_codes[i] - 1,
-                                                             reward,
-                                                             new_agent_states[i],
-                                                             episode_done)
-
-                        epsilon.append(model.epsilon)
-                        r.append(reward[0])
+                                loss.append(agent_model.doubleQLearn())
+                            epsilon.append(agent_model.epsilon)
+                            r.append(reward[0])
 
                     if train_mode:
-                        model.doubleQLearn()
-                        model.doubleQLearnComms()
-
+                        if SingleModel:
+                            model.doubleQLearn()
+                            model.doubleQLearnComms()
+                        else:
+                            for i, agent_model in enumerate(models):
+                                agent_model.doubleQLearn()
                     running_reward += reward
                     # Store New Observations
-                    agent_states = new_agent_states
+                    observations = new_observations
                     actions = []
                     actions_to_take = []
-                    message_codes = []
 
                     # Calculate average force vector
                     average_force_mag = None

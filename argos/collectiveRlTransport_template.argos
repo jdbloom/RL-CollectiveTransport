@@ -48,7 +48,7 @@
                   threshold = "2"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
-                  min_threshold = "0.5"
+                  min_threshold = "2"
                   num_episodes = "$$num_episodes$$"
                   episode_time = "4500"
                   time_out_reward = "0"

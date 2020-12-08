@@ -18,7 +18,7 @@ class Mailbox:
         for sender, recepients in self.contacts.items():
             for recepient in recepients:
                 self.inbox[recepient].append(self.Message(sender, recepient, dead_channel_code))
-            
+
         self.outbox = defaultdict(lambda: [])
 
     def schedule_message(self, sender, recepient, contents):
@@ -38,14 +38,14 @@ class Mailbox:
             for message in messages:
                 self.send_message(sender, message.recepient, message.contents)
             self.clear_outbox(sender)
-        
+
     def send_message(self, sender, recepient, contents):
         """
         Moves an item into an agent's inbox, if the contact is permitted
         """
         assert(recepient in self.contacts[sender])
         self.inbox[recepient].append(self.Message(sender, recepient, contents))
-        
+
     def get_inbox_messages(self):
         """
         Returns a list of messages in the format (sender, message)
@@ -54,13 +54,11 @@ class Mailbox:
         for sender, messages in self.inbox.items():
             for message in messages:
                 msg_list.append((sender, message))
-        
+
         return msg_list
-        
-    def clear_inbox(self, id):
-        self.inbox[id] = []
-        
+
+    def clear_inbox(self):
+        self.inbox = defaultdict(lambda: [])
+
     def clear_outbox(self, id):
         self.outbox[id] = []
-        
-        
