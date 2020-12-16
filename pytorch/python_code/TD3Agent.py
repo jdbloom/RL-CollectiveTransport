@@ -5,7 +5,7 @@ from torch.optim import Adam
 from collections import namedtuple
 import math
 
-from .networks_torch import ActorNetwork, CriticNetwork
+from .TD3_networks import ActorNetwork, CriticNetwork
 from .deep_q_comms import DeepQComms
 from .replay_buffer import ReplayBuffer
 from .mailbox import Mailbox
@@ -19,15 +19,17 @@ class Agent_DDPG:
                  num_ops_per_action, id, comm_scheme="None",
                  alphabet_size=4, min_max_action=1, alpha=0.001,
                  beta=0.002, lr=0.0001, gamma=0.99, max_size=1000000,
-                 tau=0.005, batch_size=64, noise=0.1):
+                 tau=0.005, batch_size=64, noise=0.1, update_actor_iter=2, warmup = 1000):
 
         self.id = id
 
         self.num_agents = num_agents
+        self.n_actions = num_actions
         self.num_ops_per_action = num_ops_per_action
         self.alphabet_size = alphabet_size
         self.init_comm_scheme(comm_scheme, self.num_agents)
 
+        self.warmup = warmup
         # An iterable describing who may contact who. Entries in format {sender: [receivers]}
         # Merge left and right contacts into a master dictionary
         self.contacts = {key: val+self.right_contacts[key]
@@ -39,7 +41,7 @@ class Agent_DDPG:
         self.tau = tau
         self.state_size = num_observation+2*alphabet_size
         # ! We will need to add in the number of actions when we switch to continuous
-        self.memory = ReplayBuffer(max_size, self.state_size, num_actions=num_actions)
+        self.memory = ReplayBuffer(max_size, self.state_size)
         self.comms_memory = ReplayBuffer(max_size, self.state_size)
         self.batch_size = batch_size
         self.noise = noise
@@ -51,7 +53,7 @@ class Agent_DDPG:
         self.epsilon = 1.0
         self.eps_min = 0.01
         self.eps_dec = 1e-6
-        self.num_actions = num_actions
+
         self.action_space = [i for i in range(num_ops_per_action**num_actions)]
 
         # If the robot is failed, it will always perform it's "failure_action"
@@ -62,7 +64,8 @@ class Agent_DDPG:
 
         self.learn_step_counter = 0
         self.replace_target_cnt = 1000
-
+        self.update_actor_iter = update_actor_iter
+        self.time_step = 0
 
 
     def init_comm_scheme(self, comm_scheme, num_agents):
@@ -91,9 +94,14 @@ class Agent_DDPG:
             raise Exception('Unknown comm_scheme ' + comm_scheme)
 
     def init_networks(self, num_observation, num_actions, num_ops_per_action, alpha, beta, lr):
-        self.actor = ActorNetwork(num_actions = num_actions, observation_size = num_observation, num_ops_per_action = num_ops_per_action)
-        self.target_actor = self.actor = ActorNetwork(num_actions = num_actions, observation_size = num_observation, num_ops_per_action = num_ops_per_action)
-        self.actor_optimizer = Adam(self.actor.parameters(),lr = alpha)
+        self.actor = ActorNetwork(alpha, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'actor')
+        self.critic_1 = CriticNetwork(beta, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'critic_1')
+        self.critic_2 = CriticNetwork(beta, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'critic_2')
+
+        self.target_actor = ActorNetwork(alpha, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'target_actor')
+        self.target_critic_1 = CriticNetwork(beta, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'target_critic_1')
+        self.target_critic_2 = CriticNetwork(beta, input_dims = num_observations, fc1_dims = 400, fc2_dims = 300, n_actions = num_actions, name = 'target_critic_2')
+
 
         self.critic = CriticNetwork(num_actions = num_actions, observation_size = num_observation)
         self.target_critic = CriticNetwork(num_actions = num_actions, observation_size = num_observation)
@@ -101,63 +109,40 @@ class Agent_DDPG:
 
         self.update_network_parameters(tau = 1)
 
-        self.actor.cuda()
-        self.target_actor.cuda()
-        self.critic.cuda()
-        self.target_critic.cuda()
-
         comms_nn_args = {'lr':lr, 'observation_size':num_observation, 'alphabet_size':self.alphabet_size}
         self.q_comms_eval = DeepQComms(**comms_nn_args)
         self.q_comms_next = DeepQComms(**comms_nn_args)
 
     def update_network_parameters(self, tau = None):
-        # If tau = 1 -> hard update (should only be done during init)
         if tau is None:
             tau = self.tau
-        # Update Actor Network
-        for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
-        # Update Critic Network
-        for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
-    def DDPGlearn(self):
-        if self.memory.mem_ctr < self.batch_size:
-            return
-        '''
-        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
-        states = T.tensor(state).to(self.actor.device)
-        actions = T.tensor(action).to(self.actor.device)
-        rewards = T.tensor(reward).to(self.actor.device)
-        states_ = T.tensor(new_state).to(self.actor.device)
-        dones = T.tensor(done).to(self.actor.device)
-        '''
-        self.learn_step_counter += 1
+        actor_params = self.actor.named_parameters()
+        critic_1_params = self.critic_1.named_parameters()
+        critic_2_params = self.critic_2.named_parameters()
+        target_actor_params = self.target_actor.named_parameters()
+        target_critic_1_params = self.target_critic_1.named_parameters()
+        target_critic_2_params = self.target_critic_2.named_parameters()
 
-        states, actions, rewards, states_, dones = self.sample_memory()
-        target_actions = self.target_actor(states_)
-        q_value_ = self.target_critic([states_, target_actions])
-        q_value_[dones] = 0.0
-        target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+        critic_1 = dict(critic_1_params)
+        critic_2 = dict(critic_2_params)
+        actor = dict(actor_params)
+        target_actor = dict(target_actor_params)
+        target_critic_1 = dict(target_critic_1_params)
+        target_critic_2 = dict(target_critic_2_params)
 
-        # Critic Update
-        self.critic.zero_grad()
-        q_value = self.critic([states, actions])
-        value_loss = Loss(q_value, target)
-        value_loss.backward()
-        self.critic_optimizer.step()
+        for name in critic_1:
+            critic_1[name] = tau*critic_1[name].clone() + (1-tau)*target_critic_1[name].clone()
 
-        # Actor Update
-        self.actor.zero_grad()
-        new_policy_actions = self.actor(states)
-        actor_loss = -self.critic([states, new_policy_actions])
-        actor_loss = actor_loss.mean()
-        actor_loss.backward()
-        self.actor_optimizer.step()
+        for name in critic_2:
+            critic_2[name] = tau*critic_2[name].clone() + (1-tau)*target_critic_2[name].clone()
 
-        self.update_network_parameters()
+        for name in actor:
+            actor[name] = tau*actor[name].clone() + (1-tau)*target_actor[name].clone()
 
-        self.learn_step_counter += 1
+        self.target_critic_1.load_state_dict(critic_1)
+        self.target_critic_2.load_state_dict(critic_2)
+        self.target_actor.load_state_dict(actor)
 
     def doubleQLearnComms(self):
         if self.comms_memory.mem_ctr < self.batch_size:
@@ -167,8 +152,8 @@ class Agent_DDPG:
         self.replace_target_comms_network()
 
         states, message, rewards, states_, dones = self.sample_comms_memory()
+
         indices = np.arange(self.batch_size)
-        message = T.squeeze(message.long())
         q_pred = self.q_comms_eval.forward(states)[indices, message]
 
         q_next = self.q_comms_next.forward(states_)
@@ -179,6 +164,7 @@ class Agent_DDPG:
         q_next[dones] = 0.0
 
         q_target = rewards + self.gamma*q_next[indices, max_actions]
+
         loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device)
         loss.backward()
         self.q_comms_eval.optimizer.step()
@@ -186,57 +172,74 @@ class Agent_DDPG:
 
         self.decrement_epsilon()
         #return loss.item()
+    def TD3_learn(self):
+        if self.memory.mem_ctr < self.batch_size:
+            return
+
+        state, action, reward, state_, done = self.sample_memory()
+
+        target_actions = self.target_actor.forward(state_)
+        target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
+        target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
+
+        q1_ = self.target_critic_1.forward(state_, target_actions)
+        q2_ = self.target_critic_2.forward(state_, target_actions)
+
+        q1 = self.critic_1.forward(state, action)
+        q2 = self.critic_2.forward(state, action)
+
+        q1_[dones] = 0.0
+        q2_[dones] = 0.0
+
+        q1_ = q1_.view(-1)
+        q2_ = q2_.view(-1)
+
+        critic_value = T.min(q1_, q2_)
+
+        target = reward + self.gamma*critic_value_
+        target = target.view(self.batch_size, 1)
+
+        self.critic_1.optimizer.zero_grad()
+        self.critic_2.optimizer.zero_grad()
+
+        q1_loss = F.mse_loss(target, q1)
+        q2_loss = F.mse_loss(target, q2)
+        critic_loss = q1_loss + q2_loss
+        critic_.loss.backward()
+        self.critic_1.optimizer.step()
+        self.critic_2.optimizer.step()
+
+        self.learn_step_counter += 1
+
+        if self.learn_step_counter % self.update_actor_iter != 0:
+            return
+
+        self.actor.optimizer.zero_grad()
+        actor_q1_loss = self.critic_1.forward(state, self.actor.forward(state))
+        actor_loss = -T.mean(actor_q1_loss)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        self.update_network_parameters()
 
     def choose_action(self, observation, failure, evaluate = False):
         if failure:
             self.failed = True
-            return self.failure_action#, self.failure_action_code
+            return self.failure_action, self.failure_action_code
         else: self.failed = False
-        '''
-        if evaluate or np.random.random() > self.epsilon:
-            state = T.tensor([observation], dtype = T.float).to(self.actor.device)
-            actions = self.actor(state)
-            action = T.argmax(actions[0]).item()
+
+        if self.time_step < self.warmup:
+            mu = T.tensor(np.random.normal(scale = self.noise, size = (self.n_actions,)))
+
         else:
-            action = np.random.choice(self.action_space)
+            state = T.tensor(observation, dtype = T.float).to(self.actor.device)
+            mu = self.actor.forward(state).to(self.actor.device)
+        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.actor.device)
+        # NEED TO DECIDE ABOUT COMMUNICATION HERE!!!
+        mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
+        self.time_step += 1
 
-        actions = self.parse_action(action)
-
-        return actions, action
-        '''
-
-        # CONTINUOUS ACTION SPACE!!!
-        state = T.tensor([observation], dtype = T.float).to(self.actor.device)
-        actions = self.actor(state)
-        #print('Actions before noise:', actions)
-        if not evaluate:
-            # need to add noise to allow for exploration
-            actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
-        actions = T.clip(actions, -self.min_max_action, self.min_max_action)
-        #print('Actions after noise and clip:', actions)
-        gripper = np.zeros((1, 1))
-        actions = np.append(actions[0].cpu().detach().numpy(), gripper)
-        return actions
-
-    def parse_action(self, action_num):
-        '''
-        This function will parse the number action to
-        a set of wheel actions:
-
-        0 - (- 1,-1)
-        1 - (-1, 0)
-        2 - (-1, 1)
-        3 - (0, -1)
-        4 - (0, 0)
-        5 - (0, 1)
-        6 - (1, -1)
-        7 - (1, 0)
-        8 - (1, 1)
-        '''
-        l_wheel = (math.floor(action_num/self.num_ops_per_action) - 1)/10.0
-        r_wheel = (action_num%self.num_ops_per_action - 1)/10.0
-        # Trailing zero is hardcoded control for gripper
-        return np.array([l_wheel, r_wheel, 0], dtype=np.float32)
+        return mu_prime.cpu().detach().numpy()
 
     def choose_message(self, observation, failure, test, i):
         if failure:
@@ -326,12 +329,19 @@ class Agent_DDPG:
 
         return states, actions, rewards, states_, dones
 
-    def load_weights(self, output):
-        if output is None: return
-        self.actor.load_state_dict(T.load('actor.pkl'.format(output)))
-        self.critic.load_state_dict(T.load('critic.pkl'.format(output)))
 
+    def save_models(self):
+        self.actor.save_checkpoint()
+        self.target_actor.save_checkpoint()
+        self.critic_1.save_checkpoint()
+        self.target_critic_1.save_checkpoint()
+        self.critic_2.save_checkpoint()
+        self.target_critic_2.save_checkpoint()
 
-    def save_model(self, output):
-        T.save(self.actor.state_dict(),output+'_actor.pkl')
-        T.save(self.critic.state_dict(), output+'_critic.pkl')
+    def load_models(self):
+        self.actor.load_checkpoint()
+        self.target_actor.load_checkpoint()
+        self.critic_1.load_checkpoint()
+        self.target_critic_1.load_checkpoint()
+        self.critic_2.load_checkpoint()
+        self.target_critic_2.load_checkpoint()

@@ -74,12 +74,12 @@
     <box id="wall_west" size="0.1,10,0.5" movable="false">
       <body position="-9.9,0,0" orientation="0,0,0" />
     </box>
-    <box id="barrier_1" size="0.1,2,0.5" movable="false">
+    <!--<box id="barrier_1" size="0.1,2,0.5" movable="false">
       <body position="0,-0.7,0" orientation="-45,0,0" />
     </box>
     <box id="barrier_2" size="0.1,2,0.5" movable="false">
       <body position="0,0.7,0" orientation="45,0,0" />
-    </box>
+    </box>-->
   </arena>
 
   <!-- ******************* -->
@@ -100,10 +100,10 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <!--<qt-opengl>
+    <qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
-           <placement idx="0" position="-11.3819,0.331892,4.83291" look_at="-10.6112,0.324185,4.19576" up="0.637119,-0.00637141,0.770739" lens_focal_length="20" />
+           <placement idx="0" position="-0.158945,-14.927,40.0195" look_at="-0.152872,-14.5512,39.0928" up="0.0149739,0.926553,0.375867" lens_focal_length="65" />
            <placement idx="1" position="-0.37833,-0.0908867,16.468" look_at="-0.37833,-0.0908867,15.468" up="0.999999,-0.00159265,0" lens_focal_length="20" />
            <placement idx="2" position="-0.2694,-0.698733,9.37503" look_at="-0.269392,-0.688734,8.37508" up="0.000796287,0.99995,0.00999983" lens_focal_length="20" />
            <placement idx="3" position="-0.0428437,0.0307057,11.8928" look_at="-0.0428437,0.0307057,10.8928" up="0.000796327,-1,0" lens_focal_length="20" />
@@ -116,7 +116,7 @@
            <placement idx="10" position="-2,0,2" look_at="0,0,0" up="0.707107,0,0.707107" lens_focal_length="20" />
            <placement idx="11" position="-2,0,2" look_at="0,0,0" up="0.707107,0,0.707107" lens_focal_length="20" />
         </camera>
-      </qt-opengl>-->
+      </qt-opengl>
   </visualization>
 
 </argos-configuration>

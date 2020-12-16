@@ -16,7 +16,8 @@ class ActorNetwork(nn.Module):
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
-        output_dims = (num_ops_per_action**num_actions)
+        #output_dims = (num_ops_per_action**num_actions) # For discrete action space
+        output_dims = num_actions
 
         # allows for us to change the range of the action from (-min_max_action, min_max_action)
         self.min_max_action = min_max_action
@@ -44,7 +45,7 @@ class ActorNetwork(nn.Module):
         prob = self.fc2(prob)
         prob = self.relu(prob)
         mu = self.mu(prob)
-        # out = self.min_max_action*self.tanh(out) # This is needed for continuous action space
+        mu = self.min_max_action*self.tanh(mu) # This is needed for continuous action space
         return mu
 
 
@@ -57,7 +58,7 @@ class CriticNetwork(nn.Module):
         self.fc1_dims = 400
         self.fc2_dims = 300
 
-        self.fc1 = nn.Linear(observation_size+1, self.fc1_dims) #! 1 represents the action number. Change this to num_actions when we move to continuous
+        self.fc1 = nn.Linear(observation_size+num_actions, self.fc1_dims) #! 1 represents the action number. Change this to num_actions when we move to continuous
         self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
         self.q = nn.Linear(self.fc2_dims, 1)
 

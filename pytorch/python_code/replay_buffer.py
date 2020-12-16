@@ -1,12 +1,12 @@
 import numpy as np
 
 class ReplayBuffer():
-    def __init__(self, max_size, num_observations):
+    def __init__(self, max_size, num_observations, num_actions = 1):
         self.mem_size = max_size
         self.mem_ctr = 0
         self.state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
         self.new_state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
-        self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
+        self.action_memory = np.zeros((self.mem_size, num_actions), dtype = np.float32)
         self.reward_memory = np.zeros((self.mem_size), dtype = np.float32)
         self.terminal_memory = np.zeros((self.mem_size), dtype = np.bool)
 
