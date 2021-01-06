@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import python_code.DQNAgent as Agent_DQN
+import python_code.parser as Parser
 
 import argparse
 from collections import namedtuple
@@ -66,85 +67,7 @@ ACTIONS_FMT = '3f'
 FLOAT_SIZE = 4
 # Byte size of int in C++
 INT_SIZE = 4
-#
-# Parse the fields from a message
-# Returns a dictionary
-#
-def parse_msg(msg, msgtype, fields, fmt):
-    # Make an empty named tuple with the given fields
-    Tx = namedtuple(msgtype, fields)
-    # Fill the tuple with the contents of the message
-    x = Tx._make(unpack(fmt, msg))
-    # Return the tuple as a dictionary
-    return x._asdict()
 
-#
-# Parse the experiment status
-# Returns a tuple (exp_done, episode_done)
-#
-def parse_status(msg):
-    data = parse_msg(msgs[0], 'status', EXPERIMENT_FIELDS, EXPERIMENT_FMT)
-    exp_done = (data['exp_done'] == 1)
-    episode_done = (data['episode_done'] == 1)
-    reached_goal = (data['reached_goal'] == 1)
-    return exp_done, episode_done, reached_goal
-
-#
-# Parse the observations
-# Returns a list of numpy arrays, one per robot
-#
-def parse_obs(msg):
-    obs = []
-    # For each robot
-    for r in range(0, params['num_robots']):
-        # Get message bytes for this robot
-        m = msg[r * params['num_obs'] * FLOAT_SIZE:(r+1) * params['num_obs'] * FLOAT_SIZE]
-        # Parse the bytes into a dictionary
-        data = parse_msg(m, 'obs', OBS_FIELDS, OBS_FMT)
-        # Make a numpy array
-        nparr = np.fromiter(data.values(), dtype=np.float32, count=len(data))
-        # Append it to the observations
-        obs.append(nparr)
-    return obs
-
-def parse_failures(msg):
-    failures = []
-    for r in range(0, params['num_robots']):
-        # Get message bytes for this robot
-        m = msg[r * INT_SIZE:(r+1)*INT_SIZE]
-        # Parse the bytes into a dictionary
-        data = parse_msg(m, 'failure', FAILURE_FIELDS, FAILURE_FMT)
-        # Make a numpy array
-        nparr = np.fromiter(data.values(), dtype=np.intc, count = len(data))
-        # Append it to the rewards
-        failures.append(nparr)
-    return failures
-
-def parse_rewards(msg):
-    rewards = []
-    for r in range(0, params['num_robots']):
-        # Get message bytes for this robot
-        m = msg[r * FLOAT_SIZE:(r+1)*FLOAT_SIZE]
-        # Parse the bytes into a dictionary
-        data = parse_msg(m, 'reward', REWARDS_FIELDS, REWARDS_FMT)
-        # Make a numpy array
-        nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-        # Append it to the rewards
-        rewards.append(nparr)
-    return rewards
-
-def parse_stats(msg):
-    stats = []
-    for r in range(0, params['num_robots']):
-        # Get message bytes for this robot
-        m = msg[r * params['num_stats'] * FLOAT_SIZE:(r+1) * params['num_stats'] * FLOAT_SIZE]
-        # Parse the bytes into a dictionary
-        data = parse_msg(m, 'stats', STATS_FIELDS, STATS_FMT)
-        # Make a numpy array
-        nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-        # Append it to the rewards
-        stats.append(nparr)
-    return stats
 
 def serialize_actions(actions):
     packer = Struct(ACTIONS_FMT)
@@ -179,22 +102,17 @@ print("Server started")
 # Get parameters
 params = parse_msg(socket.recv(), 'params', PARAMS_FIELDS, PARAMS_FMT)
 print("PARAMETERS:")
-print("  num_robots  =", params['num_robots'])
-print("  num_obs     =", params['num_obs'])
-print("  alphabet_size  =", params['alphabet_size'])
-print("  num_actions =", params['num_actions'])
-print("  num_stats   =", params['num_stats'])
+print("  num_robots ----", params['num_robots'])
+print("  num_obs -------", params['num_obs'])
+print("  alphabet_size -", params['alphabet_size'])
+print("  num_actions ---", params['num_actions'])
+print("  num_stats -----", params['num_stats'])
 # Path to save/ load models:
 data_file_path = recording_path + '/Data/'
 
 # num_actions -1 is to exclude control of the gripper from the neural network
-if SingleModel:
-    # Create Single Model
-    # -1 for failure code
-    model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme, alphabet_size=params['alphabet_size'])
-else:
-    # Create the models for multi-agent individual model
-    models = [Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'], 3, i) for i in range(params['num_robots'])]
+model = Agent_DQN.Agent_DQN(params['num_robots'], params['num_obs'], params['num_actions'] - 1, 3, 0, comm_scheme=comm_scheme, alphabet_size=params['alphabet_size'])
+
 
 if test_mode:
     if SingleModel:
@@ -224,7 +142,7 @@ while not exp_done:
     # 2. the list of observations
     msgs = socket.recv_multipart()
     # Experiment or episode done?
-    exp_done, episode_done, reached_goal = parse_status(msgs[0])
+    exp_done, episode_done, reached_goal = Parser.parse_status(msgs[0])
 
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:

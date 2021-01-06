@@ -1,0 +1,185 @@
+import unittest
+import torch as T
+import numpy as np
+from python_code.Agent import Agent
+
+
+class TestAgent(unittest.TestCase):
+    #------------------
+    # Testing the Make Comms function
+    #------------------
+    def test_make_comms(self):
+        agent = Agent(num_agents = 6, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDQN',
+                               comms_scheme = 'None', alphabet_size = 4)
+        #------------------
+        #Test None
+        #------------------
+        agent.make_comms_scheme()
+        self.assertEqual(len(agent.left_contacts), agent.num_agents)
+        self.assertEqual(len(agent.right_contacts), agent.num_agents)
+        for i in range(agent.num_agents):
+            self.assertEqual(agent.left_contacts[i], [])
+            self.assertEqual(agent.right_contacts[i], [])
+        #------------------
+        # Test Left
+        #------------------
+        agent.comms_scheme = 'Left'
+        agent.make_comms_scheme()
+        self.assertEqual(len(agent.left_contacts), agent.num_agents)
+        self.assertEqual(len(agent.right_contacts), agent.num_agents)
+        for i in range(agent.num_agents):
+            self.assertEqual(agent.left_contacts[i][0], (i+1)%agent.num_agents)
+            self.assertEqual(agent.right_contacts[i], [])
+        #------------------
+        #Test Right
+        #------------------
+        agent.comms_scheme = 'Right'
+        agent.make_comms_scheme()
+        self.assertEqual(len(agent.left_contacts), agent.num_agents)
+        self.assertEqual(len(agent.right_contacts), agent.num_agents)
+        for i in range(agent.num_agents):
+            self.assertEqual(agent.left_contacts[i], [])
+            self.assertEqual(agent.right_contacts[i][0], (i+agent.num_agents - 1)%agent.num_agents)
+        #------------------
+        #Test Both
+        #------------------
+        agent.comms_scheme = 'Neighbors'
+        agent.make_comms_scheme()
+        self.assertEqual(len(agent.left_contacts), agent.num_agents)
+        self.assertEqual(len(agent.right_contacts), agent.num_agents)
+        for i in range(agent.num_agents):
+            self.assertEqual(agent.left_contacts[i][0], (i+1)%agent.num_agents)
+            self.assertEqual(agent.right_contacts[i][0], (i+agent.num_agents - 1)%agent.num_agents)
+        #------------------
+        #Test Unknown Communication Scheme
+        #------------------
+        agent.comms_scheme = 'SkipOver'
+        with self.assertRaises(Exception):
+            agent.make_comms_scheme()
+
+    #------------------
+    # Testing the Make Learning Scheme function
+    #------------------
+    def test_make_learning_scheme(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDQN',
+                               comms_scheme = 'None', alphabet_size = 4)
+        #------------------
+        #Test None
+        #------------------
+        agent.learning_scheme = 'None'
+
+        #------------------
+        #Test DQN
+        #------------------
+        agent.learning_scheme = 'DQN'
+        agent.make_learning_scheme()
+        state = np.random.rand(31).astype(np.float32)
+        #testing q_eval
+        actions = agent.q_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.num_ops_per_action**agent.num_actions)
+        #testing q_next
+        actions = agent.q_next(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.num_ops_per_action**agent.num_actions)
+
+        #------------------
+        #Test DDQN
+        #------------------
+        agent.learning_scheme = 'DDQN'
+        agent.make_learning_scheme()
+        observations = np.random.rand(31)
+        comms = np.random.rand(2*agent.num_agents)
+        state = np.concatenate((observations, comms)).astype(np.float32)
+        #testing q_eval
+        actions = agent.q_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.num_ops_per_action**agent.num_actions)
+        #testing q_next
+        actions = agent.q_next(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.num_ops_per_action**agent.num_actions)
+        #testing q_comms_eval
+        actions = agent.q_comms_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+        #testing q_comms_next
+        actions = agent.q_comms_next(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+
+        #------------------
+        #Test DDPG
+        #------------------
+        agent.learning_scheme = 'DDPG'
+        agent.make_learning_scheme()
+        observations = np.random.rand(31).astype(np.float32)
+        comms = np.random.rand(2*agent.num_agents)
+        state = np.concatenate((observations, comms)).astype(np.float32)
+        #testing actor
+        action = agent.actor(T.from_numpy(state).to(agent.actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
+        for i in range(action.shape[0]):
+            self.assertTrue(action[i] <= agent.min_max_action and action[i] >= -agent.min_max_action)
+        #testing target actor
+        action = agent.target_actor(T.from_numpy(state).to(agent.target_actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
+        for i in range(action.shape[0]):
+            self.assertTrue(action[i] <= agent.min_max_action and action[i] >= -agent.min_max_action)
+        #testing critic
+        actions = T.from_numpy(np.array((1, -1)).astype(np.float32)).to(agent.critic.device)
+        action_value = agent.critic([T.from_numpy(state).to(agent.critic.device).unsqueeze(0), actions.unsqueeze(0)]).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing target critic
+        action_value = agent.target_critic([T.from_numpy(state).to(agent.critic.device).unsqueeze(0), actions.unsqueeze(0)]).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing q_comms_eval
+        actions = agent.q_comms_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+        #testing q_comms_next
+        actions = agent.q_comms_next(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+        #------------------
+        #Test TD3
+        #------------------
+        agent.learning_scheme = 'TD3'
+        agent.make_learning_scheme()
+        observations = np.random.rand(31).astype(np.float32)
+        comms = np.random.rand(2*agent.num_agents)
+        state = np.concatenate((observations, comms)).astype(np.float32)
+        #testing actor
+        action = agent.actor(T.from_numpy(state).to(agent.actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
+        for i in range(action.shape[0]):
+            self.assertTrue(action[i] <= agent.min_max_action and action[i] >= -agent.min_max_action)
+        #testing target actor
+        action = agent.target_actor(T.from_numpy(state).to(agent.actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
+        for i in range(action.shape[0]):
+            self.assertTrue(action[i] <= agent.min_max_action and action[i] >= -agent.min_max_action)
+        #testing critic 1
+        actions = T.from_numpy(np.array((1, -1)).astype(np.float32)).to(agent.critic_1.device)
+        action_value = agent.critic_1(T.from_numpy(state).to(agent.critic_1.device).unsqueeze(0), actions.unsqueeze(0)).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing target critic 1
+        actions = T.from_numpy(np.array((1, -1)).astype(np.float32)).to(agent.target_critic_1.device)
+        action_value = agent.target_critic_1(T.from_numpy(state).to(agent.target_critic_1.device).unsqueeze(0), actions.unsqueeze(0)).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing critic 2
+        actions = T.from_numpy(np.array((1, -1)).astype(np.float32)).to(agent.critic_2.device)
+        action_value = agent.critic_2(T.from_numpy(state).to(agent.critic_2.device).unsqueeze(0), actions.unsqueeze(0)).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing target critic 2
+        actions = T.from_numpy(np.array((1, -1)).astype(np.float32)).to(agent.target_critic_2.device)
+        action_value = agent.target_critic_2(T.from_numpy(state).to(agent.target_critic_2.device).unsqueeze(0), actions.unsqueeze(0)).squeeze(0)
+        self.assertEqual(action_value.shape[0], 1)
+        #testing q_comms_eval
+        actions = agent.q_comms_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+        #testing q_comms_next
+        actions = agent.q_comms_next(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
+        self.assertEqual(actions.shape[0], agent.alphabet_size)
+        #------------------
+        #Test Unknown Learning Scheme
+        #------------------
+        agent.learning_scheme = 'TheBest'
+        with self.assertRaises(Exception):
+            agent.make_learning_scheme()
+
+
+if __name__ == '__main__':
+    unittest.main()
