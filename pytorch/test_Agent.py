@@ -16,6 +16,7 @@ class TestAgent(unittest.TestCase):
         #------------------
         #Test None
         #------------------
+        agent.comms_scheme = 'None'
         agent.make_comms_scheme()
         self.assertEqual(len(agent.left_contacts), agent.num_agents)
         self.assertEqual(len(agent.right_contacts), agent.num_agents)
@@ -91,7 +92,7 @@ class TestAgent(unittest.TestCase):
         agent.learning_scheme = 'DDQN'
         agent.make_learning_scheme()
         observations = np.random.rand(31)
-        comms = np.random.rand(2*agent.num_agents)
+        comms = np.random.rand(2*agent.alphabet_size)
         state = np.concatenate((observations, comms)).astype(np.float32)
         #testing q_eval
         actions = agent.q_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
@@ -112,7 +113,7 @@ class TestAgent(unittest.TestCase):
         agent.learning_scheme = 'DDPG'
         agent.make_learning_scheme()
         observations = np.random.rand(31).astype(np.float32)
-        comms = np.random.rand(2*agent.num_agents)
+        comms = np.random.rand(2*agent.alphabet_size)
         state = np.concatenate((observations, comms)).astype(np.float32)
         #testing actor
         action = agent.actor(T.from_numpy(state).to(agent.actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
@@ -141,7 +142,7 @@ class TestAgent(unittest.TestCase):
         agent.learning_scheme = 'TD3'
         agent.make_learning_scheme()
         observations = np.random.rand(31).astype(np.float32)
-        comms = np.random.rand(2*agent.num_agents)
+        comms = np.random.rand(2*agent.alphabet_size)
         state = np.concatenate((observations, comms)).astype(np.float32)
         #testing actor
         action = agent.actor(T.from_numpy(state).to(agent.actor.device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
@@ -179,6 +180,75 @@ class TestAgent(unittest.TestCase):
         agent.learning_scheme = 'TheBest'
         with self.assertRaises(Exception):
             agent.make_learning_scheme()
+
+    def test_choose_action(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDQN',
+                               comms_scheme = 'None', alphabet_size = 4)
+        observations = np.random.rand(31).astype(np.float32)
+        comms = np.random.rand(2*agent.alphabet_size)
+        state = np.concatenate((observations, comms))
+        #------------------
+        #Test Failure
+        #------------------
+        agent.learning_scheme = 'None'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(observations, failure = True)
+        self.assertEqual(actions, [0, 0, 1])
+        self.assertEqual(action_code, 9)
+        #------------------
+        #Test None
+        #------------------
+        agent.learning_scheme = 'None'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(observations, failure = False)
+        self.assertEqual(actions, [0, 0, 1])
+        self.assertEqual(action_code, 9)
+        #------------------
+        #Test DQN
+        #------------------
+        agent.learning_scheme = 'DQN'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(observations, failure = False)
+        self.assertEqual(actions.shape[0], 3)
+        self.assertEqual(actions[2], 0)
+        for i in range(agent.num_actions):
+            self.assertTrue(actions[i] <= agent.min_max_action and actions[i] >= -agent.min_max_action)
+        #------------------
+        #Test DDQN
+        #------------------
+        agent.learning_scheme = 'DDQN'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(observations, failure = False)
+        self.assertEqual(actions.shape[0], 3)
+        self.assertEqual(actions[2], 0)
+        for i in range(agent.num_actions):
+            self.assertTrue(actions[i] <= agent.min_max_action and actions[i] >= -agent.min_max_action)
+        #------------------
+        #Test DDPG
+        #------------------
+        agent.learning_scheme = 'DDPG'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(state, failure = False)
+        self.assertEqual(actions.shape[0], 3)
+        self.assertEqual(actions[2], 0)
+        for i in range(agent.num_actions):
+            self.assertTrue(actions[i] <= agent.min_max_action and actions[i] >= -agent.min_max_action)
+        #------------------
+        #Test TD3
+        #------------------
+        agent.learning_scheme = 'TD3'
+        agent.make_learning_scheme()
+        actions, action_code = agent.choose_action(state, failure = False)
+        self.assertEqual(actions.shape[0], 3)
+        self.assertEqual(actions[2], 0)
+        for i in range(agent.num_actions):
+            self.assertTrue(actions[i] <= agent.min_max_action and actions[i] >= -agent.min_max_action)
+
+
+
+
 
 
 if __name__ == '__main__':
