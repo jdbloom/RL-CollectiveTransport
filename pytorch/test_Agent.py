@@ -273,9 +273,24 @@ class TestAgent(unittest.TestCase):
         with self.assertRaises(Exception):
             agent.parse_action(10)
 
-    
-
-
+    def test_choose_message(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DQN',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+        observations = np.random.rand(31).astype(np.float32)
+        comms = np.random.rand(2*agent.alphabet_size)
+        state = np.concatenate((observations, comms))
+        #testing failure
+        message, message_code = agent.choose_message(state, failure = True)
+        self.assertEqual(message_code, -1)
+        self.assertEqual(message.shape[0], agent.alphabet_size)
+        for j in range(agent.alphabet_size):
+            self.assertEqual(message[j], 0)
+        #testing message
+        message, message_code = agent.choose_message(state, failure = False)
+        self.assertEqual(message.shape[0], agent.alphabet_size)
+        self.assertTrue(message_code >= 0 and message_code <= (agent.alphabet_size-1))
 
 if __name__ == '__main__':
     unittest.main()

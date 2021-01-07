@@ -31,7 +31,8 @@ class Agent():
         self.alphabet_space = [np.zeros(self.alphabet_size) for i in range(self.alphabet_size + 1)]
         for i in range(self.alphabet_size):
             self.alphabet_space[i+1][i] = 1
-        self.dead_channel_code = self.alphabet_space[0]
+        self.dead_channel_message = self.alphabet_space[0]
+        self.dead_channel_code = -1
 
         if self.comms_scheme == 'None':
             self.left_contacts = {i:[] for i in range(self.num_agents)}
@@ -54,7 +55,7 @@ class Agent():
 
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
 
-        self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
+        self.mailbox = Mailbox(self.contacts, self.dead_channel_message)
 
     def make_learning_scheme(self):
         # These are the hyper parameters relating to the neural networks
@@ -250,3 +251,19 @@ class Agent():
         r_wheel = round((action_num%self.num_ops_per_action - 1)/10.0, 1)
         # Trailing zero is hardcoded control for gripper
         return np.array([l_wheel, r_wheel, 0])
+
+    def choose_message(self, state, failure, test = False):
+        if failure:
+            self.failed = True
+            return np.zeros(self.alphabet_size), self.dead_channel_code
+        else:
+            self.failed = False
+        if test or np.random.random() > self.epsilon:
+            state = T.tensor([state], dtype = T.float).to(self.q_comms_eval.device)
+            messages = self.q_comms_eval.forward(state)
+            outgoing_message_code = T.argmax(message[0]).item()
+            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+        else:
+            outgoing_message_code = np.random.choice(self.alphabet_size)
+            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+        return outgoing_message, outgoing_message_code
