@@ -1,7 +1,7 @@
 import numpy as np
 
 class ReplayBuffer():
-    def __init__(self, max_size, num_observations):
+    def __init__(self, max_size, num_observations, num_actions):
         self.mem_size = max_size
         self.mem_ctr = 0
         self.state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)

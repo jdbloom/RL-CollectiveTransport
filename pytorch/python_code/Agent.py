@@ -79,9 +79,6 @@ class Agent():
         self.warmup = 1000
         self.time_step = 0
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size)
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size)
-
         if self.learning_scheme == 'None':
             # define logic for no learning?
             return
@@ -89,10 +86,19 @@ class Agent():
         if self.learning_scheme == 'DQN':
             #define networks for DQN
             self.min_max_action = 0.1
+            obs_size = self.num_observations + 2*self.alphabet_size
             actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':self.num_observations,
                        'num_ops_per_action':self.num_ops_per_action}
             self.q_eval = DQN(**actions_nn_args)
             self.q_next = DQN(**actions_nn_args)
+
+            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+
+            self.q_comms_eval = DDQNComms(**comms_nn_args)
+            self.q_comms_next = DDQNComms(**comms_nn_args)
+
+            self.memory = ReplayBuffer(100000, self.num_observations, 1)
+            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
 
         elif self.learning_scheme == 'DDQN':
             self.min_max_action = 0.1
@@ -105,6 +111,9 @@ class Agent():
             self.q_next = DDQN(**actions_nn_args)
             self.q_comms_eval = DDQNComms(**comms_nn_args)
             self.q_comms_next = DDQNComms(**comms_nn_args)
+
+            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
 
         elif self.learning_scheme == 'DDPG':
             #define networks for DDPG
@@ -134,6 +143,9 @@ class Agent():
             self.q_comms_eval = DDQNComms(**comms_nn_args)
             self.q_comms_next = DDQNComms(**comms_nn_args)
 
+            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
+            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+
         elif self.learning_scheme == 'TD3':
             #difine networks for TD3
             self.min_max_action = 1
@@ -153,6 +165,10 @@ class Agent():
 
             self.q_comms_eval = DDQNComms(**comms_nn_args)
             self.q_comms_next = DDQNComms(**comms_nn_args)
+
+            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
+            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+
         else:
             raise Exception('Unknown Learning Scheme' + self.learning_scheme)
 
@@ -255,7 +271,7 @@ class Agent():
     def choose_message(self, state, failure, test = False):
         if failure:
             self.failed = True
-            return np.zeros(self.alphabet_size), self.dead_channel_code
+            return self.dead_channel_message, self.dead_channel_code
         else:
             self.failed = False
         if test or np.random.random() > self.epsilon:
@@ -267,3 +283,91 @@ class Agent():
             outgoing_message_code = np.random.choice(self.alphabet_size)
             outgoing_message = self.alphabet_space[outgoing_message_code + 1]
         return outgoing_message, outgoing_message_code
+
+    def learn(self):
+        if self.learning_scheme == 'None':
+            return
+        elif self.learning_scheme == 'DQN':
+            self.DQN_learn()
+        elif self.learning_scheme == 'DDQN':
+            self.DDQN_learn()
+        elif self.learning_scheme == 'DDPG':
+            self.DDPG_learn()
+        elif self.learning_scheme == 'TD3':
+            self.TD3_learn()
+
+    def DQN_learn(self):
+        if self.memory.mem_ctr < self.batch_size:
+            return
+        self.q_eval.optimizer.zero_grad()
+
+        self.replace_target_network()
+
+        states, actions, rewards, states_, dones = self.sample_memory()
+
+        indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
+
+        q_pred = self.q_eval.forward(states)[indices, actions]
+
+        q_next = self.q_next.forward(states_).max(dim=1)[0]
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next
+
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
+        loss.backward()
+        self.q_eval.optimizer.step()
+        self.learn_step_counter += 1
+
+        self.decrement_epsilon()
+
+    def DDQN_learn(self):
+        return
+
+    def DDPG_learn(self):
+        return
+
+    def TD3_learn(self):
+        return
+
+    def make_agent_state(self, obs, comms):
+        agent_state = np.concatenate((obs, comms))
+        return agent_state
+
+    def store_transition(self, state, action, reward, state_, done):
+        self.memory.store_transition(state, action, reward, state_, done)
+
+    def store_comms_transition(self, state, action, reward, state_, done):
+        self.comms_memory.store_transition(state, action, reward, state_, done)
+
+    def decrement_epsilon(self):
+        self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
+
+    def sample_memory(self):
+        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
+        states = T.tensor(state).to(self.q_eval.device)
+        actions = T.tensor(action).to(self.q_eval.device)
+        rewards = T.tensor(reward).to(self.q_eval.device)
+        states_ = T.tensor(new_state).to(self.q_eval.device)
+        dones = T.tensor(done).to(self.q_eval.device)
+
+        return states, actions, rewards, states_, dones
+
+    def sample_comms_memory(self):
+        state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size)
+        states = T.tensor(state).to(self.q_comms_eval.device)
+        actions = T.tensor(action).to(self.q_comms_eval.device)
+        rewards = T.tensor(reward).to(self.q_comms_eval.device)
+        states_ = T.tensor(new_state).to(self.q_comms_eval.device)
+        dones = T.tensor(done).to(self.q_comms_eval.device)
+
+        return states, actions, rewards, states_, dones
+
+    def replace_target_network(self):
+        if self.learn_step_counter % self.replace_target_cnt == 0:
+            self.q_next.load_state_dict(self.q_eval.state_dict())
+
+    def replace_target_comms_network(self):
+        if self.learn_step_counter % self.replace_target_cnt == 0:
+            self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())

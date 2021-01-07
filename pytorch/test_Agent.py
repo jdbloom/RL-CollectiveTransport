@@ -292,5 +292,78 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(message.shape[0], agent.alphabet_size)
         self.assertTrue(message_code >= 0 and message_code <= (agent.alphabet_size-1))
 
+    def test_decrement_epsilon(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DQN',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+        agent.epsilon = 1.0
+        agent.decrement_epsilon()
+        self.assertEqual(agent.epsilon, 1.0 - agent.eps_dec)
+        agent.epsilon = agent.eps_min
+        agent.decrement_epsilon()
+        self.assertEqual(agent.epsilon, agent.eps_min)
+        agent.epsilon = 0
+        agent.decrement_epsilon()
+        self.assertEqual(agent.epsilon, agent.eps_min)
+
+    def test_memory(self):
+        # Testing:
+        #           - make_agent_state
+        #           - store_transition
+        #           - store_comms_transition
+        #           - sample_memory
+        #           - sample_comms_memory
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDQN',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+
+        for i in range(agent.batch_size):
+            observation = np.random.rand(31).astype(np.float32)
+            comms = np.random.rand(2*agent.alphabet_size)
+            state = agent.make_agent_state(observation, comms)
+            action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
+            message = np.random.choice(agent.alphabet_size)
+            reward = np.random.random()
+            state_ = state
+            done = False
+            agent.store_transition(state, action, reward, state_, done)
+            agent.store_comms_transition(state, message, reward, state_, done)
+        s, a, r, s_, d = agent.sample_memory()
+        self.assertEqual(s.shape[0], agent.batch_size)
+        self.assertEqual(s.shape[1], 31+2*agent.alphabet_size)
+        self.assertEqual(a.shape[0], agent.batch_size)
+        self.assertEqual(r.shape[0], agent.batch_size)
+        self.assertEqual(s_.shape[0], agent.batch_size)
+        self.assertEqual(s_.shape[1], 31+2*agent.alphabet_size)
+        self.assertEqual(d.shape[0], agent.batch_size)
+
+        s, a, r, s_, d = agent.sample_comms_memory()
+        self.assertEqual(s.shape[0], agent.batch_size)
+        self.assertEqual(s.shape[1], 31+2*agent.alphabet_size)
+        self.assertEqual(a.shape[0], agent.batch_size)
+        self.assertEqual(r.shape[0], agent.batch_size)
+        self.assertEqual(s_.shape[0], agent.batch_size)
+        self.assertEqual(s_.shape[1], 31+2*agent.alphabet_size)
+        self.assertEqual(d.shape[0], agent.batch_size)
+
+    def testDQN_learn(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DQN',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+
+        for i in range(agent.batch_size):
+            state = np.random.rand(31).astype(np.float32)
+            action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
+            reward = np.random.random()
+            state_ = state
+            done = False
+            agent.store_transition(state, action, reward, state_, done)
+
+        agent.learn()
+
+
 if __name__ == '__main__':
     unittest.main()
