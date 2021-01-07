@@ -247,7 +247,33 @@ class TestAgent(unittest.TestCase):
             self.assertTrue(actions[i] <= agent.min_max_action and actions[i] >= -agent.min_max_action)
 
 
+    def test_parse_action(self):
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DQN',
+                               comms_scheme = 'None', alphabet_size = 4)
+        self.assertEqual(agent.parse_action(0)[0], -0.1)
+        self.assertEqual(agent.parse_action(0)[1], -0.1)
+        self.assertEqual(agent.parse_action(1)[0], -0.1)
+        self.assertEqual(agent.parse_action(1)[1], 0)
+        self.assertEqual(agent.parse_action(2)[0], -0.1)
+        self.assertEqual(agent.parse_action(2)[1], 0.1)
+        self.assertEqual(agent.parse_action(3)[0], 0)
+        self.assertEqual(agent.parse_action(3)[1], -0.1)
+        self.assertEqual(agent.parse_action(4)[0], 0)
+        self.assertEqual(agent.parse_action(4)[1], 0)
+        self.assertEqual(agent.parse_action(5)[0], 0)
+        self.assertEqual(agent.parse_action(5)[1], 0.1)
+        self.assertEqual(agent.parse_action(6)[0], 0.1)
+        self.assertEqual(agent.parse_action(6)[1], -0.1)
+        self.assertEqual(agent.parse_action(7)[0], 0.1)
+        self.assertEqual(agent.parse_action(7)[1], 0)
+        self.assertEqual(agent.parse_action(8)[0], 0.1)
+        self.assertEqual(agent.parse_action(8)[1], 0.1)
+        with self.assertRaises(Exception):
+            agent.parse_action(10)
 
+    
 
 
 

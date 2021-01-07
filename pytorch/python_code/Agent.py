@@ -244,6 +244,8 @@ class Agent():
         7 - (1, 0)
         8 - (1, 1)
         '''
+        if action_num < 0 or action_num >=self.num_ops_per_action**self.num_actions:
+            raise Exception('Action Number Out of Range:'+str(action_num))
         l_wheel = round((math.floor(action_num/self.num_ops_per_action) - 1)/10.0, 1)
         r_wheel = round((action_num%self.num_ops_per_action - 1)/10.0, 1)
         # Trailing zero is hardcoded control for gripper
