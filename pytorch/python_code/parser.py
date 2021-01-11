@@ -3,6 +3,11 @@ from struct import pack, unpack, Struct
 
 
 class Parser:
+    # Byte size of float in C++
+    FLOAT_SIZE = 4
+    # Byte size of int in C++
+    INT_SIZE = 4
+
     #
     # Parse the fields from a message
     # Returns a dictionary

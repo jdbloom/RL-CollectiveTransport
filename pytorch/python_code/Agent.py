@@ -2,12 +2,16 @@ from .networks import DDQN, DDQNComms, DQN, DDPGActorNetwork, DDPGCriticNetwork,
 from .replay_buffer import ReplayBuffer
 from .communications import Mailbox
 
-from collections import namedtuple
-from torch.optim import Adam
 import numpy as np
 import math
+from collections import namedtuple
+
 import torch as T
-#from .communications import Mailbox
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.optim import Adam
+
+Loss = nn.MSELoss()
 
 class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
@@ -54,8 +58,40 @@ class Agent():
             raise Exception('Unknown Communication Scheme ' + self.comms_scheme)
 
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
+        self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
 
-        self.mailbox = Mailbox(self.contacts, self.dead_channel_message)
+    def get_agent_incoming_communications(self, agent_id):
+        messages = self.mailbox.inbox[agent_id]
+        incoming_comms = namedtuple('incoming_comms', 'left_msg right_msg')
+        left_msg = self.dead_channel_message
+        right_msg = self.dead_channel_message
+        for message in messages:
+            if agent_id in self.left_contacts[message.sender]:
+                if message.contents != -1:
+                    left_msg = self.alphabet_space[message.contents]
+            elif agent_id in self.right_contacts[message.sender]:
+                if message.contents != -1:
+                    right_msg = self.alphabet_space[message.contents]
+
+        msg = incoming_comms(left_msg, right_msg)
+        return msg
+
+    def make_agent_state(self, env_obs, agent_id):
+        msg = self.get_agent_incoming_communications(agent_id)
+        #import ipdb; ipdb.set_trace()
+        agent_state = np.concatenate((env_obs, msg.left_msg, msg.right_msg))
+        return agent_state
+
+    def clear_agent_inbox(self, agent_id):
+        self.mailbox.clear_inbox(agent_id)
+
+    def schedule_message_to_all_contacts(self, sender, contents):
+        for receiver in self.mailbox.contacts[sender]:
+            self.mailbox.schedule_message(sender, receiver, contents)
+
+    def carry_mail(self):
+        self.mailbox.carry_mail()
+
 
     def make_learning_scheme(self):
         # These are the hyper parameters relating to the neural networks
@@ -112,8 +148,8 @@ class Agent():
         self.q_comms_eval = DDQNComms(**comms_nn_args)
         self.q_comms_next = DDQNComms(**comms_nn_args)
 
-        self.memory = ReplayBuffer(100000, obs_size, 1)
-        self.comms_memory = ReplayBuffer(100000, obs_size, 1)
+        self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
+        self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
     def make_DDQN(self):
         self.min_max_action = 0.1
@@ -127,8 +163,8 @@ class Agent():
         self.q_comms_eval = DDQNComms(**comms_nn_args)
         self.q_comms_next = DDQNComms(**comms_nn_args)
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
     def make_DDPG(self):
         #define networks for DDPG
         self.min_max_action = 1
@@ -157,8 +193,8 @@ class Agent():
         self.q_comms_eval = DDQNComms(**comms_nn_args)
         self.q_comms_next = DDQNComms(**comms_nn_args)
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
     def make_TD3(self):
         #difine networks for TD3
@@ -180,8 +216,8 @@ class Agent():
         self.q_comms_eval = DDQNComms(**comms_nn_args)
         self.q_comms_next = DDQNComms(**comms_nn_args)
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
     def update_network_parameters(self, tau = None):
         # If tau = 1 -> hard update (should only be done during init)
@@ -227,7 +263,7 @@ class Agent():
         else:
             print('UNKNOWN NETWORK UPDATE RULE')
             return
-            
+
     def replace_target_network(self):
         if self.learn_step_counter % self.replace_target_cnt == 0:
             self.q_next.load_state_dict(self.q_eval.state_dict())
@@ -267,7 +303,7 @@ class Agent():
         else:
             action = np.random.choice(self.action_space)
         actions = self.parse_action(action)
-        return actions, action
+        return (actions, action)
 
     def DDQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
@@ -277,7 +313,7 @@ class Agent():
         else:
             action = np.random.choice(self.action_space)
         actions = self.parse_action(action)
-        return actions, action
+        return (actions, action)
 
     def DDPG_choose_action(self, observation, test = False):
         state = T.tensor([observation], dtype = T.float).to(self.actor.device).unsqueeze(0)
@@ -358,13 +394,13 @@ class Agent():
 
         self.replace_target_network()
 
-        states, actions, rewards, states_, dones = self.sample_memory()
+        states, actions, rewards, states_, dones = self.sample_memory(network = self.q_eval)
 
         indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
 
-        q_pred = self.q_eval.forward(states)[indices, actions]
+        q_pred = self.q_eval(states)[indices, actions]
 
-        q_next = self.q_next.forward(states_).max(dim=1)[0]
+        q_next = self.q_next(states_).max(dim=1)[0]
 
         q_next[dones] = 0.0
 
@@ -378,17 +414,129 @@ class Agent():
         self.decrement_epsilon()
 
     def DDQN_learn(self):
-        return
+        if self.memory.mem_ctr < self.batch_size:
+            return
+        self.q_eval.optimizer.zero_grad()
+
+        self.replace_target_network()
+
+        states, actions, rewards, states_, dones = self.sample_memory(network = self.q_eval)
+
+        indices = np.arange(self.batch_size)
+
+        q_pred = self.q_eval(states)[indices, actions]
+
+        q_next = self.q_next(states_)
+        q_eval = self.q_eval(states_)
+
+        max_actions = T.argmax(q_eval, dim = 1)
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next[indices, max_actions]
+
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
+        loss.backward()
+        self.q_eval.optimizer.step()
+        self.learn_step_counter += 1
+
+        self.decrement_epsilon()
 
     def DDPG_learn(self):
-        return
+        if self.memory.mem_ctr < self.batch_size:
+            return
+
+        states, actions, rewards, states_, dones = self.sample_memory(network = self.actor)
+        target_actions = self.target_actor(states_)
+        q_value_ = self.target_critic([states_, target_actions])
+        q_value_[dones] = 0.0
+        target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+
+        #Critic Update
+        self.critic.zero_grad()
+        q_value = self.critic([states, actions])
+        value_loss = Loss(q_value, target)
+        value_loss.backward()
+        self.critic_optimizer.step()
+
+        #Actor Update
+        self.actor.zero_grad()
+        new_policy_actions = self.actor(states)
+        actor_loss = -self.critic([states, new_policy_actions])
+        actor_loss = actor_loss.mean()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        self.update_network_parameters()
+
+        self.learn_step_counter += 1
 
     def TD3_learn(self):
-        return
+        if self.memory.mem_ctr < self.batch_size:
+            return
 
-    def make_agent_state(self, obs, comms):
-        agent_state = np.concatenate((obs, comms))
-        return agent_state
+        states, actions, rewards, states_, dones = self.sample_memory(network = self.target_actor)
+
+        target_actions = self.target_actor.forward(states_)
+        target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
+        target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
+
+        q1_ = self.target_critic_1(states_, target_actions)
+        q2_ = self.target_critic_2(states_, target_actions)
+
+        q1 = self.critic_1(states, actions)
+        q2 = self.critic_2(states, actions)
+
+        q1_[dones] = 0.0
+        q2_[dones] = 0.0
+
+        q1_ = q1_.view(-1)
+        q2_ = q2_.view(-1)
+
+        critic_value = T.min(q1_, q2_)
+
+        target = rewards + self.gamma*critic_value
+        target = target.view(self.batch_size, 1)
+
+        self.critic_1.optimizer.zero_grad()
+        self.critic_2.optimizer.zero_grad()
+
+        q1_loss = F.mse_loss(target, q1)
+        q2_loss = F.mse_loss(target, q2)
+        critic_loss = q1_loss + q2_loss
+        critic_loss.backward()
+        self.critic_1.optimizer.step()
+        self.critic_2.optimizer.step()
+
+        self.update_network_parameters()
+
+        self.learn_step_counter += 1
+
+    def learn_comms(self):
+        if self.comms_memory.mem_ctr < self.batch_size:
+            return
+        self.q_comms_eval.optimizer.zero_grad()
+
+        self.replace_target_comms_network()
+
+        states, message, rewards, states_, dones = self.sample_comms_memory()
+
+        indices = np.arange(self.batch_size)
+
+        q_pred = self.q_comms_eval.forward(states)[indices, message]
+
+        q_next = self.q_comms_next.forward(states_)
+        q_eval = self.q_comms_eval.forward(states_)
+
+        max_actions = T.argmax(q_eval, dim = 1)
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next[indices, max_actions]
+
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device)
+        loss.backward()
+        self.q_comms_eval.optimizer.step()
 
     def store_transition(self, state, action, reward, state_, done):
         self.memory.store_transition(state, action, reward, state_, done)
@@ -399,13 +547,13 @@ class Agent():
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
 
-    def sample_memory(self):
+    def sample_memory(self, network):
         state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
-        states = T.tensor(state).to(self.q_eval.device)
-        actions = T.tensor(action).to(self.q_eval.device)
-        rewards = T.tensor(reward).to(self.q_eval.device)
-        states_ = T.tensor(new_state).to(self.q_eval.device)
-        dones = T.tensor(done).to(self.q_eval.device)
+        states = T.tensor(state).to(network.device)
+        actions = T.tensor(action).to(network.device)
+        rewards = T.tensor(reward).to(network.device)
+        states_ = T.tensor(new_state).to(network.device)
+        dones = T.tensor(done).to(network.device)
 
         return states, actions, rewards, states_, dones
 
