@@ -84,104 +84,157 @@ class Agent():
             return
 
         if self.learning_scheme == 'DQN':
-            #define networks for DQN
-            self.min_max_action = 0.1
-            obs_size = self.num_observations + 2*self.alphabet_size
-            actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':self.num_observations,
-                       'num_ops_per_action':self.num_ops_per_action}
-            self.q_eval = DQN(**actions_nn_args)
-            self.q_next = DQN(**actions_nn_args)
-
-            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-            self.q_comms_eval = DDQNComms(**comms_nn_args)
-            self.q_comms_next = DDQNComms(**comms_nn_args)
-
-            self.memory = ReplayBuffer(100000, self.num_observations, 1)
-            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+            self.make_DQN()
 
         elif self.learning_scheme == 'DDQN':
-            self.min_max_action = 0.1
-            obs_size = self.num_observations + 2*self.alphabet_size
-            actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
-                       'num_ops_per_action':self.num_ops_per_action}
-            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-            self.q_eval = DDQN(**actions_nn_args)
-            self.q_next = DDQN(**actions_nn_args)
-            self.q_comms_eval = DDQNComms(**comms_nn_args)
-            self.q_comms_next = DDQNComms(**comms_nn_args)
-
-            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
-            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+            self.make_DDQN()
 
         elif self.learning_scheme == 'DDPG':
-            #define networks for DDPG
-            self.min_max_action = 1
-            obs_size = self.num_observations + 2*self.alphabet_size
-            actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
-                             'num_ops_per_action':self.num_ops_per_action, 'min_max_action':self.min_max_action}
-            critic_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size}
-
-            self.actor = DDPGActorNetwork(**actor_nn_args)
-            self.target_actor = DDPGActorNetwork(**actor_nn_args)
-            self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr)
-
-            self.critic = DDPGCriticNetwork(**critic_nn_args)
-            self.target_critic = DDPGCriticNetwork(**critic_nn_args)
-            self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr)
-
-            self.update_network_parameters(tau = 1)
-
-            self.actor.cuda()
-            self.target_actor.cuda()
-            self.critic.cuda()
-            self.target_critic.cuda()
-
-            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-            self.q_comms_eval = DDQNComms(**comms_nn_args)
-            self.q_comms_next = DDQNComms(**comms_nn_args)
-
-            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
-            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+            self.make_DDPG()
 
         elif self.learning_scheme == 'TD3':
-            #difine networks for TD3
-            self.min_max_action = 1
-            obs_size = self.num_observations + 2*self.alphabet_size
-            self.actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'actor')
-            self.target_actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_actor')
-
-            self.critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_1')
-            self.target_critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_1')
-
-            self.critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_2')
-            self.target_critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_2')
-
-            self.update_network_parameters(tau = 1)
-
-            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-            self.q_comms_eval = DDQNComms(**comms_nn_args)
-            self.q_comms_next = DDQNComms(**comms_nn_args)
-
-            self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
-            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+            self.make_TD3()
 
         else:
             raise Exception('Unknown Learning Scheme' + self.learning_scheme)
 
+    def make_DQN(self):
+        #define networks for DQN
+        self.min_max_action = 0.1
+        obs_size = self.num_observations + 2*self.alphabet_size
+        actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
+                   'num_ops_per_action':self.num_ops_per_action}
+        self.q_eval = DQN(**actions_nn_args)
+        self.q_next = DQN(**actions_nn_args)
+
+        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+
+        self.q_comms_eval = DDQNComms(**comms_nn_args)
+        self.q_comms_next = DDQNComms(**comms_nn_args)
+
+        self.memory = ReplayBuffer(100000, obs_size, 1)
+        self.comms_memory = ReplayBuffer(100000, obs_size, 1)
+
+    def make_DDQN(self):
+        self.min_max_action = 0.1
+        obs_size = self.num_observations + 2*self.alphabet_size
+        actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
+                   'num_ops_per_action':self.num_ops_per_action}
+        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+
+        self.q_eval = DDQN(**actions_nn_args)
+        self.q_next = DDQN(**actions_nn_args)
+        self.q_comms_eval = DDQNComms(**comms_nn_args)
+        self.q_comms_next = DDQNComms(**comms_nn_args)
+
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+    def make_DDPG(self):
+        #define networks for DDPG
+        self.min_max_action = 1
+        obs_size = self.num_observations + 2*self.alphabet_size
+        actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
+                         'num_ops_per_action':self.num_ops_per_action, 'min_max_action':self.min_max_action}
+        critic_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size}
+
+        self.actor = DDPGActorNetwork(**actor_nn_args)
+        self.target_actor = DDPGActorNetwork(**actor_nn_args)
+        self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr)
+
+        self.critic = DDPGCriticNetwork(**critic_nn_args)
+        self.target_critic = DDPGCriticNetwork(**critic_nn_args)
+        self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr)
+
+        self.update_network_parameters(tau = 1)
+
+        self.actor.cuda()
+        self.target_actor.cuda()
+        self.critic.cuda()
+        self.target_critic.cuda()
+
+        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+
+        self.q_comms_eval = DDQNComms(**comms_nn_args)
+        self.q_comms_next = DDQNComms(**comms_nn_args)
+
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+
+    def make_TD3(self):
+        #difine networks for TD3
+        self.min_max_action = 1
+        obs_size = self.num_observations + 2*self.alphabet_size
+        self.actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'actor')
+        self.target_actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_actor')
+
+        self.critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_1')
+        self.target_critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_1')
+
+        self.critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_2')
+        self.target_critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_2')
+
+        self.update_network_parameters(tau = 1)
+
+        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+
+        self.q_comms_eval = DDQNComms(**comms_nn_args)
+        self.q_comms_next = DDQNComms(**comms_nn_args)
+
+        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions)
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1)
+
     def update_network_parameters(self, tau = None):
         # If tau = 1 -> hard update (should only be done during init)
-        if tau is None:
-            tau = self.tau
-        # Update Actor Network
-        for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
-        # Update Critic Network
-        for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+        if self.learning_scheme == 'DDPG':
+            if tau is None:
+                tau = self.tau
+            # Update Actor Network
+            for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+            # Update Critic Network
+            for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+        elif self.learning_scheme == 'TD3':
+            if tau is None:
+                tau = self.tau
+
+            actor_params = self.actor.named_parameters()
+            critic_1_params = self.critic_1.named_parameters()
+            critic_2_params = self.critic_2.named_parameters()
+            target_actor_params = self.target_actor.named_parameters()
+            target_critic_1_params = self.target_critic_1.named_parameters()
+            target_critic_2_params = self.target_critic_2.named_parameters()
+
+            critic_1 = dict(critic_1_params)
+            critic_2 = dict(critic_2_params)
+            actor = dict(actor_params)
+            target_actor = dict(target_actor_params)
+            target_critic_1 = dict(target_critic_1_params)
+            target_critic_2 = dict(target_critic_2_params)
+
+            for name in critic_1:
+                critic_1[name] = tau*critic_1[name].clone() + (1-tau)*target_critic_1[name].clone()
+
+            for name in critic_2:
+                critic_2[name] = tau*critic_2[name].clone() + (1-tau)*target_critic_2[name].clone()
+
+            for name in actor:
+                actor[name] = tau*actor[name].clone() + (1-tau)*target_actor[name].clone()
+
+            self.target_critic_1.load_state_dict(critic_1)
+            self.target_critic_2.load_state_dict(critic_2)
+            self.target_actor.load_state_dict(actor)
+        else:
+            print('UNKNOWN NETWORK UPDATE RULE')
+            return
+            
+    def replace_target_network(self):
+        if self.learn_step_counter % self.replace_target_cnt == 0:
+            self.q_next.load_state_dict(self.q_eval.state_dict())
+
+    def replace_target_comms_network(self):
+        if self.learn_step_counter % self.replace_target_cnt == 0:
+            self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())
 
     def choose_action(self, observation, failure, test = False):
         if failure:
@@ -189,62 +242,64 @@ class Agent():
             return self.failure_action, self.failure_action_code
         else:
             self.failed = False
-        #######################
-        # None
-        #######################
+
         if self.learning_scheme == 'None':
             # Not sure what to do here for no learning
             return self.failure_action, self.failure_action_code
-        #######################
-        # DQN
-        #######################
+
         if self.learning_scheme == 'DQN':
-            if test or np.random.random() > self.epsilon:
-                state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
-                action_values = self.q_eval.forward(state)
-                action = T.argmax(actions[0]).item()
-            else:
-                action = np.random.choice(self.action_space)
-            actions = self.parse_action(action)
-            return actions, action
-        #######################
-        # DDQN
-        #######################
+            return self.DQN_choose_action(observation, test)
+
         elif self.learning_scheme == 'DDQN':
-            if test or np.random.random() > self.epsilon:
-                state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
-                action_values = self.q_eval.forward(state)
-                action = T.argmax(actions[0]).item()
-            else:
-                action = np.random.choice(self.action_space)
-            actions = self.parse_action(action)
-            return actions, action
-        #######################
-        # DDPG
-        #######################
+            return self.DDQN_choose_action(observation, test)
+
         elif self.learning_scheme == 'DDPG':
-            state = T.tensor([observation], dtype = T.float).to(self.actor.device).unsqueeze(0)
-            actions = self.actor(state)
-            if not test:
-                actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
-            actions = T.clip(actions, -self.min_max_action, self.min_max_action)
-            gripper = np.zeros((1, 1))
-            actions = np.append(actions[0].cpu().detach().numpy(), gripper)
-            return (actions, None)
-        #######################
-        # TD3
-        #######################
+            return self.DDPG_choose_action(observation, test)
+
         elif self.learning_scheme == 'TD3':
-            if self.time_step < self.warmup:
-                mu = T.tensor(np.random.normal(scale = self.noise, size = (self.num_actions,))).to(self.actor.device    )
-            else:
-                state = T.tensor([observation], dtype = T.float).to(self.actor.device)
-            mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.actor.device)
-            mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
-            self.time_step += 1
-            gripper = np.zeros((1, 1))
-            actions = np.append(mu_prime.cpu().detach().numpy(), gripper)
-            return (actions, None)
+            return self.TD3_choose_action(observation, test)
+
+    def DQN_choose_action(self, observation, test = False):
+        if test or np.random.random() > self.epsilon:
+            state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
+            action_values = self.q_eval.forward(state)
+            action = T.argmax(actions[0]).item()
+        else:
+            action = np.random.choice(self.action_space)
+        actions = self.parse_action(action)
+        return actions, action
+
+    def DDQN_choose_action(self, observation, test = False):
+        if test or np.random.random() > self.epsilon:
+            state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
+            action_values = self.q_eval.forward(state)
+            action = T.argmax(actions[0]).item()
+        else:
+            action = np.random.choice(self.action_space)
+        actions = self.parse_action(action)
+        return actions, action
+
+    def DDPG_choose_action(self, observation, test = False):
+        state = T.tensor([observation], dtype = T.float).to(self.actor.device).unsqueeze(0)
+        actions = self.actor(state)
+        if not test:
+            actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
+        actions = T.clip(actions, -self.min_max_action, self.min_max_action)
+        gripper = np.zeros((1, 1))
+        actions = np.append(actions[0].cpu().detach().numpy(), gripper)
+        return (actions, None)
+
+    def TD3_choose_action(self,observation, test = False):
+        if self.time_step < self.warmup:
+            mu = T.tensor(np.random.normal(scale = self.noise, size = (self.num_actions,))).to(self.actor.device    )
+        else:
+            state = T.tensor([observation], dtype = T.float).to(self.actor.device)
+        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.actor.device)
+        mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
+        self.time_step += 1
+        gripper = np.zeros((1, 1))
+        actions = np.append(mu_prime.cpu().detach().numpy(), gripper)
+        return (actions, None)
 
     def parse_action(self, action_num):
         '''
@@ -363,11 +418,3 @@ class Agent():
         dones = T.tensor(done).to(self.q_comms_eval.device)
 
         return states, actions, rewards, states_, dones
-
-    def replace_target_network(self):
-        if self.learn_step_counter % self.replace_target_cnt == 0:
-            self.q_next.load_state_dict(self.q_eval.state_dict())
-
-    def replace_target_comms_network(self):
-        if self.learn_step_counter % self.replace_target_cnt == 0:
-            self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())

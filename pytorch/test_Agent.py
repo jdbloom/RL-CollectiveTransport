@@ -78,7 +78,7 @@ class TestAgent(unittest.TestCase):
         #------------------
         agent.learning_scheme = 'DQN'
         agent.make_learning_scheme()
-        state = np.random.rand(31).astype(np.float32)
+        state = np.random.rand(agent.num_observations + 2*agent.alphabet_size).astype(np.float32)
         #testing q_eval
         actions = agent.q_eval(T.from_numpy(state).to(agent.q_eval.device).unsqueeze(0)).squeeze(0)
         self.assertEqual(actions.shape[0], agent.num_ops_per_action**agent.num_actions)
@@ -348,14 +348,70 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(s_.shape[1], 31+2*agent.alphabet_size)
         self.assertEqual(d.shape[0], agent.batch_size)
 
-    def testDQN_learn(self):
+    def test_learn(self):
+        # Not entirely sure how to test learning other than to run it and make
+        # sure it doesnt explode
+        #######################
+        # DQN
+        #######################
         agent = Agent(num_agents = 4, num_observations = 31,
                                num_actions = 2, num_ops_per_action = 3,
                                id = 1, learning_scheme = 'DQN',
                                comms_scheme = 'Neighbors', alphabet_size = 4)
 
         for i in range(agent.batch_size):
-            state = np.random.rand(31).astype(np.float32)
+            state = np.random.rand(agent.num_observations + 2*agent.alphabet_size).astype(np.float32)
+            action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
+            reward = np.random.random()
+            state_ = state
+            done = False
+            agent.store_transition(state, action, reward, state_, done)
+
+        agent.learn()
+        #######################
+        # DDQN
+        #######################
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDQN',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+
+        for i in range(agent.batch_size):
+            state = np.random.rand(agent.num_observations + 2*agent.alphabet_size).astype(np.float32)
+            action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
+            reward = np.random.random()
+            state_ = state
+            done = False
+            agent.store_transition(state, action, reward, state_, done)
+
+        agent.learn()
+        #######################
+        # DDPG
+        #######################
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'DDPG',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+
+        for i in range(agent.batch_size):
+            state = np.random.rand(agent.num_observations + 2*agent.alphabet_size).astype(np.float32)
+            action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
+            reward = np.random.random()
+            state_ = state
+            done = False
+            agent.store_transition(state, action, reward, state_, done)
+
+        agent.learn()
+        #######################
+        # TD3
+        #######################
+        agent = Agent(num_agents = 4, num_observations = 31,
+                               num_actions = 2, num_ops_per_action = 3,
+                               id = 1, learning_scheme = 'TD3',
+                               comms_scheme = 'Neighbors', alphabet_size = 4)
+
+        for i in range(agent.batch_size):
+            state = np.random.rand(agent.num_observations + 2*agent.alphabet_size).astype(np.float32)
             action = np.random.choice(agent.num_ops_per_action**agent.num_actions)
             reward = np.random.random()
             state_ = state
