@@ -4,11 +4,12 @@ class ReplayBuffer():
     def __init__(self, max_size, num_observations, num_actions, action_type):
         self.mem_size = max_size
         self.mem_ctr = 0
+        self.action_type = action_type
         self.state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
         self.new_state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
-        if action_type == 'Discrete':
+        if self.action_type == 'Discrete':
             self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
-        elif action_type == 'Continuous':
+        elif self.action_type == 'Continuous':
             self.action_memory = np.zeros((self.mem_size, num_actions), dtype = np.float32)
         else:
             raise Exception('Unknown Action Type:' + action_type)
@@ -18,9 +19,9 @@ class ReplayBuffer():
     def store_transition(self, state, action, reward, state_, done):
         index = self.mem_ctr % self.mem_size
         self.state_memory[index] = state
-        if action_type == 'Discrete':
+        if self.action_type == 'Discrete':
             self.action_memory[index] = action[0]
-        elif action_type == 'Continuous':
+        elif self.action_type == 'Continuous':
             self.action_memory[index] = action[1]
         self.reward_memory[index] = reward
         self.new_state_memory[index] = state_
