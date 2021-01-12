@@ -207,6 +207,15 @@ private:
    /** List of robot failure times: -1 = no failure **/
    std::vector <std::vector<SInt32>> m_vecRobotFailures;
 
+   /** Number of obstacles to fill in the environment*/
+   UInt32 m_unNumObstacles;
+
+   /** Obstacle Positions (index = # episode, # obstacles) */
+   std::vector<std::vector<CVector3> > m_vecObstaclePos;
+
+   /** List of obstacles */
+   std::vector<CCylinderEntity*> m_vecObstacles;
+
 
 private:
 

@@ -13,8 +13,11 @@ static const Real WALL_THICKNESS            = 0.2;  // m
 static const Real CYLINDER_RADIUS           = 0.5;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
+static const Real OBSTACLE_RADIUS           = 0.5;  // m
+static const Real OBSTACLE_HEIGHT           = 0.5;  // m
+static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
-static const Real ROBOT_CYLINDER_DISTANCE   = 0.6; // m
+static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
@@ -67,6 +70,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
+      GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -174,18 +178,39 @@ void CCollectiveRLTransport::CreateEntities() {
         }
       }
    }
+   /** Create Cylinder Obstacles */
+   std::ostringstream cCID;
+   CCylinderEntity* pcC;
+   for(size_t i = 0; i < m_unNumObstacles; ++i){
+     cCID.str("");
+     cCID << "o" << i;
+     pcC = new CCylinderEntity(
+        cCID.str(),
+        CVector3(),
+        CQuaternion(),
+        false,
+        OBSTACLE_RADIUS,
+        OBSTACLE_HEIGHT,
+        OBSTACLE_MASS);
+     m_vecObstacles.push_back(pcC);
+     AddEntity(*pcC);
+   }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
-   CRange<Real> cXRange(
+   CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-      -CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
       );
+   CRange<Real> cXObstacleRange(
+      GetSpace().GetArenaLimits().GetMin().GetX()/2,
+      0
+   );
    CRange<Real> cYRange(
       GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXRange),
+      cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
                m_pcRNG->Uniform(cYRange),
                0.0);
       m_vecCylinderPos.push_back(cPos);
@@ -212,6 +237,16 @@ void CCollectiveRLTransport::CreateEntities() {
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
+   /** Generate Random Positions for the obstacles */
+   for(size_t i = 0; i < m_unNumEpisodes; i++){
+     m_vecObstaclePos.push_back(std::vector<CVector3>());
+     for(size_t j = 0; j < m_unNumObstacles; j++){
+       cPos.Set(m_pcRNG->Uniform(cXObstacleRange),
+                m_pcRNG->Uniform(cYRange),
+                0.0);
+       m_vecObstaclePos.back().push_back(cPos);
+     }
+   }
 }
 
 /****************************************/
@@ -237,6 +272,13 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                  m_vecRobotOrient[un_episode][i],     // orientation
                  false,                               // not a check
                  true);                               // ignore collisions
+   }
+   for(size_t i = 0; i < m_vecObstacles.size(); ++i){
+     MoveEntity(m_vecObstacles[i]->GetEmbodiedEntity(), // body
+                m_vecObstaclePos[un_episode][i],        // position
+                CQuaternion(),                          // orientation
+                false,                                  // not a check
+                true);                                  // ignore collisions
    }
 }
 

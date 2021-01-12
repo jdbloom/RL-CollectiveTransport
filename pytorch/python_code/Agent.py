@@ -315,9 +315,9 @@ class Agent():
 
     def DDQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
-            state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
+            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             action_values = self.q_eval.forward(state)
-            action = T.argmax(actions[0]).item()
+            action = T.argmax(action_values[0]).item()
         else:
             action = np.random.choice(self.action_space)
         actions = self.parse_action(action)
