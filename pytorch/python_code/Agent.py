@@ -32,11 +32,14 @@ class Agent():
 
 
     def make_comms_scheme(self):
+        print('######## COMMUNICATION SCHEME ########')
+        print('SCHEME:', self.comms_scheme)
         self.alphabet_space = [np.zeros(self.alphabet_size) for i in range(self.alphabet_size + 1)]
         for i in range(self.alphabet_size):
             self.alphabet_space[i+1][i] = 1
         self.dead_channel_message = self.alphabet_space[0]
         self.dead_channel_code = -1
+        obs_size = self.num_observations+2*self.alphabet_size
 
         if self.comms_scheme == 'None':
             self.left_contacts = {i:[] for i in range(self.num_agents)}
@@ -56,6 +59,16 @@ class Agent():
             self.right_contacts[0] = [self.num_agents - 1]
         else:
             raise Exception('Unknown Communication Scheme ' + self.comms_scheme)
+
+        if self.comms_scheme != 'None':
+            print('MODEL SPECIFICS:')
+            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+            self.q_comms_eval = DDQNComms(**comms_nn_args)
+            self.q_comms_next = DDQNComms(**comms_nn_args)
+            print('Communication Network:')
+            print(self.q_comms_eval)
+            print(self.q_comms_next)
+            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
@@ -77,6 +90,8 @@ class Agent():
         return msg
 
     def make_agent_state(self, env_obs, agent_id):
+        if self.comms_scheme == 'None':
+            return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message))
         msg = self.get_agent_incoming_communications(agent_id)
         #import ipdb; ipdb.set_trace()
         agent_state = np.concatenate((env_obs, msg.left_msg, msg.right_msg))
@@ -114,7 +129,9 @@ class Agent():
         self.update_actor_iter = 2
         self.warmup = 1000
         self.time_step = 0
-
+        print('######## LEARNING SCHEME ########')
+        print('SCHEME:', self.learning_scheme)
+        print('MODEL SPECIFICS:')
         if self.learning_scheme == 'None':
             # define logic for no learning?
             return
@@ -140,46 +157,45 @@ class Agent():
         obs_size = self.num_observations + 2*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
-        self.q_eval = DQN(**actions_nn_args)
-        self.q_next = DQN(**actions_nn_args)
-
         comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
 
-        self.q_comms_eval = DDQNComms(**comms_nn_args)
-        self.q_comms_next = DDQNComms(**comms_nn_args)
+        self.q_eval = DQN(**actions_nn_args)
+        self.q_next = DQN(**actions_nn_args)
+        print(self.q_eval)
+        print(self.q_next)
 
         self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
-        self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
     def make_DDQN(self):
         self.min_max_action = 0.1
         obs_size = self.num_observations + 2*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
-        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
 
         self.q_eval = DDQN(**actions_nn_args)
         self.q_next = DDQN(**actions_nn_args)
-        self.q_comms_eval = DDQNComms(**comms_nn_args)
-        self.q_comms_next = DDQNComms(**comms_nn_args)
+        print(self.q_eval)
+        print(self.q_next)
 
         self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
+
     def make_DDPG(self):
         #define networks for DDPG
         self.min_max_action = 1
         obs_size = self.num_observations + 2*self.alphabet_size
         actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action, 'min_max_action':self.min_max_action}
-        critic_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size}
 
         self.actor = DDPGActorNetwork(**actor_nn_args)
         self.target_actor = DDPGActorNetwork(**actor_nn_args)
         self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr)
-
+        print(self.actor)
+        print(self.target_actor)
         self.critic = DDPGCriticNetwork(**critic_nn_args)
         self.target_critic = DDPGCriticNetwork(**critic_nn_args)
         self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr)
+        print(self.critic)
+        print(self.target_critic)
 
         self.update_network_parameters(tau = 1)
 
@@ -188,13 +204,7 @@ class Agent():
         self.critic.cuda()
         self.target_critic.cuda()
 
-        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-        self.q_comms_eval = DDQNComms(**comms_nn_args)
-        self.q_comms_next = DDQNComms(**comms_nn_args)
-
         self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
     def make_TD3(self):
         #difine networks for TD3
@@ -202,22 +212,20 @@ class Agent():
         obs_size = self.num_observations + 2*self.alphabet_size
         self.actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'actor')
         self.target_actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_actor')
-
+        print(self.actor)
+        print(self.target_actor)
         self.critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_1')
         self.target_critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_1')
-
+        print(self.critic_1)
+        print(self.target_critic_1)
         self.critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_2')
         self.target_critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_2')
+        print(self.critic_2)
+        print(self.target_critic_2)
 
         self.update_network_parameters(tau = 1)
 
-        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-
-        self.q_comms_eval = DDQNComms(**comms_nn_args)
-        self.q_comms_next = DDQNComms(**comms_nn_args)
-
         self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
     def update_network_parameters(self, tau = None):
         # If tau = 1 -> hard update (should only be done during init)
@@ -297,9 +305,9 @@ class Agent():
 
     def DQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
-            state = T.tensor([observatoin], dtype = T.float).to(self.q_eval.device)
+            state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
             action_values = self.q_eval.forward(state)
-            action = T.argmax(actions[0]).item()
+            action = T.argmax(action_values[0]).item()
         else:
             action = np.random.choice(self.action_space)
         actions = self.parse_action(action)
@@ -368,7 +376,7 @@ class Agent():
         if test or np.random.random() > self.epsilon:
             state = T.tensor([state], dtype = T.float).to(self.q_comms_eval.device)
             messages = self.q_comms_eval.forward(state)
-            outgoing_message_code = T.argmax(message[0]).item()
+            outgoing_message_code = T.argmax(messages[0]).item()
             outgoing_message = self.alphabet_space[outgoing_message_code + 1]
         else:
             outgoing_message_code = np.random.choice(self.alphabet_size)
@@ -566,3 +574,11 @@ class Agent():
         dones = T.tensor(done).to(self.q_comms_eval.device)
 
         return states, actions, rewards, states_, dones
+
+    def save_model(self, path):
+        if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
+            self.q_eval.save_model(path)
+
+    def load_model(self, path):
+        if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
+            self.q_eval.load_model(path)
