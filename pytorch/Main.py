@@ -147,7 +147,7 @@ while not exp_done:
                     socket.send(Utility.serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
-                    env_observationso = Utility.parse_obs(msgs[1])
+                    env_observations = Utility.parse_obs(msgs[1])
                     failures = Utility.parse_failures(msgs[2])
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
