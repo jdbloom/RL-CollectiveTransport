@@ -98,12 +98,8 @@ while not exp_done:
             stats = Utility.parse_stats(msgs[4])
 
             agent_states = []
-            actions = []
-            messages = []
-            message_codes = []
             force_mags = []
             force_angs = []
-            actions_to_take = []
             running_reward = 0
 
             for i in range(Utility.params['num_robots']):
@@ -123,8 +119,11 @@ while not exp_done:
             while not episode_done:
                 if not exp_done:
                     reward = []
+                    actions = []
+                    actions_to_take = []
+                    messages = []
+                    message_codes = []
                     time_steps += 1
-
                     # Get Actions
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
