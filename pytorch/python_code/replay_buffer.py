@@ -22,7 +22,7 @@ class ReplayBuffer():
         if self.action_type == 'Discrete':
             self.action_memory[index] = action[0]
         elif self.action_type == 'Continuous':
-            self.action_memory[index] = action[1]
+            self.action_memory[index] = action[1][0:2]
         self.reward_memory[index] = reward
         self.new_state_memory[index] = state_
         self.terminal_memory[index] = done

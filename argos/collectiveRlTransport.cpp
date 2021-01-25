@@ -71,6 +71,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
+      GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel)
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -356,16 +357,22 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase,
-                std::vector<UInt32>& vec_faiulure) :
+                std::vector<UInt32>& vec_faiulure,
+                std::vector<Real>& vec_angle_to_goal,
+                std::vector<UInt32>& vec_base_model) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
-      Failure(vec_faiulure) {}
+      Failure(vec_faiulure),
+      AngleToGoal(vec_angle_to_goal),
+      BaseModel(vec_base_model) {}
 
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
+      BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
+      BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
       /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
@@ -376,6 +383,8 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
    std::vector<UInt32> Failure;
+   std::vector<Real> AngleToGoal;
+   std::vector<UInt32> BaseModle;
 };
 
 /****************************************/
@@ -521,13 +530,18 @@ void CCollectiveRLTransport::PreStep() {
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
    std::vector<UInt32> vecFailure(m_unNumRobots);
+   std::vector<Real> vecAngleToGoal(m_unNumRobots);
+   std::vector<UInt32> vecBaseModel(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
+      float* pfObs = &m_vecObs[0] + i * m_unNumObs;
       vecLIncrease[i] = pfAction[0];
       vecRIncrease[i] = pfAction[1];
       vecFailure[i] = pfAction[2];
+      vecAngleToGoal[i] = pfObs[1];
+      vecBaseModel[i] = m_unBaseModel;
    }
-   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure));
+   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure, vecAngleToGoal, vecBaseModel));
 }
 
 /****************************************/

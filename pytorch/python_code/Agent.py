@@ -60,16 +60,6 @@ class Agent():
         else:
             raise Exception('Unknown Communication Scheme ' + self.comms_scheme)
 
-        if self.comms_scheme != 'None':
-            print('MODEL SPECIFICS:')
-            comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
-            self.q_comms_eval = DDQNComms(**comms_nn_args)
-            self.q_comms_next = DDQNComms(**comms_nn_args)
-            print('Communication Network:')
-            print(self.q_comms_eval)
-            print(self.q_comms_next)
-            self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
-
         self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
 
@@ -110,6 +100,7 @@ class Agent():
 
     def make_learning_scheme(self):
         # These are the hyper parameters relating to the neural networks
+        # HYPER PARAMETERS COME FROM "Continuous Control with Deep Reinforcement Learning"
         self.action_space = [i for i in range(self.num_ops_per_action**self.num_actions)]
         self.gamma = 0.99997
         self.tau = 0.005
@@ -119,7 +110,7 @@ class Agent():
         self.epsilon = 1.0
         self.eps_min = 0.01
         self.eps_dec = 1e-6
-        self.batch_size = 64
+        self.batch_size = 100
         self.replace_target_cnt = 1000
         self.failed = False
         self.failure_action = [0, 0, 1]
@@ -129,6 +120,10 @@ class Agent():
         self.update_actor_iter = 2
         self.warmup = 1000
         self.time_step = 0
+
+        if self.comms_scheme != 'None':
+            self.make_comms_network()
+
         print('######## LEARNING SCHEME ########')
         print('SCHEME:', self.learning_scheme)
         print('MODEL SPECIFICS:')
@@ -150,6 +145,17 @@ class Agent():
 
         else:
             raise Exception('Unknown Learning Scheme' + self.learning_scheme)
+
+    def make_comms_network(self):
+        obs_size = self.num_observations + 2*self.alphabet_size
+        print('MODEL SPECIFICS:')
+        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+        self.q_comms_eval = DDQNComms(**comms_nn_args)
+        self.q_comms_next = DDQNComms(**comms_nn_args)
+        print('Communication Network:')
+        print(self.q_comms_eval)
+        print(self.q_comms_next)
+        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
 
     def make_DQN(self):
         #define networks for DQN
@@ -184,15 +190,17 @@ class Agent():
         self.min_max_action = 1
         obs_size = self.num_observations + 2*self.alphabet_size
         actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
-                         'num_ops_per_action':self.num_ops_per_action, 'min_max_action':self.min_max_action}
+                         'num_ops_per_action':self.num_ops_per_action,
+                         'min_max_action':self.min_max_action}
+        critic_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size}
 
-        self.actor = DDPGActorNetwork(**actor_nn_args)
-        self.target_actor = DDPGActorNetwork(**actor_nn_args)
+        self.actor = DDPGActorNetwork(**actor_nn_args, name = 'actor')
+        self.target_actor = DDPGActorNetwork(**actor_nn_args, name = 'target_actor')
         self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr)
         print(self.actor)
         print(self.target_actor)
-        self.critic = DDPGCriticNetwork(**critic_nn_args)
-        self.target_critic = DDPGCriticNetwork(**critic_nn_args)
+        self.critic = DDPGCriticNetwork(**critic_nn_args, name = 'critic')
+        self.target_critic = DDPGCriticNetwork(**critic_nn_args, name = 'target_critic')
         self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr)
         print(self.critic)
         print(self.target_critic)
@@ -210,16 +218,21 @@ class Agent():
         #difine networks for TD3
         self.min_max_action = 1
         obs_size = self.num_observations + 2*self.alphabet_size
-        self.actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'actor')
-        self.target_actor = TD3ActorNetwork(self.alpha, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_actor')
+        actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
+                         'fc2_dims':300, 'n_actions':self.num_actions}
+        critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
+                          'fc2_dims':300, 'n_actions':self.num_actions}
+
+        self.actor = TD3ActorNetwork(**actor_nn_args, name = 'actor')
+        self.target_actor = TD3ActorNetwork(**actor_nn_args, name = 'target_actor')
         print(self.actor)
         print(self.target_actor)
-        self.critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_1')
-        self.target_critic_1 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_1')
+        self.critic_1 = TD3CriticNetwork(**critic_nn_args, name = 'critic_1')
+        self.target_critic_1 = TD3CriticNetwork(**critic_nn_args, name = 'target_critic_1')
         print(self.critic_1)
         print(self.target_critic_1)
-        self.critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'critic_2')
-        self.target_critic_2 = TD3CriticNetwork(self.beta, input_dims = obs_size, fc1_dims = 400, fc2_dims = 300, n_actions = self.num_actions, name = 'target_critic_2')
+        self.critic_2 = TD3CriticNetwork(**critic_nn_args, name = 'critic_2')
+        self.target_critic_2 = TD3CriticNetwork(**critic_nn_args, name = 'target_critic_2')
         print(self.critic_2)
         print(self.target_critic_2)
 
@@ -229,9 +242,10 @@ class Agent():
 
     def update_network_parameters(self, tau = None):
         # If tau = 1 -> hard update (should only be done during init)
+        if tau is None:
+            tau = self.tau
+
         if self.learning_scheme == 'DDPG':
-            if tau is None:
-                tau = self.tau
             # Update Actor Network
             for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
                 target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
@@ -239,9 +253,6 @@ class Agent():
             for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
                 target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
         elif self.learning_scheme == 'TD3':
-            if tau is None:
-                tau = self.tau
-
             actor_params = self.actor.named_parameters()
             critic_1_params = self.critic_1.named_parameters()
             critic_2_params = self.critic_2.named_parameters()
@@ -269,8 +280,7 @@ class Agent():
             self.target_critic_2.load_state_dict(critic_2)
             self.target_actor.load_state_dict(actor)
         else:
-            print('UNKNOWN NETWORK UPDATE RULE')
-            return
+            raise Exception('UNKNOWN NETWORK UPDATE RULE'+self.learning_scheme)
 
     def replace_target_network(self):
         if self.learn_step_counter % self.replace_target_cnt == 0:
@@ -333,11 +343,14 @@ class Agent():
         actions = np.append(actions[0].cpu().detach().numpy(), gripper)
         return (actions, None)
 
-    def TD3_choose_action(self,observation, test = False):
+    def TD3_choose_action(self, observation, test = False):
         if self.time_step < self.warmup:
-            mu = T.tensor(np.random.normal(scale = self.noise, size = (self.num_actions,))).to(self.actor.device    )
+            mu = T.tensor(np.random.normal(scale = self.noise,
+                                           size = (self.num_actions,))
+                          ).to(self.actor.device)
         else:
-            state = T.tensor([observation], dtype = T.float).to(self.actor.device)
+            state = T.tensor(observation, dtype = T.float).to(self.actor.device)
+            mu = self.actor.forward(state).to(self.actor.device)
         mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.actor.device)
         mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
         self.time_step += 1
@@ -489,11 +502,11 @@ class Agent():
         target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
         target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
 
-        q1_ = self.target_critic_1(states_, target_actions)
-        q2_ = self.target_critic_2(states_, target_actions)
+        q1_ = self.target_critic_1.forward(states_, target_actions)
+        q2_ = self.target_critic_2.forward(states_, target_actions)
 
-        q1 = self.critic_1(states, actions)
-        q2 = self.critic_2(states, actions)
+        q1 = self.critic_1.forward(states, actions)
+        q2 = self.critic_2.forward(states, actions)
 
         q1_[dones] = 0.0
         q2_[dones] = 0.0
@@ -501,9 +514,9 @@ class Agent():
         q1_ = q1_.view(-1)
         q2_ = q2_.view(-1)
 
-        critic_value = T.min(q1_, q2_)
+        critic_value_ = T.min(q1_, q2_)
 
-        target = rewards + self.gamma*critic_value
+        target = rewards + self.gamma*critic_value_
         target = target.view(self.batch_size, 1)
 
         self.critic_1.optimizer.zero_grad()
@@ -516,9 +529,18 @@ class Agent():
         self.critic_1.optimizer.step()
         self.critic_2.optimizer.step()
 
-        self.update_network_parameters()
-
         self.learn_step_counter += 1
+
+        if self.learn_step_counter % self.update_actor_iter != 0:
+            return
+        #print('Actor Learn Step')
+        self.actor.optimizer.zero_grad()
+        actor_q1_loss = self.critic_1.forward(states, self.actor.forward(states))
+        actor_loss = -T.mean(actor_q1_loss)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        self.update_network_parameters()
 
     def learn_comms(self):
         if self.comms_memory.mem_ctr < self.batch_size:
@@ -578,6 +600,18 @@ class Agent():
     def save_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
             self.q_eval.save_model(path)
+        elif self.learning_scheme == 'DDPG':
+            self.actor.save_checkpoint(path)
+            self.target_actor.save_checkpoint(path)
+            self.critic.save_checkpoint(path)
+            self.target_critic.save_checkpoint(path)
+        elif self.learning_scheme == 'TD3':
+            self.actor.save_checkpoint(path)
+            self.target_actor.save_checkpoint(path)
+            self.critic_1.save_checkpoint(path)
+            self.target_critic_1.save_checkpoint(path)
+            self.critic_2.save_checkpoint(path)
+            self.target_critic_2.save_checkpoint(path)
 
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':

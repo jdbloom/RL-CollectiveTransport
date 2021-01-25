@@ -49,7 +49,7 @@
                   threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "2"
-                  num_episodes = "1000"
+                  num_episodes = "500"
                   episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
@@ -95,7 +95,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <qt-opengl>
+    <!--<qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
           <placements>
@@ -107,7 +107,7 @@
             <placement index="5" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
           </placements>
         </camera>
-      </qt-opengl>
+      </qt-opengl>-->
   </visualization>
 
 </argos-configuration>

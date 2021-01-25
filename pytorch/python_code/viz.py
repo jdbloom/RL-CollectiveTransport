@@ -9,18 +9,20 @@ import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
 parser.add_argument("figure_path")
+parser.add_argument("figure_name")
 args = parser.parse_args()
 
-path = args.data_path
+data_path = args.data_path
+
 
 file_names = []
-for file in os.listdir(path):
+for file in os.listdir(data_path):
     file_names.append(file)
 
 df_list = []
 for i in range(len(file_names)-1):
     name = 'Data_Episode_'+str(i)+'.csv'
-    file_path = path+name
+    file_path = data_path+name
     df = pd.read_csv(file_path)
     df_list.append((i, df))
 
@@ -50,7 +52,7 @@ if len(last_10_axis) > 150:
     print('The Best Model is:', 150+np.argmax(last_10_reward[150:]))
 
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.title('4 Agent Double Deep Q-Learning\n with Obstacle and Communication')
+plt.title(args.figure_name)
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
 #s = ['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0', '0.9', '0.8', '0.7', '0.6', '0.5' ]
@@ -61,4 +63,4 @@ plt.ylabel('Reward')
 #    plt.text(x[i], y[i], s[i], c='gray')
 plt.plot(reward, c = 'lightsteelblue')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-plt.savefig(args.figure_path)
+plt.savefig(args.figure_path+args.figure_name+".png")

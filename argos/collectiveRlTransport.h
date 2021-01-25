@@ -216,6 +216,9 @@ private:
    /** List of obstacles */
    std::vector<CCylinderEntity*> m_vecObstacles;
 
+   /** Flag for whether or not to use learning or the base model*/
+   UInt32 m_unBaseModel;
+
 
 private:
 
