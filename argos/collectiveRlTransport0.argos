@@ -56,7 +56,8 @@
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "4"
                   proximity_range = "1"
-                  num_obstacles = "0"/>
+                  num_obstacles = "0"
+                  use_base_model = "0"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
