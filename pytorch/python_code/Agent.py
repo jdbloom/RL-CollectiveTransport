@@ -616,3 +616,15 @@ class Agent():
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
             self.q_eval.load_model(path)
+        elif self.learning_scheme == 'DDPG':
+            self.actor.load_checkpoint(path)
+            self.target_actor.load_checkpoint(path)
+            self.critic.load_checkpoint(path)
+            self.target_critic.load_checkpoint(path)
+        elif self.learning_scheme == 'TD3':
+            self.actor.load_checkpoint(path)
+            self.target_actor.load_checkpoint(path)
+            self.critic_1.load_checkpoint(path)
+            self.target_critic_1.load_checkpoint(path)
+            self.critic_2.load_checkpoint(path)
+            self.target_critic_2.load_checkpoint(path)

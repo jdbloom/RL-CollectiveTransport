@@ -3,30 +3,46 @@ include "vec2.bzz"
 MAX_SPEED = 10.0
 MIN_SPEED = -MAX_SPEED
 
+function set_wheels_debug(Left, Right){
+	log("speeds: ", Left, " " , Right)
+	set_wheels(10.0, 5.0)
+	debug.print("i: ", L_increase, " ", R_increase, "; s: ", Left, " ", Right, "; a: ", AngleToGoal)
+}
 function init(){
   #debug.trajectory.enable(100)
   R_wheel = MAX_SPEED
   L_wheel = MAX_SPEED
-  set_wheels(L_wheel, R_wheel)
+	#log("setting init")
+  set_wheels_debug(L_wheel, R_wheel)
   gripped = 0
   failure = 0
+	angle_buffer = 5.0 # degrees
 }
 
 function step(){
+	#log("failure ", failure)
+	vec_to_goal = math.vec2.newp(1.0, AngleToGoal/180.0*math.pi)
+	debug.rays.add(255, 0, 0, vec_to_goal.x, vec_to_goal.y, 0.1)
   if(gripped){
     # Should we use the base model to control the robots or the learned model
+    log(id, BaseModel)
     if (BaseModel == 1){
-      AngleToGoal = AngleToGoal + 180.0
+      #log(id, " Case = 1")
+      AngleToGoal = AngleToGoal + 180.0	
+			log("ANGLES: ",AngleToGoal, " ", 360-AngleToGoal, " ", angle_buffer)
       if(AngleToGoal < angle_buffer or (360 - AngleToGoal) < angle_buffer){
-        set_wheels(0.0, 0.0)
-        set_wheels(-10.0, -10.0)
+				#log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
+        set_wheels_debug(-10.0, -10.0)
       }
       # Otherwise rotate
       else {
-        set_wheels(-5.0, 5.0)
+				#log("Setting wheels case 1, out of range ", -MAX_SPEED/2.0, " ", MAX_SPEED/2.0)
+        set_wheels_debug(-5.0, 5.0)
+				#log("Wheels set")
       }
     }
     else{
+      #log(id, "Case = 0")
       # Grab R_increase and L_increase from PreStep() in the loopfunctions code.
       # Make sure R_wheel and L_wheel are within bounds
       L_wheel = L_wheel + L_increase
@@ -34,12 +50,14 @@ function step(){
       R_wheel = R_wheel + R_increase
       R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
       # Set the wheel speeds
-      set_wheels(L_wheel, R_wheel)
+			#log("setting case = 0")
+      set_wheels_debug(L_wheel, R_wheel)
     }
   }
   else {
     if (proximity[0].value > 0.6){
-      set_wheels(0.0, 0.0)
+			log("setting gripping")
+      set_wheels_debug(0.0, 0.0)
       gripper_lock()
       turret_disable()
       gripped = 1
@@ -48,7 +66,8 @@ function step(){
   # If the robot fails, open the gripper and set the wheel speeds to 0.
   if(failure){
     gripper_unlock()
-    set_wheels(0.0, 0.0)
+		log("setting failure")
+    set_wheels_debug(0.0, 0.0)
   }
 }
 

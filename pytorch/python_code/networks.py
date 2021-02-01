@@ -148,7 +148,7 @@ class DDPGActorNetwork(nn.Module):
 
         self.init_weights(3e-3) #find where this comes from and maybe find the purpose of this line???
 
-        self.name = name + '_DDPG'
+        self.name = name
 
 
     def init_weights(self, init_w):
@@ -170,8 +170,8 @@ class DDPGActorNetwork(nn.Module):
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...')
-        T.load_state_dict(T.load(path + '_' + self.name))
+        print('... loading', self.name, 'checkpoint ...', path)
+        self.load_state_dict(T.load(path + '_' + self.name))
 
 ############################################################################
 # Critic Network for DDPG
@@ -191,7 +191,7 @@ class DDPGCriticNetwork(nn.Module):
         self.relu = nn.ReLU()
         self.init_weights(3e-3)
 
-        self.name = name + '_DDPG'
+        self.name = name
 
     def init_weights(self, init_w):
         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
@@ -212,8 +212,8 @@ class DDPGCriticNetwork(nn.Module):
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...')
-        T.load_state_dict(T.load(path + '_' + self. name))
+        print('... loading', self.name, 'checkpoint ...', path)
+        self.load_state_dict(T.load(path + '_' + self. name))
 
 ############################################################################
 # Actor Network for TD3

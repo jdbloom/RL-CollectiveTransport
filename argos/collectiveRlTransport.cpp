@@ -71,7 +71,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
-      GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel)
+      GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -373,18 +373,19 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f\n",
+      DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
-            RIncrease[t_vm->robot]);*/
+            RIncrease[t_vm->robot],
+            Failure[t_vm->robot]);
    }
 
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
    std::vector<UInt32> Failure;
    std::vector<Real> AngleToGoal;
-   std::vector<UInt32> BaseModle;
+   std::vector<UInt32> BaseModel;
 };
 
 /****************************************/
@@ -529,6 +530,7 @@ void CCollectiveRLTransport::PreStep() {
    }*/
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
+   std::vector<UInt32> vecGripper(m_unNumRobots);
    std::vector<UInt32> vecFailure(m_unNumRobots);
    std::vector<Real> vecAngleToGoal(m_unNumRobots);
    std::vector<UInt32> vecBaseModel(m_unNumRobots);
@@ -537,7 +539,8 @@ void CCollectiveRLTransport::PreStep() {
       float* pfObs = &m_vecObs[0] + i * m_unNumObs;
       vecLIncrease[i] = pfAction[0];
       vecRIncrease[i] = pfAction[1];
-      vecFailure[i] = pfAction[2];
+      vecGripper[i] = pfAction[2];
+      vecFailure[i] = m_vecFailures[i];
       vecAngleToGoal[i] = pfObs[1];
       vecBaseModel[i] = m_unBaseModel;
    }
