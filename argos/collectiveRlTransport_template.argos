@@ -57,7 +57,7 @@
 		              alphabet_size = "$$alphabet_size$$"
                   proximity_range = "1"
                   num_obstacles = "0"
-                  use_base_model = "0"/>
+                  use_base_model = "$$num_obstacles$$"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->

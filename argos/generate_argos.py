@@ -2,7 +2,7 @@ import re
 import argparse
 import os
 
-def generate_argos(num_robots="1", max_num_robot_failures="1", chance_failure="0.5", num_episodes="1000",
+def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="1", chance_failure="0.5", num_episodes="1000",
                    pytorch_port="tcp://localhost:55555", argos_filename="collectiveRlTransport.argos",
                    alphabet_size='4'):
     containing_folder = os.path.dirname(os.path.realpath(__file__))
@@ -15,12 +15,14 @@ def generate_argos(num_robots="1", max_num_robot_failures="1", chance_failure="0
         filestring = re.sub(r'\$\$num_episodes\$\$', num_episodes, filestring)
         filestring = re.sub(r'\$\$pytorch_port\$\$', pytorch_port, filestring)
         filestring = re.sub(r'\$\$alphabet_size\$\$', alphabet_size, filestring)
+        filestring = re.sub(r'\$\$num_obstacles\$\$', num_obstacles, filestring)
 
     argos_filename = os.path.join(containing_folder, argos_filename)
     with open(argos_filename, 'w') as f:
         f.write(filestring)
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--num_obstacles", default="0")
 parser.add_argument("--num_robots", default="1")
 parser.add_argument("--max_num_robot_failures", default="1")
 parser.add_argument("--chance_failure", default="0.5")
