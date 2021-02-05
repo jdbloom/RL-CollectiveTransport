@@ -125,13 +125,13 @@ while not exp_done:
                     message_codes = []
                     time_steps += 1
                     # Get Actions
-                    print('-----------------')
+                    #print('-----------------')
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         action, action_num = model.choose_action(agent_states[i], failure, test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
-                        print(i, action)
+                        #print(i, action)
                         # Choose a message
                         if model.comms_scheme != 'None':
                             message, message_num = model.choose_message(agent_states[i], failure, test_mode)

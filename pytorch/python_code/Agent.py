@@ -299,7 +299,7 @@ class Agent():
 
         if self.learning_scheme == 'None':
             # Not sure what to do here for no learning
-            return self.failure_action, self.failure_action_code
+            return [0, 0, 0], 0
 
         if self.learning_scheme == 'DQN':
             return self.DQN_choose_action(observation, test)

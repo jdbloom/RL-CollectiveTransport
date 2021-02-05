@@ -16,14 +16,15 @@ def fanin_init(size, fanin = None):
 # Action Network for DQN
 ############################################################################
 class DQN(nn.Module):
-    def __init__(self, lr, num_actions, observation_size, num_ops_per_action):
+    def __init__(self, lr, num_actions, observation_size, num_ops_per_action,
+                 fc1_dims = 64, fc2_dims = 128):
         super().__init__()
 
         output_dims = num_ops_per_action**num_actions
 
-        self.fc1 = nn.Linear(observation_size, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, output_dims)
+        self.fc1 = nn.Linear(observation_size, fc1_dims)
+        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
+        self.fc3 = nn.Linear(fc2_dims, output_dims)
 
         self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
 
@@ -52,15 +53,16 @@ class DQN(nn.Module):
 # Communication Network for DDQN
 ############################################################################
 class DDQNComms(nn.Module):
-    def __init__(self, *, lr=None, observation_size=None, alphabet_size=None):
+    def __init__(self, *, lr=None, observation_size=None, alphabet_size=None,
+                 fc1_dims = 64, fc2_dims = 128):
         super().__init__()
         output_dims = alphabet_size
 
         #print('Comms Network has input size = ', observation_size, 'and output size = ', output_dims)
 
-        self.fc1 = nn.Linear(observation_size, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, output_dims)
+        self.fc1 = nn.Linear(observation_size, fc1_dims)
+        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
+        self.fc3 = nn.Linear(fc2_dims, output_dims)
 
         self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
 
@@ -88,15 +90,16 @@ class DDQNComms(nn.Module):
 # Action Network for DDQN
 ############################################################################
 class DDQN(nn.Module):
-    def __init__(self, *, lr = None, num_actions = None, observation_size = None, num_ops_per_action = None):
+    def __init__(self, *, lr = None, num_actions = None, observation_size = None,
+                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128):
         super().__init__()
 
         output_dims = (num_ops_per_action**num_actions)
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
 
-        self.fc1 = nn.Linear(observation_size, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, output_dims)
+        self.fc1 = nn.Linear(observation_size, fc1_dims)
+        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
+        self.fc3 = nn.Linear(fc2_dims, output_dims)
 
         self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
 
