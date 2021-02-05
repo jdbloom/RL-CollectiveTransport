@@ -52,6 +52,7 @@ CCollectiveRLTransport::CCollectiveRLTransport() :
 void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
    try {
       /* Parse XML tree */
+      LOG<<"Initiating"<<std::endl;
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
