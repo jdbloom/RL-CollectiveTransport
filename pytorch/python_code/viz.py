@@ -30,6 +30,19 @@ base_model_3_obstacle_score_std = 2747.92
 base_model_3_obstacle_pct_std = 247.44
 base_model_1_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
 
+# Base Models with 8 aganets
+# Base Model with 0 obstacles over 1000 eps
+base_model_8_agents_average = -1106.49
+base_model_8_agents_score_std = 92.38
+base_model_8_agents_pct_std = 0
+base_model_8_agents_path = 'Data/BaseModel_8_agents/Data/'
+
+# Base Model with 2 obstacles over 1000 eps
+base_model_8_agents_2_obstacles_average = -2136.96
+base_model_8_agents_2_obstacles_score_std = 2491.55
+base_model_8_agents_2_obstacles_pct_std = 0
+base_model_8_agents_2_obstacles_path = 'Data/BaseModel_8_agents_2_obstacles/Data/'
+
 base_avg = base_model_2_obstacle_average
 base_score_std = base_model_2_obstacle_score_std
 base_pct_std = base_model_2_obstacle_pct_std

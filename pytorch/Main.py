@@ -229,7 +229,8 @@ while not exp_done:
                                 model.save_model(path)
                             file_name = 'Episode_'+str(ep_counter)
                             path = recording_path + "/Models/" +file_name
-                            model.save_model(path)
+                            if train_mode:
+                                model.save_model(path)
                             print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
                         running_reward = 0
