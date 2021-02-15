@@ -173,7 +173,7 @@ private:
    CCylinderEntity* m_pcCylinder;
 
    /** The networking socket */
-   CTCPSocket* socket
+   CTCPSocket socket;
 
    /** List of robots */
    std::vector<CFootBotEntity*> m_vecRobots;
@@ -202,12 +202,6 @@ private:
    /** The vector of actions */
    std::vector<float> m_vecActions;
 
-   /** ZeroMQ context */
-   void* m_ptZMQContext;
-
-   /** ZeroMQ communication socket */
-   void* m_ptZMQSocket;
-
    /** List of robot failure times: -1 = no failure **/
    std::vector <std::vector<SInt32>> m_vecRobotFailures;
 
@@ -222,6 +216,9 @@ private:
 
    /** Flag for whether or not to use learning or the base model*/
    UInt32 m_unBaseModel;
+
+   /** Port for server connection*/
+   UInt32 m_unPort;
 
 
 private:
@@ -240,23 +237,23 @@ private:
 
    void CalculateRobotStats();
 
-   void ZMQSendEpisodeState(EEpisodeState e_state);
+   void SocketSendEpisodeState(EEpisodeState e_state);
 
-   void ZMQSendTermination();
+   void SocketSendTermination();
 
-   void ZMQSendParams();
+   void SocketSendParams();
 
-   void ZMQSendObservations();
+   void SocketSendObservations();
 
-   void ZMQSendFailures();
+   void SocketSendFailures();
 
-   void ZMQSendRewards();
+   void SocketSendRewards();
 
-   void ZMQSendRobotStats();
+   void SocketSendRobotStats();
 
-   void ZMQGetActions();
+   void SocketGetActions();
 
-   void ZMQGetAck();
+   void SocketGetAck();
 
 };
 

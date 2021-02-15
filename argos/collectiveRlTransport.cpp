@@ -1,6 +1,5 @@
 #include "collectiveRlTransport.h"
 #include <buzz/buzzvm.h>
-#include <zmq.h>
 #include <cmath>
 
 using namespace argos;
@@ -41,9 +40,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
    m_unNumObs(7+24),
-   m_unNumActions(3),
-   m_ptZMQContext(nullptr),
-   m_ptZMQSocket(nullptr) {
+   m_unNumActions(3){
 }
 
 /****************************************/
@@ -67,8 +64,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "threshold_dec", m_fDecThreshold);
       GetNodeAttribute(t_tree, "min_threshold", m_fMinThreshold);
       GetNodeAttribute(t_tree, "goal_reward",     m_fGoalReward);
-      std::string strPyTorchURL;
-      GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
+      GetNodeAttribute(t_tree, "socket_port",     m_unPort);
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
@@ -83,27 +79,13 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /*
        * Connect to PyTorch
        */
-      /* Create context */
-      m_ptZMQContext = zmq_ctx_new();
-      if(m_ptZMQContext == nullptr) {
-         THROW_ARGOSEXCEPTION("Cannot create ZeroMQ context: " << zmq_strerror(errno));
-      }
-      /* Create context */
-      m_ptZMQSocket = zmq_socket(m_ptZMQContext, ZMQ_REQ);
-      if(m_ptZMQSocket == nullptr) {
-         THROW_ARGOSEXCEPTION("Cannot create ZeroMQ socket: " << zmq_strerror(errno));
-      }
-      /*
-       * This call returns success even when the server is down.
-       * Usually a failed connection is detected when the first data is sent.
-       * This weird behavior is a design choice of ZeroMQ.
-       */
-      if(zmq_connect(m_ptZMQSocket, strPyTorchURL.c_str()) != 0) {
-         THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
-      }
+      /* Connect to Server */
+      LOG<<m_unPort<<std::endl;
+      socket.Connect("localhost", m_unPort);
+
       /* Send parameters */
-      ZMQSendParams();
-      LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
+      SocketSendParams();
+      LOG << "[INFO] Connection to PyTorch server successful" << std::endl;
       /* Initialize episode-related variables */
       m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
@@ -345,10 +327,7 @@ void CCollectiveRLTransport::Reset() {
 /****************************************/
 
 void CCollectiveRLTransport::Destroy() {
-   /* Disconnect and get rid of the ZeroMQ socket */
-   if(m_ptZMQSocket) zmq_close(m_ptZMQSocket);
-   /* Get rid of the ZeroMQ context */
-   if(m_ptZMQContext) zmq_ctx_destroy(m_ptZMQContext);
+
 }
 
 /****************************************/
@@ -513,13 +492,13 @@ void CCollectiveRLTransport::PreStep() {
    }
    DEBUG("\n");*/
    /* Send observations to PyTorch */
-   ZMQSendEpisodeState(EPISODE_RUNNING);
-   ZMQSendObservations();
-   ZMQSendFailures();
-   ZMQSendRewards();
-   ZMQSendRobotStats();
+   SocketSendEpisodeState(EPISODE_RUNNING);
+   SocketSendObservations();
+   SocketSendFailures();
+   SocketSendRewards();
+   SocketSendRobotStats();
    /* Get actions from PyTorch */
-   ZMQGetActions();
+   SocketGetActions();
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
@@ -575,7 +554,7 @@ bool CCollectiveRLTransport::IsExperimentFinished() {
  */
 void CCollectiveRLTransport::PostExperiment() {
    LOG<<"Closing the Server"<<std::endl;
-   ZMQSendTermination();
+   SocketSendTermination();
 }
 
 /****************************************/
@@ -608,12 +587,12 @@ void CCollectiveRLTransport::PostStep() {
       }
       DEBUG("\n");*/
       /* Send observations to PyTorch */
-      ZMQSendEpisodeState(eState);
-      ZMQSendObservations();
-      ZMQSendFailures();
-      ZMQSendRewards();
-      ZMQSendRobotStats();
-      ZMQGetAck();
+      SocketSendEpisodeState(eState);
+      SocketSendObservations();
+      SocketSendFailures();
+      SocketSendRewards();
+      SocketSendRobotStats();
+      SocketGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
       if(m_unEpisodeCounter < m_unNumEpisodes) {
@@ -686,154 +665,118 @@ void CCollectiveRLTransport::CalculateRobotStats(){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
-   unsigned char punDone[3] =
-      {
-         0,                            // experiment not done
-         (e_state != EPISODE_RUNNING), // episode done?
-         m_bReachedGoal,               // reached goal?
-      };
-   if(zmq_send(
-         m_ptZMQSocket,             // the socket
-         &punDone,                   // data pointer
-         sizeof(unsigned char) * 3, // data size in bytes
-         ZMQ_SNDMORE)               // another message will follow (observations)
-      < 0) {                        // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
-   }
+void CCollectiveRLTransport::SocketSendEpisodeState(EEpisodeState e_state) {
+   CByteArray b_Done;
+   b_Done<<uint16_t(0);
+   b_Done<<uint16_t(e_state !=EPISODE_RUNNING);
+   b_Done<<uint16_t(m_bReachedGoal);
+   LOG<<"[STATE]"<<b_Done<<std::endl;
+   socket.SendMsg(b_Done, true);
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendTermination() {
-   unsigned char punDone[3] =
-      {
-         1, // experiment done
-         1, // episode done
-         0, // No Reward
-      };
-   if(zmq_send(
-         m_ptZMQSocket,             // the socket
-         &punDone,                  // data pointer
-         sizeof(unsigned char) * 3, // data size in bytes
-         0)                         // no more messages
-      < 0) {                        // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send episode state to PyTorch: " << zmq_strerror(errno));
-   }
+void CCollectiveRLTransport::SocketSendTermination() {
+   CByteArray b_Done;
+   // (experiment done, episode done, no reward)
+   b_Done << 1 << 0 << 0;
+   socket.SendMsg(b_Done, false);
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendParams() {
+void CCollectiveRLTransport::SocketSendParams() {
    /* Make the parameter buffer */
-   std::vector<unsigned int> vecParams;
-   vecParams.push_back(m_unNumRobots);
-   vecParams.push_back(m_unNumObs);
-   vecParams.push_back(m_unNumActions);
-   vecParams.push_back(m_unNumStats);
-   vecParams.push_back(m_unAlphabetSize);
+   CByteArray vecParams;
+   vecParams << m_unNumRobots;
+   vecParams << m_unNumObs;
+   vecParams << m_unNumActions;
+   vecParams << m_unNumStats;
+   vecParams << m_unAlphabetSize;
+   LOG<<"[PARAMS] "<<vecParams<<std::endl;
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
    DEBUG("m_unNumActions = %u\n", m_unNumActions);*/
    /* Send the parameters */
-   if(zmq_send(
-         m_ptZMQSocket,                           // the socket
-         &vecParams[0],                           // data pointer
-         sizeof(unsigned int) * vecParams.size(), // data size in bytes
-         0)                                       // no special flags
-      < 0) {                                      // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send parameters to PyTorch: " << zmq_strerror(errno));
-   }
+   socket.SendMsg(vecParams, false);
    /* Wait for acknowledgment */
-   ZMQGetAck();
+   SocketGetAck();
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendObservations() {
-   if(zmq_send_const(
-         m_ptZMQSocket,                    // the socket
-         const_cast<float*>(&m_vecObs[0]), // data pointer
-         sizeof(float) * m_vecObs.size(),  // data size in bytes
-         ZMQ_SNDMORE)                      // another message will follow (rewards)
-      < 0) {                               // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+void CCollectiveRLTransport::SocketSendObservations() {
+   CByteArray b_vecObs;
+   for(size_t i = 0; i < m_vecObs.size(); ++i){
+     b_vecObs << m_vecObs[i];
    }
+   LOG<<"[OBSERVATIONS] "<<b_vecObs<<std::endl;
+   socket.SendMsg(b_vecObs, true);
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendFailures() {
-   if(zmq_send_const(
-         m_ptZMQSocket,                    // the socket
-         const_cast<int*>(&m_vecFailures[0]), // data pointer
-         sizeof(int) * m_vecFailures.size(),  // data size in bytes
-         ZMQ_SNDMORE)                      // another message will follow (rewards)
-      < 0) {                               // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+void CCollectiveRLTransport::SocketSendFailures() {
+   CByteArray b_vecFailures;
+   for(size_t i = 0; i < m_vecFailures.size(); ++i){
+     b_vecFailures << m_vecFailures[i];
    }
+   LOG<<"[FAILURES] "<<b_vecFailures<<std::endl;
+   socket.SendMsg(b_vecFailures, true);
 }
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendRewards(){
-
-  if (zmq_send_const(
-        m_ptZMQSocket,                        // the socket
-        const_cast<float*>(&m_vecRewards[0]), // data pointer
-        sizeof(float)*m_vecRewards.size(),    //data size in bytes
-        ZMQ_SNDMORE)                          // another message will follow (Stats)
-     < 0) {                                   // >= means success
-       THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
-   }
-}
-
-/****************************************/
-/****************************************/
-void CCollectiveRLTransport::ZMQSendRobotStats(){
-  if (zmq_send_const(
-    m_ptZMQSocket,                        // The socket
-    const_cast <float*>(&m_vecStats[0]),  // data pointer
-    sizeof(float)*m_vecStats.size(),      // data size in bytes
-    0)                                    //no special flags
-  < 0) {                                  // >= 0 means success
-    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+void CCollectiveRLTransport::SocketSendRewards(){
+  CByteArray b_vecRewards;
+  for(size_t i = 0; i < m_vecRewards.size(); ++i){
+    b_vecRewards << m_vecRewards[i];
   }
+  LOG<<"[REWARDS] "<<b_vecRewards<<std::endl;
+  socket.SendMsg(b_vecRewards, true);
+}
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::SocketSendRobotStats(){
+  CByteArray b_vecStats;
+  for(size_t i = 0; i < m_vecStats.size(); ++i){
+    b_vecStats << m_vecStats[i];
+  }
+  LOG<<"[STATS] "<<b_vecStats<<std::endl;
+  socket.SendMsg(b_vecStats, false);
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQGetActions() {
+void CCollectiveRLTransport::SocketGetActions() {
    /* Receive the message */
-   if(zmq_recv(
-         m_ptZMQSocket,                       // the socket
-         &m_vecActions[0],                    // data buffer
-         sizeof(float) * m_vecActions.size(), // data size in bytes
-         0)                                   // no special flags
-      < 0) {                                  // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot receive data from PyTorch: " << zmq_strerror(errno));
+   CByteArray b_vecActions;
+   socket.RecvMsg(b_vecActions);
+   for(size_t i = 0; i < b_vecActions.Size(); ++i){
+     float action;
+     b_vecActions >> action;
+     m_vecActions.push_back(action);
+     LOG<<"[ACTION] "<<i<<" "<<action<<" " <<m_vecActions[i]<<std::endl;
    }
+
 }
 
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQGetAck() {
+void CCollectiveRLTransport::SocketGetAck() {
    DEBUG_FUNCTION_ENTER;
-   char pchAck[4];
    /* Receive the message */
-   if(zmq_recv(
-         m_ptZMQSocket, // the socket
-         &pchAck,       // data buffer
-         4,             // data size in bytes
-         0)             // no special flags
-      < 0) {            // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot receive acknowledgment from PyTorch: " << zmq_strerror(errno));
+   CByteArray ack;
+   socket.RecvMsg(ack);
+   if(ack[0] != 111 || ack[1] != 107) {
+      THROW_ARGOSEXCEPTION("Cannot receive acknowledgment from PyTorch");
    }
    DEBUG_FUNCTION_EXIT;
 }
