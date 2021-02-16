@@ -257,4 +257,8 @@ private:
 
 };
 
+CByteArray& appendFloatIEEE754(CByteArray& b, float f);
+
+CByteArray& getFloatIEEE754(CByteArray& b, float& f);
+
 #endif

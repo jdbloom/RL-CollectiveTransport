@@ -499,14 +499,15 @@ void CCollectiveRLTransport::PreStep() {
    SocketSendRobotStats();
    /* Get actions from PyTorch */
    SocketGetActions();
+
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
             m_unEpisodeCounter,
             GetSpace().GetSimulationClock(),
             i,
-            pfAction[0],
-            pfAction[1]);
+            m_vecActions[i*3],
+            m_vecActions[i*3+1]);
    }*/
    std::vector<Real> vecLIncrease(m_unNumRobots);
    std::vector<Real> vecRIncrease(m_unNumRobots);
@@ -670,7 +671,6 @@ void CCollectiveRLTransport::SocketSendEpisodeState(EEpisodeState e_state) {
    b_Done<<uint16_t(0);
    b_Done<<uint16_t(e_state !=EPISODE_RUNNING);
    b_Done<<uint16_t(m_bReachedGoal);
-   LOG<<"[STATE]"<<b_Done<<std::endl;
    socket.SendMsg(b_Done, true);
 }
 
@@ -695,7 +695,6 @@ void CCollectiveRLTransport::SocketSendParams() {
    vecParams << m_unNumActions;
    vecParams << m_unNumStats;
    vecParams << m_unAlphabetSize;
-   LOG<<"[PARAMS] "<<vecParams<<std::endl;
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
    DEBUG("m_unNumActions = %u\n", m_unNumActions);*/
@@ -711,9 +710,8 @@ void CCollectiveRLTransport::SocketSendParams() {
 void CCollectiveRLTransport::SocketSendObservations() {
    CByteArray b_vecObs;
    for(size_t i = 0; i < m_vecObs.size(); ++i){
-     b_vecObs << m_vecObs[i];
+     appendFloatIEEE754(b_vecObs, m_vecObs[i]);
    }
-   LOG<<"[OBSERVATIONS] "<<b_vecObs<<std::endl;
    socket.SendMsg(b_vecObs, true);
 }
 
@@ -725,7 +723,6 @@ void CCollectiveRLTransport::SocketSendFailures() {
    for(size_t i = 0; i < m_vecFailures.size(); ++i){
      b_vecFailures << m_vecFailures[i];
    }
-   LOG<<"[FAILURES] "<<b_vecFailures<<std::endl;
    socket.SendMsg(b_vecFailures, true);
 }
 
@@ -734,9 +731,8 @@ void CCollectiveRLTransport::SocketSendFailures() {
 void CCollectiveRLTransport::SocketSendRewards(){
   CByteArray b_vecRewards;
   for(size_t i = 0; i < m_vecRewards.size(); ++i){
-    b_vecRewards << m_vecRewards[i];
+    appendFloatIEEE754(b_vecRewards, m_vecRewards[i]);
   }
-  LOG<<"[REWARDS] "<<b_vecRewards<<std::endl;
   socket.SendMsg(b_vecRewards, true);
 }
 
@@ -745,9 +741,8 @@ void CCollectiveRLTransport::SocketSendRewards(){
 void CCollectiveRLTransport::SocketSendRobotStats(){
   CByteArray b_vecStats;
   for(size_t i = 0; i < m_vecStats.size(); ++i){
-    b_vecStats << m_vecStats[i];
+    appendFloatIEEE754(b_vecStats, m_vecStats[i]);
   }
-  LOG<<"[STATS] "<<b_vecStats<<std::endl;
   socket.SendMsg(b_vecStats, false);
 }
 
@@ -756,13 +751,16 @@ void CCollectiveRLTransport::SocketSendRobotStats(){
 
 void CCollectiveRLTransport::SocketGetActions() {
    /* Receive the message */
-   CByteArray b_vecActions;
-   socket.RecvMsg(b_vecActions);
-   for(size_t i = 0; i < b_vecActions.Size(); ++i){
-     float action;
-     b_vecActions >> action;
-     m_vecActions.push_back(action);
-     LOG<<"[ACTION] "<<i<<" "<<action<<" " <<m_vecActions[i]<<std::endl;
+   CByteArray msg;
+   socket.RecvMsg(msg);
+   int counter = 0;
+   for(size_t i = 0; i < m_unNumRobots; ++i){
+     for(size_t j = 0; j < m_unNumActions; ++j){
+       float action;
+       getFloatIEEE754(msg, action);
+       m_vecActions[counter] = action;
+       ++counter;
+     }
    }
 
 }
@@ -783,5 +781,20 @@ void CCollectiveRLTransport::SocketGetAck() {
 
 /****************************************/
 /****************************************/
+
+CByteArray& appendFloatIEEE754(CByteArray& b, float f){
+  b << (*reinterpret_cast<UInt32*>(&f));
+  return b;
+}
+
+/****************************************/
+/****************************************/
+
+CByteArray& getFloatIEEE754(CByteArray& b, float& f){
+  UInt32 buffer;
+  b >> buffer;
+  f = *reinterpret_cast<float*>(&buffer);
+  return b;
+}
 
 REGISTER_LOOP_FUNCTIONS(CCollectiveRLTransport, "collective_rl_transport");

@@ -65,7 +65,7 @@ if test_mode:
     model.load_model(model_file_path)
 
 # Send acknowledgment
-print('[SOCKET] Sending OK')
+#print('[SOCKET] Sending OK')
 socket.send_multipart(b"ok")
 
 #######################################################################
@@ -80,11 +80,12 @@ mean_axis = []
 
 while not exp_done:
     #receive initial observations
+
     msgs = socket.recv_multipart()
-    print('[SOCKET] Received Messgae')
-    print('[MSG]', msgs[0])
+    #print('[SOCKET] Received Messgae')
+    #print('[MSG]', msgs[0])
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
-    print('[SOCKET] Parsed Status')
+    #print('[SOCKET] Parsed Status')
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
@@ -94,20 +95,20 @@ while not exp_done:
             time_steps = 0
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
-            print('[SOCKET] Parsed Observations')
+            #print('[SOCKET] Parsed Observations')
             failures = Utility.parse_failures(msgs[2])
-            print('[SOCKET] Parsed Failures')
+            #print('[SOCKET] Parsed Failures')
             rewards = Utility.parse_rewards(msgs[3])
-            print('[SOCKET] Parsed Rewards')
+            #print('[SOCKET] Parsed Rewards')
             stats = Utility.parse_stats(msgs[4])
-            print('[SOCKET] Parsed Stats')
-            for i in range(Utility.params['num_robots']):
+            #print('[SOCKET] Parsed Stats')
+            '''for i in range(Utility.params['num_robots']):
                 print('[MESSAGES]', i)
                 print('[MESSAGES] env_observations', env_observations[i])
                 print('[MESSAGES] failures', failures[i])
                 print('[MESSAGES] rewards', rewards[i])
                 print('[MESSAGES] stats', stats[i])
-
+            '''
 
             agent_states = []
             force_mags = []
@@ -143,7 +144,7 @@ while not exp_done:
                         action, action_num = model.choose_action(agent_states[i], failure, test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
-                        print('[ACTIONS]',i, action)
+                        #print('[ACTIONS]',i, action)
                         # Choose a message
                         if model.comms_scheme != 'None':
                             message, message_num = model.choose_message(agent_states[i], failure, test_mode)
@@ -157,29 +158,30 @@ while not exp_done:
 
                     old_failures = failures[:]
                     # Take Step
+                    #print("[DEBUG]: Action size:", len(actions_to_take), "Actions:", actions_to_take)
                     socket.send_multipart(Utility.serialize_actions(actions_to_take))
-                    print('[SOCKET] Sent Actions')
+                    #print('[SOCKET] Sent Actions')
                     msgs = socket.recv_multipart()
-                    print('[SOCKET] Received Message')
+                    #print('[SOCKET] Received Message')
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
-                    print('[SOCKET] Parsed Status')
+                    #print('[SOCKET] Parsed Status')
                     env_observations = Utility.parse_obs(msgs[1])
-                    print('[SOCKET] Parsed Observations')
+                    #print('[SOCKET] Parsed Observations')
                     failures = Utility.parse_failures(msgs[2])
-                    print('[SOCKET] Parsed Failures')
+                    #print('[SOCKET] Parsed Failures')
                     rewards = Utility.parse_rewards(msgs[3])
-                    print('[SOCKET] Parsed Rewards')
+                    #print('[SOCKET] Parsed Rewards')
                     stats = Utility.parse_stats(msgs[4])
-                    print('[SOCKET] Parsed Stats')
+                    #print('[SOCKET] Parsed Stats')
 
-                    print('[MESSAGES] dones', exp_done, episode_done, reached_goal)
-                    for i in range(Utility.params['num_robots']):
+                    #print('[MESSAGES] dones', exp_done, episode_done, reached_goal)
+                    '''for i in range(Utility.params['num_robots']):
                         print('[MESSAGES]', i)
                         print('[MESSAGES] env_observations', env_observations[i])
                         print('[MESSAGES] failures', failures[i])
                         print('[MESSAGES] rewards', rewards[i])
                         print('[MESSAGES] stats', stats[i])
-
+                    '''
                     # Store Transitions and Learn
                     new_agent_states = []
                     force_mags = []
