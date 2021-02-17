@@ -220,6 +220,9 @@ private:
    /** Port for server connection*/
    UInt32 m_unPort;
 
+   /** Byte Array for actions*/
+   CByteArray b_Actions;
+
 
 private:
 
@@ -251,7 +254,7 @@ private:
 
    void SocketSendRobotStats();
 
-   void SocketGetActions();
+   void SocketGetActions(CByteArray& b);
 
    void SocketGetAck();
 

@@ -498,7 +498,7 @@ void CCollectiveRLTransport::PreStep() {
    SocketSendRewards();
    SocketSendRobotStats();
    /* Get actions from PyTorch */
-   SocketGetActions();
+   SocketGetActions(b_Actions);
 
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
@@ -749,20 +749,11 @@ void CCollectiveRLTransport::SocketSendRobotStats(){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::SocketGetActions() {
+void CCollectiveRLTransport::SocketGetActions(CByteArray& b) {
    /* Receive the message */
-   CByteArray msg;
-   socket.RecvMsg(msg);
-   int counter = 0;
-   for(size_t i = 0; i < m_unNumRobots; ++i){
-     for(size_t j = 0; j < m_unNumActions; ++j){
-       float action;
-       getFloatIEEE754(msg, action);
-       m_vecActions[counter] = action;
-       ++counter;
-     }
-   }
-
+   socket.RecvMsg(b);
+   const float* pfPtr = reinterpret_cast<const float*>(b.ToCArray());
+   m_vecActions = std::vector<float>(pfPtr, pfPtr + m_unNumRobots*m_unNumActions);
 }
 
 /****************************************/

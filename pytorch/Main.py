@@ -9,6 +9,7 @@ import math
 import copy
 import csv
 import os
+import time
 
 Utility = Socket_Utility()
 
@@ -129,6 +130,7 @@ while not exp_done:
             #
             # Start the Episode Loop
             #
+            episode_start_time = time.time()
             while not episode_done:
                 if not exp_done:
                     reward = []
@@ -236,6 +238,8 @@ while not exp_done:
                     writer.writerow([r, model.epsilon, reached_goal, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
 
                     if episode_done:
+                        episode_run_time = time.time() - episode_start_time
+                        print('[RUN TIME] %.2f' %episode_run_time)
                         exp_rewards.append(running_reward)
                         if not reached_goal:
                             print("Episode", ep_counter ,"timed out")
@@ -264,6 +268,6 @@ while not exp_done:
                         ep_counter += 1
                         running_reward = 0
                         # Send acknowledgment
-                        print('[SOCKET] Sending OK')
+                        #print('[SOCKET] Sending OK')
                         socket.send_multipart(b"ok")
 print("Experiment Done\n")
