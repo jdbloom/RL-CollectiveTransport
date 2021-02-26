@@ -9,10 +9,7 @@
 #include <argos3/core/control_interface/ci_controller.h>
 #include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
-<<<<<<< HEAD
-=======
 #include <argos3/core/utility/networking/tcp_socket.h>
->>>>>>> zmq
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
