@@ -10,6 +10,7 @@ import copy
 import zmq
 import csv
 import os
+import time
 
 Utility = zmq_utility.ZMQ_Utility()
 
@@ -79,7 +80,7 @@ exp_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
-
+experiment_start_time = time.time()
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
@@ -116,6 +117,7 @@ while not exp_done:
             #
             # Start the Episode Loop
             #
+            exp_start_time = time.time()
             while not episode_done:
                 if not exp_done:
                     reward = []
@@ -128,13 +130,14 @@ while not exp_done:
                     #print('-----------------')
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
-                        action, action_num = model.choose_action(agent_states[i], failure, test_mode)
+                        #print("[DEBUG] Robot",i,"Failure:", failures[i])
+                        action, action_num = model.choose_action(agent_states[i], failures[i], test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
                         #print(i, action)
                         # Choose a message
                         if model.comms_scheme != 'None':
-                            message, message_num = model.choose_message(agent_states[i], failure, test_mode)
+                            message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
                             # Schedule the message to neighbors
                             model.schedule_message_to_all_contacts(i, message_num)
                             message_codes.append(message_num)
@@ -150,6 +153,7 @@ while not exp_done:
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
                     env_observations = Utility.parse_obs(msgs[1])
                     failures = Utility.parse_failures(msgs[2])
+                    #print('[DEBUG] Received Failures ', failures)
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
 
@@ -160,7 +164,14 @@ while not exp_done:
                     r = []
 
                     for i in range(Utility.params['num_robots']):
+                        #print('[DEBUG] ROBOT', i)
                         reward = rewards[i]
+                        #print('[DEBUG] OBS:', env_observations[i])
+                        prox_values = env_observations[i][7:]
+                        #print('[DEBUG] Prox Values', prox_values)
+                        prox_value = np.sum(prox_values)
+                        #print('[DEBUG] Prox Value Reward:', (-0.1)*prox_value)
+                        reward += (-0.1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
                         new_agent_state = model.make_agent_state(env_observations[i], i)
@@ -181,12 +192,14 @@ while not exp_done:
                                                                      new_agent_states[i],
                                                                      episode_done)
                         r.append(reward[0])
+                    #print('[DEBUG] Rewards:', r)
+                    #print('[DEBUG] Reward Average:', np.average(r))
                     if train_mode:
                         model.learn()
                         if model.comms_scheme != 'None':
                             model.learn_comms()
 
-                    running_reward += reward
+                    running_reward += np.average(r)
                     # Store New Observations
                     agent_states = new_agent_states
                     actions = []
@@ -207,6 +220,8 @@ while not exp_done:
                     writer.writerow([r, model.epsilon, reached_goal, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
 
                     if episode_done:
+                        run_time = time.time() - exp_start_time
+                        print('[RUN TIME] %.2f' % run_time)
                         exp_rewards.append(running_reward)
                         if not reached_goal:
                             print("Episode", ep_counter ,"timed out")
@@ -219,14 +234,6 @@ while not exp_done:
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []
-                            if exp_mean_rewards[-1] > high_score and ep_counter > 1500:
-                                high_score = exp_mean_rewards[-1]
-                                print('****************************************')
-                                print('         NEW HIGH SCORE: %.2f'%high_score)
-                                print('****************************************')
-                                file_name = 'High_Score'
-                                path = model_file_path+file_name
-                                model.save_model(path)
                             file_name = 'Episode_'+str(ep_counter)
                             path = recording_path + "/Models/" +file_name
                             if train_mode:
@@ -236,4 +243,5 @@ while not exp_done:
                         running_reward = 0
                         # Send acknowledgment
                         socket.send(b"ok")
+print("[RUN TIME] Experiment: %.2f" % (time.time() - experiment_start_time))
 print("Experiment Done\n")

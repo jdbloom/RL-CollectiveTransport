@@ -148,6 +148,9 @@ private:
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
+   /** The seed for the RNG if testing*/
+   UInt32 m_unSeed;
+
    /** Whether the cylinder reached the goal */
    bool m_bReachedGoal;
 
@@ -173,7 +176,7 @@ private:
    CCylinderEntity* m_pcCylinder;
 
    /** The networking socket */
-   CTCPSocket* socket
+   CTCPSocket* socket;
 
    /** List of robots */
    std::vector<CFootBotEntity*> m_vecRobots;

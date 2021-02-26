@@ -291,7 +291,9 @@ class Agent():
             self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())
 
     def choose_action(self, observation, failure, test = False):
+        #print('[DEBUG] Failure:', failure)
         if failure:
+            #print('DEBUG Retruning Failure State')
             self.failed = True
             return self.failure_action, self.failure_action_code
         else:

@@ -73,6 +73,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
+      GetNodeAttribute(t_tree, "seed", m_unSeed);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -114,8 +115,19 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
-      /* Create a new RNG */
-      m_pcRNG = CRandom::CreateRNG("argos");
+      /* Create a new RNG with seed for testing models, and without seed
+         if training*/
+      if(m_unSeed == 0){
+        /* Create a new RNG */
+        LOG<<"[INFO] Creating RNG for Training"<<std::endl;
+        m_pcRNG = CRandom::CreateRNG("argos");
+      }
+      else{
+        /* Create a new RNG with specified seed*/
+        LOG<<"[INFO] Creating RNG for Testing with seed: "<<m_unSeed<<std::endl;
+        m_pcRNG = CRandom::CreateRNG("argos");
+        //m_pcRNG.SetSeed(m_unSeed);
+      }
       /* Create and place stuff */
       CreateEntities();
       LOG<<"Added Entities\n";
@@ -768,6 +780,11 @@ void CCollectiveRLTransport::ZMQSendObservations() {
 /****************************************/
 
 void CCollectiveRLTransport::ZMQSendFailures() {
+   /*LOG<<"[DEBUG] Sending Failures ";
+   for(size_t i = 0; i < m_unNumRobots; ++i){
+     LOG<<m_vecFailures[i]<<" ";
+   }
+   LOG<<std::endl;*/
    if(zmq_send_const(
          m_ptZMQSocket,                    // the socket
          const_cast<int*>(&m_vecFailures[0]), // data pointer

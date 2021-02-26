@@ -42,8 +42,8 @@
                   data_file = "data.csv"
                   num_robots = "8"
                   max_robot_failures = "0"
-		              latest_failure_time = "1000"
-		              chance_failure = "0.5"
+		              latest_failure_time = "2250"
+		              chance_failure = "0.25"
                   goal = "4.5, 0"
                   threshold = "2"
                   threshold_freq = "100"
@@ -56,8 +56,9 @@
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "4"
                   proximity_range = "1"
-                  num_obstacles = "3"
-                  use_base_model = "1"/>
+                  num_obstacles = "2"
+                  use_base_model = "1"
+                  seed = "0"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->

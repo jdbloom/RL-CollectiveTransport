@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 # Base Model Stats over 1000 eps:
 base_model_average = -1110.54
+base_model_average_reward = -1495.51
 base_model_score_std = 93.48
 base_model_pct_std = 8.44
 base_model_path = 'Data/BaseModel/Data/'
@@ -20,6 +21,7 @@ base_model_1_obstacle_path = 'Data/BaseModel_1_obstacle/Data/'
 
 # Base Model with 2 obstacle over 1000 eps:
 base_model_2_obstacle_average = -1983.07
+base_model_2_obstacle_average_reward = 2550.82
 base_model_2_obstacle_score_std = 2292.86
 base_model_2_obstacle_pct_std = 206.46
 base_model_2_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
@@ -33,12 +35,14 @@ base_model_1_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
 # Base Models with 8 aganets
 # Base Model with 0 obstacles over 1000 eps
 base_model_8_agents_average = -1106.49
+base_model_8_agents_average_reward = -1501.54
 base_model_8_agents_score_std = 92.38
 base_model_8_agents_pct_std = 0
 base_model_8_agents_path = 'Data/BaseModel_8_agents/Data/'
 
 # Base Model with 2 obstacles over 1000 eps
 base_model_8_agents_2_obstacles_average = -2136.96
+base_model_8_agents_2_obstacles_average_reward = 0
 base_model_8_agents_2_obstacles_score_std = 2491.55
 base_model_8_agents_2_obstacles_pct_std = 0
 base_model_8_agents_2_obstacles_path = 'Data/BaseModel_8_agents_2_obstacles/Data/'
@@ -116,6 +120,7 @@ if args.test:
         rewards = []
         terminal = []
         for t in range(len(episode[1])):
+
             rewards.append(episode[1]['reward'][t].strip('][').split(','))
             #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
             #losses.append(episode[1]['loss'][t].strip('][').split(','))
@@ -152,9 +157,9 @@ plt.xlabel('Episodes')
 plt.ylabel('Reward')
 plt.scatter(np.arange(0, len(reward), 1), reward, c = 'darkturquoise', label = 'Episode Scores')
 #plt.plot(reward, c = 'lightsteelblue', label = 'Episode Scores')
-plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
+#plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
-plt.ylim(-10000, 500)
+plt.ylim(-12000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")
 if args.test:
@@ -167,7 +172,7 @@ if args.test:
     plt.plot(base_last_10_axis[1:len(base_last_10_axis)], base_last_10_reward, c = 'r', label = 'Baseline Running Average')
     plt.scatter(np.arange(0, len(reward), 1), reward, c = 'lightsteelblue', label = 'Model Raw Scores')
     plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Model Running Average')
-    plt.ylim(-10000, 500)
+    plt.ylim(-12000, 500)
     plt.legend(loc = 1)
     plt.savefig(args.figure_path+args.figure_name+"_overlay.png")
 
@@ -213,7 +218,7 @@ if args.test:
     plt.savefig(args.figure_path+args.figure_name+"_BASE_MODEL_COMPARE_PERCENTAGE.png")
 
 print('Average Reward for Experiment:', AVERAGE)
-if not args.test:
+if not args.test and len(last_10_reward)>0:
     print('Best Model:', (np.argmax(last_10_reward)+1)*10, last_10_reward[np.argmax(last_10_reward)])
 print('Score STD:', np.std(reward))
 if args.test:
@@ -225,7 +230,15 @@ print('Percentage Failure: %.2f' % (episode_fail*100/len(reward)))
 if args.test:
     print('Base Failure Episodes:', base_fail)
     print('Base Percentage Failure: %.2f' % (base_fail*100/len(base_reward)))
-print('BASELINE----------  0        1        2        3')
-print('Baseline score avg: %.2f %.2f %.2f %.2f' % (base_model_average, base_model_1_obstacle_average, base_model_2_obstacle_average, base_model_3_obstacle_average))
-print('Baseline score std:  %.2f    %.2f  %.2f  %.2f' % (base_model_score_std, base_model_1_obstacle_score_std, base_model_2_obstacle_score_std, base_model_3_obstacle_score_std))
-print('Baseline pct std:    %.2f     %.2f   %.2f   %.2f' % (base_model_pct_std, base_model_1_obstacle_pct_std, base_model_2_obstacle_pct_std, base_model_3_obstacle_pct_std))
+
+print('\nBASELINE AVERAGE SCORES')
+print('4 Agents: %.2f, %.2f' % (base_model_average, base_model_2_obstacle_average))
+print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average, base_model_8_agents_2_obstacles_average))
+print('\nBASELINE AVERAGE SCORES WITH NEW REWARD STRUCTURE')
+print('4 Agents: %.2f, %.2f' % (base_model_average_reward, base_model_2_obstacle_average_reward))
+print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average_reward, base_model_8_agents_2_obstacles_average_reward))
+
+#print('BASELINE----------  0        1        2        3')
+#print('Baseline score avg: %.2f %.2f %.2f %.2f' % (base_model_average, base_model_1_obstacle_average, base_model_2_obstacle_average, base_model_3_obstacle_average))
+#print('Baseline score std:  %.2f    %.2f  %.2f  %.2f' % (base_model_score_std, base_model_1_obstacle_score_std, base_model_2_obstacle_score_std, base_model_3_obstacle_score_std))
+#print('Baseline pct std:    %.2f     %.2f   %.2f   %.2f' % (base_model_pct_std, base_model_1_obstacle_pct_std, base_model_2_obstacle_pct_std, base_model_3_obstacle_pct_std))
