@@ -9,6 +9,10 @@
 #include <argos3/core/control_interface/ci_controller.h>
 #include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
+<<<<<<< HEAD
+=======
+#include <argos3/core/utility/networking/tcp_socket.h>
+>>>>>>> zmq
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
@@ -147,6 +151,9 @@ private:
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
+   /** The seed for the RNG if testing*/
+   UInt32 m_unSeed;
+
    /** Whether the cylinder reached the goal */
    bool m_bReachedGoal;
 
@@ -170,6 +177,9 @@ private:
 
    /** The cylinder */
    CCylinderEntity* m_pcCylinder;
+
+   /** The networking socket */
+   CTCPSocket* socket;
 
    /** List of robots */
    std::vector<CFootBotEntity*> m_vecRobots;
@@ -206,6 +216,18 @@ private:
 
    /** List of robot failure times: -1 = no failure **/
    std::vector <std::vector<SInt32>> m_vecRobotFailures;
+
+   /** Number of obstacles to fill in the environment*/
+   UInt32 m_unNumObstacles;
+
+   /** Obstacle Positions (index = # episode, # obstacles) */
+   std::vector<std::vector<CVector3> > m_vecObstaclePos;
+
+   /** List of obstacles */
+   std::vector<CCylinderEntity*> m_vecObstacles;
+
+   /** Flag for whether or not to use learning or the base model*/
+   UInt32 m_unBaseModel;
 
 
 private:
