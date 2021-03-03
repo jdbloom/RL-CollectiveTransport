@@ -40,7 +40,7 @@
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
-                  num_robots = "8"
+                  num_robots = "4"
                   max_robot_failures = "0"
 		              latest_failure_time = "2250"
 		              chance_failure = "0.25"
@@ -56,9 +56,9 @@
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "4"
                   proximity_range = "1"
-                  num_obstacles = "2"
-                  use_base_model = "1"
-                  seed = "0"/>
+                  num_obstacles = "0"
+                  use_gate = "1"
+                  use_base_model = "0"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
@@ -97,7 +97,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <!--<qt-opengl>
+    <qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
           <placements>
@@ -109,7 +109,7 @@
             <placement index="5" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
           </placements>
         </camera>
-      </qt-opengl>-->
+      </qt-opengl>
   </visualization>
 
 </argos-configuration>

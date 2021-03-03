@@ -4,6 +4,7 @@
 #include <buzz/argos/buzz_loop_functions.h>
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
+#include <argos3/plugins/simulator/entities/box_entity.h>
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
 #include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
 #include <argos3/core/control_interface/ci_controller.h>
@@ -148,9 +149,6 @@ private:
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
-   /** The seed for the RNG if testing*/
-   UInt32 m_unSeed;
-
    /** Whether the cylinder reached the goal */
    bool m_bReachedGoal;
 
@@ -217,11 +215,23 @@ private:
    /** Number of obstacles to fill in the environment*/
    UInt32 m_unNumObstacles;
 
+   /** Use the gate model for an obstacle */
+   UInt32 m_unUseGate;
+
    /** Obstacle Positions (index = # episode, # obstacles) */
    std::vector<std::vector<CVector3> > m_vecObstaclePos;
 
    /** List of obstacles */
    std::vector<CCylinderEntity*> m_vecObstacles;
+
+   /** List of Gate Walls */
+   std::vector<CBoxEntity*> m_vecGateWalls;
+
+   /** List of Wall Positions */
+   std::vector<std::vector<CVector3>> m_vecGateWallPos;
+
+   /** List of Wall Sizes */
+   std::vector<std::vector<CVector3>> m_vecGateWallSize;
 
    /** Flag for whether or not to use learning or the base model*/
    UInt32 m_unBaseModel;

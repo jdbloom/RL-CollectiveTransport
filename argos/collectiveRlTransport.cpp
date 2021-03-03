@@ -72,8 +72,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
+      GetNodeAttribute(t_tree, "use_gate", m_unUseGate);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
-      GetNodeAttribute(t_tree, "seed", m_unSeed);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -115,19 +115,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
-      /* Create a new RNG with seed for testing models, and without seed
-         if training*/
-      if(m_unSeed == 0){
-        /* Create a new RNG */
-        LOG<<"[INFO] Creating RNG for Training"<<std::endl;
-        m_pcRNG = CRandom::CreateRNG("argos");
-      }
-      else{
-        /* Create a new RNG with specified seed*/
-        LOG<<"[INFO] Creating RNG for Testing with seed: "<<m_unSeed<<std::endl;
-        m_pcRNG = CRandom::CreateRNG("argos");
-        //m_pcRNG.SetSeed(m_unSeed);
-      }
+      /* Create a new RNG */
+      LOG<<"[INFO] Creating RNG for Training"<<std::endl;
+      m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
       CreateEntities();
       LOG<<"Added Entities\n";
@@ -252,13 +242,71 @@ void CCollectiveRLTransport::CreateEntities() {
       }
    }
    /** Generate Random Positions for the obstacles */
-   for(size_t i = 0; i < m_unNumEpisodes; i++){
+   for(size_t i = 0; i < m_unNumEpisodes; ++i){
      m_vecObstaclePos.push_back(std::vector<CVector3>());
      for(size_t j = 0; j < m_unNumObstacles; j++){
        cPos.Set(m_pcRNG->Uniform(cXObstacleRange),
                 m_pcRNG->Uniform(cYRange),
                 0.0);
        m_vecObstaclePos.back().push_back(cPos);
+     }
+   }
+   /**
+   Generate the gate model obstacle from
+   two box_entities. The gate should be in
+   a different position every episode which
+   means the boxes have to change shape every
+   episode.
+   */
+   if(m_unUseGate){
+     /** Create two box entities and add them to the environment*/
+     std::ostringstream bCID;
+     CBoxEntity* pcB;
+     for(size_t i = 0; i < 2; ++i){
+       bCID.str("");
+       bCID << "b" << i;
+       pcB = new CBoxEntity(
+          bCID.str(),
+          CVector3(),
+          CQuaternion(),
+          false,
+          CVector3(),
+          OBSTACLE_MASS);
+       m_vecGateWalls.push_back(pcB);
+       AddEntity(*pcB);
+     }
+     CRange<Real> cYRange(
+        GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_RADIUS*2,
+        GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_RADIUS*2
+        );
+     CRange<Real> cXWallRange(
+        GetSpace().GetArenaLimits().GetMin().GetX()/2,
+        0
+        );
+     for(size_t i = 0; i < m_unNumEpisodes; ++i){
+       m_vecGateWallPos.push_back(std::vector<CVector3>());
+       m_vecGateWallSize.push_back(std::vector<CVector3>());
+       /** Generate positions and sizes for the box entitites */
+       Real YPos = m_pcRNG->Uniform(cYRange);
+       Real XPos = m_pcRNG->Uniform(cXWallRange);
+       /** set position*/
+       cPos.Set(XPos,
+                GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - 2*CYLINDER_RADIUS)))/2,
+                0.0);
+       m_vecGateWallPos.back().push_back(cPos);
+       cPos.Set(XPos,
+                GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + 2*CYLINDER_RADIUS)))/2,
+                0.0);
+       m_vecGateWallPos.back().push_back(cPos);
+       /** Set Size */
+       cPos.Set(0.5,
+                abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - 2*CYLINDER_RADIUS)),
+                0.5);
+       m_vecGateWallSize.back().push_back(cPos);
+       cPos.Set(0.5,
+                abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + 2*CYLINDER_RADIUS)),
+                0.5);
+       m_vecGateWallSize.back().push_back(cPos);
      }
    }
 }
@@ -294,6 +342,24 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                 false,                                  // not a check
                 true);                                  // ignore collisions
    }
+
+   /** Move the Walls */
+   MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
+              m_vecGateWallPos[un_episode][0],
+              CQuaternion(),
+              false,
+              true);
+   MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
+              m_vecGateWallPos[un_episode][1],
+              CQuaternion(),
+              false,
+              true);
+
+    /** Resize the walls */
+    m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
+    m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+
+
 }
 
 /****************************************/

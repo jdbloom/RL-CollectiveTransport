@@ -21,7 +21,7 @@ base_model_1_obstacle_path = 'Data/BaseModel_1_obstacle/Data/'
 
 # Base Model with 2 obstacle over 1000 eps:
 base_model_2_obstacle_average = -1983.07
-base_model_2_obstacle_average_reward = 2550.82
+base_model_2_obstacle_average_reward = -2550.82
 base_model_2_obstacle_score_std = 2292.86
 base_model_2_obstacle_pct_std = 206.46
 base_model_2_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
@@ -42,7 +42,7 @@ base_model_8_agents_path = 'Data/BaseModel_8_agents/Data/'
 
 # Base Model with 2 obstacles over 1000 eps
 base_model_8_agents_2_obstacles_average = -2136.96
-base_model_8_agents_2_obstacles_average_reward = 0
+base_model_8_agents_2_obstacles_average_reward = -2755.08
 base_model_8_agents_2_obstacles_score_std = 2491.55
 base_model_8_agents_2_obstacles_pct_std = 0
 base_model_8_agents_2_obstacles_path = 'Data/BaseModel_8_agents_2_obstacles/Data/'
