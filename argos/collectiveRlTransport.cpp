@@ -73,6 +73,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "num_obstacles", m_unNumObstacles);
       GetNodeAttribute(t_tree, "use_gate", m_unUseGate);
+      GetNodeAttribute(t_tree, "gate_curriculum", m_unGateCurriculum);
+      GetNodeAttribute(t_tree, "gate_update_frequency", m_unGateUpdateFrequency);
+      GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
@@ -275,15 +278,32 @@ void CCollectiveRLTransport::CreateEntities() {
        m_vecGateWalls.push_back(pcB);
        AddEntity(*pcB);
      }
-     CRange<Real> cYRange(
-        GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_RADIUS*2,
-        GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_RADIUS*2
-        );
+     Real offset ;
+     if(m_unGateCurriculum == 1){
+       offset = GetSpace().GetArenaLimits().GetMax().GetY();
+     }
+     else{
+       offset = CYLINDER_RADIUS*2;
+     }
+     UInt32 update_offset_flag = 1;
      CRange<Real> cXWallRange(
         GetSpace().GetArenaLimits().GetMin().GetX()/2,
         0
         );
      for(size_t i = 0; i < m_unNumEpisodes; ++i){
+       if(update_offset_flag == 1){
+         if((i+1)%m_unGateUpdateFrequency == 0){
+           offset = offset - m_fGateUpdate;
+           if(offset <= (CYLINDER_RADIUS*2)){
+             offset = CYLINDER_RADIUS*2;
+             update_offset_flag = 0;
+           }
+         }
+       }
+       CRange<Real> cYRange(
+          GetSpace().GetArenaLimits().GetMin().GetY() + offset,
+          GetSpace().GetArenaLimits().GetMax().GetY() - offset
+          );
        m_vecGateWallPos.push_back(std::vector<CVector3>());
        m_vecGateWallSize.push_back(std::vector<CVector3>());
        /** Generate positions and sizes for the box entitites */
@@ -291,20 +311,20 @@ void CCollectiveRLTransport::CreateEntities() {
        Real XPos = m_pcRNG->Uniform(cXWallRange);
        /** set position*/
        cPos.Set(XPos,
-                GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - 2*CYLINDER_RADIUS)))/2,
+                GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
                 0.0);
        m_vecGateWallPos.back().push_back(cPos);
        cPos.Set(XPos,
-                GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + 2*CYLINDER_RADIUS)))/2,
+                GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
                 0.0);
        m_vecGateWallPos.back().push_back(cPos);
        /** Set Size */
        cPos.Set(0.5,
-                abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - 2*CYLINDER_RADIUS)),
+                abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)),
                 0.5);
        m_vecGateWallSize.back().push_back(cPos);
        cPos.Set(0.5,
-                abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + 2*CYLINDER_RADIUS)),
+                abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)),
                 0.5);
        m_vecGateWallSize.back().push_back(cPos);
      }

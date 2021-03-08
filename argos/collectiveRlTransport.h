@@ -218,6 +218,15 @@ private:
    /** Use the gate model for an obstacle */
    UInt32 m_unUseGate;
 
+   /** Use Curriculum learning for the gate */
+   UInt32 m_unGateCurriculum;
+
+   /** Frequency to update the gate seperation*/
+   UInt32 m_unGateUpdateFrequency;
+
+   /** Amount to change the gate distance by during updates */
+   Real m_fGateUpdate;
+
    /** Obstacle Positions (index = # episode, # obstacles) */
    std::vector<std::vector<CVector3> > m_vecObstaclePos;
 
