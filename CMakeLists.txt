@@ -34,7 +34,7 @@ link_directories(${ARGOS_LIBRARY_DIRS})
 
 if(NOT CLUSTER)
   # Find Lua
-  find_package(Lua53)
+  find_package(Lua)
   include_directories(${LUA_INCLUDE_DIR})
 endif(NOT CLUSTER)
 
