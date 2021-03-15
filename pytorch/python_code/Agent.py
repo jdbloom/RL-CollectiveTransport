@@ -614,6 +614,8 @@ class Agent():
             self.target_critic_1.save_checkpoint(path)
             self.critic_2.save_checkpoint(path)
             self.target_critic_2.save_checkpoint(path)
+        if self.comms_scheme != 'None':
+            self.q_comms_eval.save_model(path)
 
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
@@ -630,3 +632,5 @@ class Agent():
             self.target_critic_1.load_checkpoint(path)
             self.critic_2.load_checkpoint(path)
             self.target_critic_2.load_checkpoint(path)
+        if self.comms_scheme != 'None':
+            self.q_comms_eval.load_model(path)

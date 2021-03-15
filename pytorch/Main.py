@@ -1,5 +1,6 @@
 import python_code.Agent as Agent
 import python_code.zmq_utility as zmq_utility
+#from python_code.comms_viz import viz
 
 import argparse
 from collections import namedtuple
@@ -12,6 +13,8 @@ import csv
 import os
 import time
 
+import matplotlib.pyplot as plt
+
 Utility = zmq_utility.ZMQ_Utility()
 
 # get path to containing folder so this works where ever it is used
@@ -22,6 +25,7 @@ parser.add_argument("recording_path")
 parser.add_argument("--learning_scheme")
 parser.add_argument("--comms_scheme", default = "Neighbors")
 parser.add_argument("--test", default = False, action = "store_true")
+parser.add_argument("--plot_comms", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
 parser.add_argument("--model_path")
 args = parser.parse_args()
@@ -34,6 +38,19 @@ comms_scheme = args.comms_scheme
 port = args.port
 test_mode = args.test
 train_mode = not test_mode
+
+
+def viz(message_codes, t):
+    plt.clf()
+    num_robots = len(message_codes)
+    x = np.arange(0, num_robots, 1)
+    plt.scatter(x, message_codes)
+    plt.xlabel('Robot')
+    plt.xticks(x)
+    plt.ylabel('Message')
+    plt.ylim(-1, Utility.params['alphabet_size']+1)
+    plt.title('Robot Messages, Time: '+str(t))
+    plt.pause(0.0001)
 
 
 #
@@ -81,6 +98,7 @@ exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
 experiment_start_time = time.time()
+
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
@@ -218,6 +236,10 @@ while not exp_done:
                             average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
 
                     writer.writerow([r, model.epsilon, reached_goal, message_codes, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
+
+                    if args.plot_comms:
+                        viz(message_codes, time_steps)
+
                     message_codes = []
                     if episode_done:
                         run_time = time.time() - exp_start_time

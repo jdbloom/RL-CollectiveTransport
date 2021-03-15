@@ -47,4 +47,5 @@ for r in range(len(messages[0])):
     print('MSG 2 = %0.2f' % (msg_2/len(messages)))
     print('MSG 3 = %0.2f' % (msg_3/len(messages)))
     print('MSG 4 = %0.2f' % (msg_4/len(messages)))
+plt.savefig(args.figure_path+'COMMS_CHART_'+args.figure_name)
 plt.show()

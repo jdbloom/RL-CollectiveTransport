@@ -144,9 +144,9 @@ if args.test:
 episode_fail = 0
 episode_struggle = 0
 for i in range(len(reward)):
-    if reward[i] < -6500:
+    if reward[i] < -8000:
         episode_fail += 1
-    elif reward[i] < -2500:
+    elif reward[i] < -3000:
         episode_struggle += 1
 
 print('. . . Plotting')
@@ -159,6 +159,7 @@ plt.scatter(np.arange(0, len(reward), 1), reward, c = 'darkturquoise', label = '
 #plt.plot(reward, c = 'lightsteelblue', label = 'Episode Scores')
 #plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
+plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
 plt.ylim(-12000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")

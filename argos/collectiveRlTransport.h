@@ -227,6 +227,12 @@ private:
    /** Amount to change the gate distance by during updates */
    Real m_fGateUpdate;
 
+   /** Minimum gate separation */
+   Real m_fGateMinimum;
+
+   /** vector to keep track of the current offset (not used other than to print) */
+   std::vector<Real> m_vecOffset;
+
    /** Obstacle Positions (index = # episode, # obstacles) */
    std::vector<std::vector<CVector3> > m_vecObstaclePos;
 

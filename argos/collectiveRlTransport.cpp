@@ -76,6 +76,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_curriculum", m_unGateCurriculum);
       GetNodeAttribute(t_tree, "gate_update_frequency", m_unGateUpdateFrequency);
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
+      GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
@@ -283,7 +284,7 @@ void CCollectiveRLTransport::CreateEntities() {
        offset = GetSpace().GetArenaLimits().GetMax().GetY();
      }
      else{
-       offset = CYLINDER_RADIUS*2;
+       offset = (m_fGateMinimum/2.0);
      }
      UInt32 update_offset_flag = 1;
      CRange<Real> cXWallRange(
@@ -294,11 +295,14 @@ void CCollectiveRLTransport::CreateEntities() {
        if(update_offset_flag == 1){
          if((i+1)%m_unGateUpdateFrequency == 0){
            offset = offset - m_fGateUpdate;
-           if(offset <= (CYLINDER_RADIUS*2)){
-             offset = CYLINDER_RADIUS*2;
+           std::cout<<"Updating gap distance to "<<offset*2<<" at episode "<<i<<std::endl;
+           if(offset <= (m_fGateMinimum/2.0)){
+             offset = (m_fGateMinimum/2.0);
+             std::cout<<"Reached final gap distance of "<<offset*2<<" at episode "<<i<<std::endl;
              update_offset_flag = 0;
            }
          }
+         m_vecOffset.push_back(offset);
        }
        CRange<Real> cYRange(
           GetSpace().GetArenaLimits().GetMin().GetY() + offset,
@@ -434,6 +438,9 @@ void CCollectiveRLTransport::Reset() {
      LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
    }
    LOG<<std::endl;
+   if(m_unUseGate==1){
+     LOG<<"[INFO] Current Offset: "<<m_vecOffset[m_unEpisodeCounter]<<std::endl;
+   }
    PlaceEntities(m_unEpisodeCounter);
    m_bReachedGoal = false;
 

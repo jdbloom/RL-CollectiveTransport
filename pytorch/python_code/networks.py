@@ -17,8 +17,10 @@ def fanin_init(size, fanin = None):
 ############################################################################
 class DQN(nn.Module):
     def __init__(self, lr, num_actions, observation_size, num_ops_per_action,
-                 fc1_dims = 64, fc2_dims = 128):
+                 fc1_dims = 64, fc2_dims = 128, name = 'DQN'):
         super().__init__()
+
+        self.name = name        
 
         output_dims = num_ops_per_action**num_actions
 
@@ -43,19 +45,22 @@ class DQN(nn.Module):
 
     def save_model(self, file_path):
         print('... saving DeepQNetwork model ...')
-        T.save(self.state_dict(), file_path)
+        T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
         print('... loading DeepQNetwork model ...')
-        self.load_state_dict(T.load(file_path))
+        self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Communication Network for DDQN
 ############################################################################
 class DDQNComms(nn.Module):
     def __init__(self, *, lr=None, observation_size=None, alphabet_size=None,
-                 fc1_dims = 64, fc2_dims = 128):
+                 fc1_dims = 64, fc2_dims = 128, name = 'DDQN_COMMS'):
         super().__init__()
+
+        self.name = name
+
         output_dims = alphabet_size
 
         #print('Comms Network has input size = ', observation_size, 'and output size = ', output_dims)
@@ -80,19 +85,21 @@ class DDQNComms(nn.Module):
 
     def save_model(self, file_path):
         print('... saving DoubleDeepQComms model ...')
-        T.save(self.state_dict(), file_path)
+        T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
         print('... loading DoubleDeepQComms model ...')
-        self.load_state_dict(T.load(file_path))
+        self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Action Network for DDQN
 ############################################################################
 class DDQN(nn.Module):
     def __init__(self, *, lr = None, num_actions = None, observation_size = None,
-                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128):
+                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN'):
         super().__init__()
+
+        self.name = name
 
         output_dims = (num_ops_per_action**num_actions)
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
@@ -118,11 +125,11 @@ class DDQN(nn.Module):
 
     def save_model(self, file_path):
         print('... saving DoubleDeepQNetwork model ...')
-        T.save(self.state_dict(), file_path)
+        T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
         print('... loading DoubleDeepQNetwork model ...')
-        self.load_state_dict(T.load(file_path))
+        self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Actor Network for DDPG
