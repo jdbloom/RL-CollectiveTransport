@@ -300,38 +300,38 @@ void CCollectiveRLTransport::CreateEntities() {
              offset = (m_fGateMinimum/2.0);
              std::cout<<"Reached final gap distance of "<<offset*2<<" at episode "<<i<<std::endl;
              update_offset_flag = 0;
+             }
            }
          }
          m_vecOffset.push_back(offset);
+         CRange<Real> cYRange(
+            GetSpace().GetArenaLimits().GetMin().GetY() + offset,
+            GetSpace().GetArenaLimits().GetMax().GetY() - offset
+            );
+         m_vecGateWallPos.push_back(std::vector<CVector3>());
+         m_vecGateWallSize.push_back(std::vector<CVector3>());
+         /** Generate positions and sizes for the box entitites */
+         Real YPos = m_pcRNG->Uniform(cYRange);
+         Real XPos = m_pcRNG->Uniform(cXWallRange);
+         /** set position*/
+         cPos.Set(XPos,
+                  GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
+                  0.0);
+         m_vecGateWallPos.back().push_back(cPos);
+         cPos.Set(XPos,
+                  GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
+                  0.0);
+         m_vecGateWallPos.back().push_back(cPos);
+         /** Set Size */
+         cPos.Set(0.5,
+                  abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)),
+                  0.5);
+         m_vecGateWallSize.back().push_back(cPos);
+         cPos.Set(0.5,
+                  abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)),
+                  0.5);
+         m_vecGateWallSize.back().push_back(cPos);
        }
-       CRange<Real> cYRange(
-          GetSpace().GetArenaLimits().GetMin().GetY() + offset,
-          GetSpace().GetArenaLimits().GetMax().GetY() - offset
-          );
-       m_vecGateWallPos.push_back(std::vector<CVector3>());
-       m_vecGateWallSize.push_back(std::vector<CVector3>());
-       /** Generate positions and sizes for the box entitites */
-       Real YPos = m_pcRNG->Uniform(cYRange);
-       Real XPos = m_pcRNG->Uniform(cXWallRange);
-       /** set position*/
-       cPos.Set(XPos,
-                GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
-                0.0);
-       m_vecGateWallPos.back().push_back(cPos);
-       cPos.Set(XPos,
-                GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
-                0.0);
-       m_vecGateWallPos.back().push_back(cPos);
-       /** Set Size */
-       cPos.Set(0.5,
-                abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)),
-                0.5);
-       m_vecGateWallSize.back().push_back(cPos);
-       cPos.Set(0.5,
-                abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)),
-                0.5);
-       m_vecGateWallSize.back().push_back(cPos);
-     }
    }
 }
 
@@ -366,22 +366,23 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                 false,                                  // not a check
                 true);                                  // ignore collisions
    }
+   if(m_unUseGate == 1){
+     /** Move the Walls */
+     MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
+                m_vecGateWallPos[un_episode][0],
+                CQuaternion(),
+                false,
+                true);
+     MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
+                m_vecGateWallPos[un_episode][1],
+                CQuaternion(),
+                false,
+                true);
 
-   /** Move the Walls */
-   MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
-              m_vecGateWallPos[un_episode][0],
-              CQuaternion(),
-              false,
-              true);
-   MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
-              m_vecGateWallPos[un_episode][1],
-              CQuaternion(),
-              false,
-              true);
-
-    /** Resize the walls */
-    m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
-    m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+      /** Resize the walls */
+      m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
+      m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+    }    
 
 
 }
