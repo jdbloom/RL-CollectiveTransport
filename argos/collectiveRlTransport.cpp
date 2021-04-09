@@ -118,6 +118,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecFailures.resize(m_unNumRobots, 0);
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
+      m_vecObjStats.resize(6, 0.0);
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       /* Create a new RNG */
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
@@ -382,7 +383,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
       /** Resize the walls */
       m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
       m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
-    }    
+    }
 
 
 }
@@ -510,6 +511,21 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
+   /** Get the position and orientation of the object*/
+   CVector3& cCylinderPos =
+      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CQuaternion cCylinderOrient =
+      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+   CRadians cObjZ, cObjY, cObjX;
+   cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
+   /** Store object position and orientation to send to python*/
+   m_vecObjStats[0] = cCylinderPos.GetX();
+   m_vecObjStats[1] = cCylinderPos.GetY();
+   m_vecObjStats[2] = cCylinderPos.GetZ();
+   m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
+   m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
+   m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       /* Get robot pose */
       CVector3& cRobotPos =
@@ -524,8 +540,6 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          m_cGoal.GetY() - cRobotPos.GetY());
       cVecRobot2Goal.Rotate(-cRobotZ);
       /* Get vector from robot to cylinder (robot-local) */
-      CVector3& cCylinderPos =
-         m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
       CVector2 cVecRobot2Cylinder(
          cCylinderPos.GetX() - cRobotPos.GetX(),
          cCylinderPos.GetY() - cRobotPos.GetY());
@@ -624,6 +638,7 @@ void CCollectiveRLTransport::PreStep() {
    ZMQSendFailures();
    ZMQSendRewards();
    ZMQSendRobotStats();
+   ZMQSendObjectStats();
    /* Get actions from PyTorch */
    ZMQGetActions();
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -719,6 +734,7 @@ void CCollectiveRLTransport::PostStep() {
       ZMQSendFailures();
       ZMQSendRewards();
       ZMQSendRobotStats();
+      ZMQSendObjectStats();
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -834,12 +850,17 @@ void CCollectiveRLTransport::ZMQSendTermination() {
 
 void CCollectiveRLTransport::ZMQSendParams() {
    /* Make the parameter buffer */
-   std::vector<unsigned int> vecParams;
+   std::vector<float> vecParams;
    vecParams.push_back(m_unNumRobots);
    vecParams.push_back(m_unNumObs);
    vecParams.push_back(m_unNumActions);
    vecParams.push_back(m_unNumStats);
    vecParams.push_back(m_unAlphabetSize);
+   vecParams.push_back(GetSpace().GetArenaLimits().GetMax().GetY());
+   vecParams.push_back(GetSpace().GetArenaLimits().GetMin().GetY());
+   vecParams.push_back(GetSpace().GetArenaLimits().GetMax().GetX());
+   vecParams.push_back(GetSpace().GetArenaLimits().GetMin().GetX());
+
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
    DEBUG("m_unNumActions = %u\n", m_unNumActions);*/
@@ -910,6 +931,19 @@ void CCollectiveRLTransport::ZMQSendRobotStats(){
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecStats[0]),  // data pointer
     sizeof(float)*m_vecStats.size(),      // data size in bytes
+    ZMQ_SNDMORE)                         // another message will follow (object stats)
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendObjectStats(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecObjStats[0]),  // data pointer
+    sizeof(float)*m_vecObjStats.size(),      // data size in bytes
     0)                                    //no special flags
   < 0) {                                  // >= 0 means success
     THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));

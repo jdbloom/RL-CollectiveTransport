@@ -200,6 +200,9 @@ private:
    /** The vector of robot stats */
    std::vector<float> m_vecStats;
 
+   /** The vector of object stats*/
+   std::vector<float> m_vecObjStats;
+
    /** The vector of actions */
    std::vector<float> m_vecActions;
 
@@ -283,6 +286,8 @@ private:
    void ZMQSendRobotStats();
 
    void ZMQGetActions();
+
+   void ZMQSendObjectStats();
 
    void ZMQGetAck();
 

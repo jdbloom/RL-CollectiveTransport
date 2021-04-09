@@ -4,8 +4,9 @@ import numpy as np
 
 class ZMQ_Utility:
     def __init__(self):
-        self.PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats', 'alphabet_size']
-        self.PARAMS_FMT = '5I'
+        self.PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats', 'alphabet_size',
+                              'arena_max_y', 'arena_min_y', 'arena_max_x', 'arena_min_x']
+        self.PARAMS_FMT = '9f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',
@@ -23,6 +24,8 @@ class ZMQ_Utility:
         self.REWARDS_FMT = '1f'
         self.STATS_FIELDS = ['magnitude', 'angle']
         self.STATS_FMT = '2f'
+        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
+        self.OBJ_STATS_FMT = '6f'
         self.ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
         self.ACTIONS_FMT = '3f'
 
@@ -33,6 +36,12 @@ class ZMQ_Utility:
 
     def get_params(self, msg):
         self.params = self.parse_msg(msg, 'params', self.PARAMS_FIELDS, self.PARAMS_FMT)
+        self.params['num_robots'] = int(self.params['num_robots'])
+        self.params['num_obs'] = int(self.params['num_obs'])
+        self.params['num_actions'] = int(self.params['num_actions'])
+        self.params['num_stats'] = int(self.params['num_stats'])
+        self.params['alphabet_size'] = int(self.params['alphabet_size'])
+
     #
     # Parse the fields from a message
     # Returns a dictionary
@@ -109,9 +118,16 @@ class ZMQ_Utility:
             data = self.parse_msg(m, 'stats', self.STATS_FIELDS, self.STATS_FMT)
             # Make a numpy array
             nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-            # Append it to the rewards
+            # Append it to the stats array
             stats.append(nparr)
         return stats
+
+    def parse_obj_stats(self, msg):
+        # Parse the bytes into a dictionary
+        data = self.parse_msg(msg, 'obj_stats', self.OBJ_STATS_FIELDS, self.OBJ_STATS_FMT)
+        # Make a numpy array
+        obj_stats = np.fromiter(data.values(), dtype=np.float32, count = len(data))
+        return obj_stats
 
     def serialize_actions(self, actions):
         packer = Struct(self.ACTIONS_FMT)
