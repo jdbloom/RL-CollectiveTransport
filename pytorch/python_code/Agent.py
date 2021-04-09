@@ -15,8 +15,9 @@ Loss = nn.MSELoss()
 
 class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
-                 num_ops_per_action, id, learning_scheme, comms_scheme = "None",
-                 alphabet_size=4, min_max_action = 1):
+                 num_ops_per_action, id, learning_scheme, no_buffer,
+                 comms_memory, comms_scheme = "None", alphabet_size=4,
+                 min_max_action = 1, use_horizon = False):
         self.id = id
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -26,9 +27,26 @@ class Agent():
         self.comms_scheme = comms_scheme
         self.learning_scheme = learning_scheme
         self.min_max_action = min_max_action
+        self.use_horizon = use_horizon
+        self.object_stats = []
+        self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
+        self.max_obj_stats = np.zeros(4)
+
+        # Dictionaries and binning for loss function calculations
+        self.StateDict = {}
+        self.StateDict["count"] = 0
+        self.MsgDict = {}
+        self.MsgDict["count"] = 0
+        self.angle_bins = [i for i in range(360)]
+        self.decimals = 1
+        self.acceleration_bins = np.around(np.arange(-10, 10, (1/10**self.decimals)), self.decimals)
+        self.binned_angle = None
+        self.binned_acceleration = None
+        self.obj_state = None
+
 
         self.make_comms_scheme()
-        self.make_learning_scheme()
+        self.make_learning_scheme(comms_memory)
 
 
     def make_comms_scheme(self):
@@ -79,13 +97,21 @@ class Agent():
         msg = incoming_comms(left_msg, right_msg)
         return msg
 
-    def make_agent_state(self, env_obs, agent_id):
+    def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
         if self.comms_scheme == 'None':
             return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message))
         msg = self.get_agent_incoming_communications(agent_id)
         #import ipdb; ipdb.set_trace()
-        agent_state = np.concatenate((env_obs, msg.left_msg, msg.right_msg))
-        return agent_state
+        if not comms_memory:
+            agent_state = np.concatenate((env_obs, msg.left_msg, msg.right_msg))
+        else:
+            agent_state = env_obs
+            for i in range(len(message_memory)):
+                agent_state = np.concatenate((agent_state, message_memory[i]))
+            if len(agent_state) < (self.num_observations + self.num_agents * self.alphabet_size):
+                zeros_to_add = (self.num_observations + self.num_agents * self.alphabet_size) - len(agent_state)
+                agent_state = np.concatenate((agent_state, np.zeros(zeros_to_add)))
+        return agent_state, msg
 
     def clear_agent_inbox(self, agent_id):
         self.mailbox.clear_inbox(agent_id)
@@ -98,7 +124,7 @@ class Agent():
         self.mailbox.carry_mail()
 
 
-    def make_learning_scheme(self):
+    def make_learning_scheme(self, comms_memory):
         # These are the hyper parameters relating to the neural networks
         # HYPER PARAMETERS COME FROM "Continuous Control with Deep Reinforcement Learning"
         self.action_space = [i for i in range(self.num_ops_per_action**self.num_actions)]
@@ -122,7 +148,7 @@ class Agent():
         self.time_step = 0
 
         if self.comms_scheme != 'None':
-            self.make_comms_network()
+            self.make_comms_network(comms_memory)
 
         print('######## LEARNING SCHEME ########')
         print('SCHEME:', self.learning_scheme)
@@ -132,10 +158,10 @@ class Agent():
             return
 
         if self.learning_scheme == 'DQN':
-            self.make_DQN()
+            self.make_DQN(comms_memory)
 
         elif self.learning_scheme == 'DDQN':
-            self.make_DDQN()
+            self.make_DDQN(comms_memory)
 
         elif self.learning_scheme == 'DDPG':
             self.make_DDPG()
@@ -146,8 +172,11 @@ class Agent():
         else:
             raise Exception('Unknown Learning Scheme' + self.learning_scheme)
 
-    def make_comms_network(self):
-        obs_size = self.num_observations + 2*self.alphabet_size
+    def make_comms_network(self, comms_memory):
+        if not comms_memory:
+            obs_size = self.num_observations + 2*self.alphabet_size
+        else:
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         print('MODEL SPECIFICS:')
         comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
         self.q_comms_eval = DDQNComms(**comms_nn_args)
@@ -155,12 +184,15 @@ class Agent():
         print('Communication Network:')
         print(self.q_comms_eval)
         print(self.q_comms_next)
-        self.comms_memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
+        self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
-    def make_DQN(self):
+    def make_DQN(self, comms_memory):
         #define networks for DQN
         self.min_max_action = 0.1
-        obs_size = self.num_observations + 2*self.alphabet_size
+        if not comms_memory:
+            obs_size = self.num_observations + 2*self.alphabet_size
+        else:
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
         comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
@@ -172,9 +204,12 @@ class Agent():
 
         self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
-    def make_DDQN(self):
+    def make_DDQN(self, comms_memory):
         self.min_max_action = 0.1
-        obs_size = self.num_observations + 2*self.alphabet_size
+        if not comms_memory:
+            obs_size = self.num_observations + 2*self.alphabet_size
+        else:
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
 
@@ -183,7 +218,7 @@ class Agent():
         print(self.q_eval)
         print(self.q_next)
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, 1, 'Discrete')
+        self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
     def make_DDPG(self):
         #define networks for DDPG
@@ -196,12 +231,12 @@ class Agent():
 
         self.actor = DDPGActorNetwork(**actor_nn_args, name = 'actor')
         self.target_actor = DDPGActorNetwork(**actor_nn_args, name = 'target_actor')
-        self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr)
+        self.actor_optimizer = Adam(self.actor.parameters(), lr = self.lr, weight_decay = 1e-4)
         print(self.actor)
         print(self.target_actor)
         self.critic = DDPGCriticNetwork(**critic_nn_args, name = 'critic')
         self.target_critic = DDPGCriticNetwork(**critic_nn_args, name = 'target_critic')
-        self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr)
+        self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr, weight_decay = 1e-4)
         print(self.critic)
         print(self.target_critic)
 
@@ -392,10 +427,10 @@ class Agent():
             state = T.tensor([state], dtype = T.float).to(self.q_comms_eval.device)
             messages = self.q_comms_eval.forward(state)
             outgoing_message_code = T.argmax(messages[0]).item()
-            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+            outgoing_message = self.alphabet_space[outgoing_message_code]
         else:
             outgoing_message_code = np.random.choice(self.alphabet_size)
-            outgoing_message = self.alphabet_space[outgoing_message_code + 1]
+            outgoing_message = self.alphabet_space[outgoing_message_code]
         return outgoing_message, outgoing_message_code
 
     def learn(self):
@@ -411,7 +446,7 @@ class Agent():
             self.TD3_learn()
 
     def DQN_learn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
         self.q_eval.optimizer.zero_grad()
 
@@ -437,7 +472,7 @@ class Agent():
         self.decrement_epsilon()
 
     def DDQN_learn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
         self.q_eval.optimizer.zero_grad()
 
@@ -465,8 +500,43 @@ class Agent():
 
         self.decrement_epsilon()
 
+    def learn_no_buffer(self, sarsd):
+        self.q_eval.optimizer.zero_grad()
+
+        self.replace_target_network()
+
+        states, actions, rewards, states_, dones = sarsd
+
+        network = self.q_eval
+
+        states = T.tensor(states).to(network.device)
+        actions = T.tensor(actions).to(network.device)
+        rewards = T.tensor(rewards).to(network.device)
+        states_ = T.tensor(states_).to(network.device)
+        dones = T.tensor(dones).to(network.device)
+
+        indices = np.arange(len(dones))
+
+        q_pred = self.q_eval(states)[indices, actions]
+
+        q_next = self.q_next(states_)
+        q_eval = self.q_eval(states_)
+
+        max_actions = T.argmax(q_eval, dim = 1)
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next[indices, max_actions]
+
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
+        loss.backward()
+        self.q_eval.optimizer.step()
+        self.learn_step_counter += 1
+
+        self.decrement_epsilon()
+
     def DDPG_learn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
 
         states, actions, rewards, states_, dones = self.sample_memory(network = self.actor)
@@ -495,7 +565,7 @@ class Agent():
         self.learn_step_counter += 1
 
     def TD3_learn(self):
-        if self.memory.mem_ctr < self.batch_size:
+        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
 
         states, actions, rewards, states_, dones = self.sample_memory(network = self.target_actor)
@@ -545,8 +615,9 @@ class Agent():
         self.update_network_parameters()
 
     def learn_comms(self):
-        if self.comms_memory.mem_ctr < self.batch_size:
+        if self.comms_memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
+
         self.q_comms_eval.optimizer.zero_grad()
 
         self.replace_target_comms_network()
@@ -556,6 +627,39 @@ class Agent():
         indices = np.arange(self.batch_size)
 
         q_pred = self.q_comms_eval.forward(states)[indices, message]
+
+        q_next = self.q_comms_next.forward(states_)
+        q_eval = self.q_comms_eval.forward(states_)
+
+        max_actions = T.argmax(q_eval, dim = 1)
+
+        q_next[dones] = 0.0
+
+        q_target = rewards + self.gamma*q_next[indices, max_actions]
+
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device)
+        loss.backward()
+        self.q_comms_eval.optimizer.step()
+
+    def learn_no_buffer_comms(self, sarsd):
+
+        self.q_comms_eval.optimizer.zero_grad()
+
+        self.replace_target_comms_network()
+
+        states, messages, rewards, states_, dones = sarsd
+
+        network = self.q_eval
+
+        states = T.tensor(states).to(network.device)
+        messages = T.tensor(messages).to(network.device)
+        rewards = T.tensor(rewards).to(network.device)
+        states_ = T.tensor(states_).to(network.device)
+        dones = T.tensor(dones).to(network.device)
+
+        indices = np.arange(len(dones))
+
+        q_pred = self.q_comms_eval.forward(states)[indices, messages]
 
         q_next = self.q_comms_next.forward(states_)
         q_eval = self.q_comms_eval.forward(states_)
@@ -580,7 +684,7 @@ class Agent():
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
 
     def sample_memory(self, network):
-        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
+        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
         states = T.tensor(state).to(network.device)
         actions = T.tensor(action).to(network.device)
         rewards = T.tensor(reward).to(network.device)
@@ -590,7 +694,7 @@ class Agent():
         return states, actions, rewards, states_, dones
 
     def sample_comms_memory(self):
-        state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size)
+        state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
         states = T.tensor(state).to(self.q_comms_eval.device)
         actions = T.tensor(action).to(self.q_comms_eval.device)
         rewards = T.tensor(reward).to(self.q_comms_eval.device)
@@ -620,6 +724,9 @@ class Agent():
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
             self.q_eval.load_model(path)
+            print('-------------------- Weights ------------------')
+            for param in self.q_eval.parameters():
+                print(param.data)
         elif self.learning_scheme == 'DDPG':
             self.actor.load_checkpoint(path)
             self.target_actor.load_checkpoint(path)
@@ -634,3 +741,115 @@ class Agent():
             self.target_critic_2.load_checkpoint(path)
         if self.comms_scheme != 'None':
             self.q_comms_eval.load_model(path)
+
+    def store_object_stats(self, obj_stats, calculate):
+        # len = 3 is so that we can calculate velocity and acceleration
+        # calculate is a flag that tracks based on episode time steps.
+        # we dont want to do any calculations within the first 3 time
+        # steps of an episode.
+        if not calculate:
+            self.object_stats.append(obj_stats)
+        else:
+            # get rid of the oldest stat
+            self.object_stats.pop(0)
+            self.object_stats.append(obj_stats)
+            velocity_t0 = math.sqrt((self.object_stats[2][0] - self.object_stats[1][0])**2 + (self.object_stats[2][1] - self.object_stats[1][1])**2)/0.1
+            velocity_t1 = math.sqrt((self.object_stats[1][0] - self.object_stats[0][0])**2 + (self.object_stats[1][1] - self.object_stats[0][1])**2)/0.1
+            acceleration = (velocity_t0 - velocity_t1)/0.1
+            # Need to handle the case where we have -179 and 179 which are only 2 degrees away from eachother.
+            #if((self.object_stats[2][5] < 0 and self.object_stats[1][5] > 0) or (self.object_stats[2][5] > 0 and self.object_stats[1][5]<0)):
+            #    angular_velocity_t0 = (360 - (abs(self.object_stats[2][5]) + abs(self.object_stats[1][5])))/0.1
+            #else:
+            angular_velocity_t0 = (abs(self.object_stats[2][5]) - abs(self.object_stats[1][5]))/0.1
+            #if((self.object_stats[1][5] < 0 and self.object_stats[0][5] > 0) or (self.object_stats[1][5] > 0 and self.object_stats[0][5]<0)):
+            #    angular_velocity_t1 = (360 - (abs(self.object_stats[1][5]) + abs(self.object_stats[0][5])))/0.1
+            #else:
+            angular_velocity_t1 = (abs(self.object_stats[1][5]) - abs(self.object_stats[0][5]))/0.1
+            angular_acceleration = (angular_velocity_t0 - angular_velocity_t1)/0.1
+
+            self.binned_acceleration = int(min(self.acceleration_bins, key=lambda x:abs(x-acceleration))*(10**self.decimals))
+            self.binned_angle = min(self.angle_bins, key=lambda x:abs(x-self.object_stats[2][5]))
+            self.obj_state = [self.binned_acceleration, self.binned_angle]
+
+
+            # This is for finding bin limits only
+            if velocity_t0 > self.max_obj_stats[0]: self.max_obj_stats[0] = velocity_t0
+            if velocity_t0 < self.min_obj_stats[0]: self.min_obj_stats[0] = velocity_t0
+            if acceleration > self.max_obj_stats[1]: self.max_obj_stats[1] = acceleration
+            if acceleration < self.min_obj_stats[1]: self.min_obj_stats[1] = acceleration
+            if angular_velocity_t0 > self.max_obj_stats[2]: self.max_obj_stats[2] = angular_velocity_t0
+            if angular_velocity_t0 < self.min_obj_stats[2]: self.min_obj_stats[2] = angular_velocity_t0
+            if angular_acceleration > self.max_obj_stats[3]: self.max_obj_stats[3] = angular_acceleration
+            if angular_acceleration < self.min_obj_stats[3]: self.min_obj_stats[3] = angular_acceleration
+
+            print("[INFO] Angle: %0.2f" %self.object_stats[0][5])
+            print("[INFO] Velocity[0]: %0.2f m/s" % velocity_t0)
+            print("[INFO] Velocity[1]: %0.2f m/s" % velocity_t1)
+            print("[INFO] Acceleration: %0.5f m/s^2" % acceleration)
+            print("[INFO] Angular Velocity[0]: %0.2f deg/s" % angular_velocity_t0)
+            print("[INFO] Angular Velocity[1]: %0.2f deg/s" % angular_velocity_t1)
+            print("[INFO] Angular Acceleration: %0.5f deg/s^2" % angular_acceleration)
+
+    def store_state_message(self, message_codes, calculate):
+
+        if calculate:
+            # Create Dict Keys from message and state
+            message_key = [str(i) for i in message_codes]
+            message_key = ("".join(message_key))
+            state_key = [str(i) for i in self.obj_state]
+            state_key = ("".join(state_key))
+            # Increment the total counts
+            self.StateDict["count"] += 1
+            self.MsgDict["count"] += 1
+            # Add to StateDict and MessageDict
+            if message_key in self.MsgDict.keys():
+                # we have seen this message before so lets increment the total state count
+                self.MsgDict[message_key]["count"] += 1
+                if state_key in self.MsgDict[message_key].keys():
+                    # we have seen this message-state combo so lets increment the state count
+                    self.MsgDict[message_key][state_key] += 1
+                else:
+                    # we have not seen this message-state combo so lets add the state key and initialize at 1
+                    self.MsgDict[message_key][state_key] = 1
+            else:
+                # we have not seen this message before so we have to create a new dict under the message key
+                self.MsgDict[message_key] = {}
+                # we initialize the total state count to 1
+                self.MsgDict[message_key]["count"] = 1
+                # we add the state key and initialize the count to 1
+                self.MsgDict[message_key][state_key] = 1
+
+            if state_key in self.StateDict.keys():
+                # we have seen this state before so lets increment the total message count
+                self.StateDict[state_key]["count"] += 1
+                if message_key in self.StateDict[state_key].keys():
+                    # we have seen this state-message combo so lets increment the message count
+                    self.StateDict[state_key][message_key] += 1
+                else:
+                    # we have not seen this message before so lets add the message key and initialize to 1
+                    self.StateDict[state_key][message_key] = 1
+            else:
+                # we have not seen this state before so we have to create a new dict under the state key
+                self.StateDict[state_key] = {}
+                # we initialize the total message count to 1
+                self.StateDict[state_key]["count"] = 1
+                # we add the message key and initialize the count to 1
+                self.StateDict[state_key][message_key] = 1
+
+    def calculate_probabilities(self, message_code, obj_state):
+        message_key = [str(i) for i in message_codes]
+        message_key = ("".join(message_key))
+        state_key = [str(i) for i in obj_state]
+        state_key = ("".join(state_key))
+        # check if the message exists in the dict and the state exists in the message
+        if message_key in self.MsgDict.keys() and state_key in self.MsgDict[message_key].keys():
+            # check if the state exists in the dict and the message exists in the state
+            if state_key in self.StateDict.keys() and message_key in self.StateDict[state_key].keys():
+                probability_of_message = self.MsgDict[message_key]["count"] / self.MsgDict["count"]
+                probability_of_state = self.StateDict[state_key]["count"] / self.StateDict["count"]
+                probability_of_state_given_message = self.MsgDict[message_key][state_key] / self.MsgDict[message_key]["count"]
+                probability_of_message_given_state = self.StateDict[state_key][message_key] / self.self.StateDict[state_key]["count"]
+                return probability_of_message, probability_of_state, probability_of_message_given_state, probability_of_state_given_message
+        # The way this is set up, if one doesnt exist then the other will not exist and all probabilities are 0
+        else:
+            return 0, 0, 0, 0

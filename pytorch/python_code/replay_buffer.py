@@ -16,25 +16,39 @@ class ReplayBuffer():
         self.reward_memory = np.zeros((self.mem_size), dtype = np.float32)
         self.terminal_memory = np.zeros((self.mem_size), dtype = np.bool)
 
+
+
     def store_transition(self, state, action, reward, state_, done):
-        index = self.mem_ctr % self.mem_size
-        self.state_memory[index] = state
+        mem_index = self.mem_ctr % self.mem_size
+        self.state_memory[mem_index] = state
         if self.action_type == 'Discrete':
-            self.action_memory[index] = action[0]
+            self.action_memory[mem_index] = action[0]
         elif self.action_type == 'Continuous':
-            self.action_memory[index] = action[1][0:2]
-        self.reward_memory[index] = reward
-        self.new_state_memory[index] = state_
-        self.terminal_memory[index] = done
+            self.action_memory[mem_index] = action[1][0:2]
+        self.reward_memory[mem_index] = reward
+        self.new_state_memory[mem_index] = state_
+        self.terminal_memory[mem_index] = done
         self.mem_ctr += 1
 
-    def sample_buffer(self, batch_size):
+
+    def sample_buffer(self, batch_size, use_horizon, num_agents):
         max_mem = min(self.mem_ctr, self.mem_size)
-        batch = np.random.choice(max_mem, batch_size, replace = False)
-        states = self.state_memory[batch]
-        actions = self.action_memory[batch]
-        rewards = self.reward_memory[batch]
-        next_states = self.new_state_memory[batch]
-        dones = self.terminal_memory[batch]
+        if not use_horizon:
+            batch = np.random.choice(max_mem, batch_size, replace = False)
+            states = self.state_memory[batch]
+            actions = self.action_memory[batch]
+            rewards = self.reward_memory[batch]
+            next_states = self.new_state_memory[batch]
+            dones = self.terminal_memory[batch]
+        else:
+            max_mem -= batch_size*num_agents
+            batch_start = np.random.choice(max_mem)
+            batch_end = batch_start + num_agents * batch_size
+            batch_index = np.arange(batch_start, batch_end, num_agents)
+            states = self.state_memory[batch_index]
+            actions = self.action_memory[batch_index]
+            rewards = self.reward_memory[batch_index]
+            next_states = self.new_state_memory[batch_index]
+            dones = self.terminal_memory[batch_index]
 
         return states, actions, rewards, next_states, dones

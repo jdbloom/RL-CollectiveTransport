@@ -98,6 +98,8 @@ AVERAGE = np.average(reward)
 last_10_axis = np.arange(0, len(reward), 10)
 last_10_reward = [sum(reward[i:i + 10])/10
                   for i in last_10_axis[0:len(last_10_axis)-1]]
+for i in range(len(last_10_axis)-1):
+    print(last_10_axis[i], last_10_reward[i])
 if args.test:
     print('. . . Loading Baseline Data')
     file_names = []
@@ -131,6 +133,7 @@ if args.test:
         episode_rewards.append(r)
         #print(episode[0], r[0])
 
+
     base_reward = [row[0] for row in episode_rewards]
     base_AVERAGE = np.average(base_reward)
     base_last_10_axis = np.arange(0, len(base_reward), 10)
@@ -160,7 +163,7 @@ plt.scatter(np.arange(0, len(reward), 1), reward, c = 'darkturquoise', label = '
 #plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
 plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
-plt.ylim(-12000, 500)
+plt.ylim(-14000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")
 if args.test:

@@ -20,7 +20,7 @@ class DQN(nn.Module):
                  fc1_dims = 64, fc2_dims = 128, name = 'DQN'):
         super().__init__()
 
-        self.name = name        
+        self.name = name
 
         output_dims = num_ops_per_action**num_actions
 
@@ -28,7 +28,7 @@ class DQN(nn.Module):
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.fc3 = nn.Linear(fc2_dims, output_dims)
 
-        self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.loss = nn.MSELoss()
 
@@ -69,7 +69,7 @@ class DDQNComms(nn.Module):
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.fc3 = nn.Linear(fc2_dims, output_dims)
 
-        self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.loss = nn.MSELoss()
 
@@ -108,7 +108,7 @@ class DDQN(nn.Module):
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.fc3 = nn.Linear(fc2_dims, output_dims)
 
-        self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.loss = nn.MSELoss()
 
@@ -243,7 +243,7 @@ class TD3ActorNetwork(nn.Module):
         self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
         self.mu = nn.Linear(self.fc2_dims, self.n_actions)
 
-        self.optimizer = optim.Adam(self.parameters(), lr = alpha)
+        self.optimizer = optim.Adam(self.parameters(), lr = alpha, weight_decay = 1e-4)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
         self.to(self.device)
@@ -281,7 +281,7 @@ class TD3CriticNetwork(nn.Module):
         self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
         self.q1 = nn.Linear(self.fc2_dims, 1)
 
-        self.optimizer = optim.Adam(self.parameters(), lr = beta)
+        self.optimizer = optim.Adam(self.parameters(), lr = beta, weight_decay = 1e-4)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
         self.to(self.device)

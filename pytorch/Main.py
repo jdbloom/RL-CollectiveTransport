@@ -28,6 +28,9 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--plot_comms", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
 parser.add_argument("--model_path")
+parser.add_argument("--no_buffer", default = False, action = "store_true")
+parser.add_argument("--comms_mem", default = False, action = "store_true")
+parser.add_argument("--use_horizon", default = False, action = "store_true")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -71,6 +74,7 @@ print("  num_obs -------", Utility.params['num_obs'])
 print("  alphabet_size -", Utility.params['alphabet_size'])
 print("  num_actions ---", Utility.params['num_actions'])
 print("  num_stats -----", Utility.params['num_stats'])
+print("  Arena Limits--- X:[", Utility.params['arena_min_x'], Utility.params['arena_max_x'],"], Y:[" ,Utility.params['arena_min_y'], Utility.params['arena_max_y'],"]")
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
@@ -80,10 +84,14 @@ model = Agent.Agent(Utility.params['num_robots'],
                     num_ops_per_action = 3,
                     id = 0,
                     learning_scheme = learning_scheme,
+                    no_buffer = args.no_buffer,
+                    comms_memory = args.comms_mem,
                     comms_scheme = comms_scheme,
-                    alphabet_size = Utility.params['alphabet_size'])
+                    alphabet_size = Utility.params['alphabet_size'],
+                    use_horizon = args.use_horizon)
 if test_mode:
     model.load_model(model_file_path)
+
 
 # Send acknowledgment
 socket.send(b"ok")
@@ -97,6 +105,7 @@ exp_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
+
 experiment_start_time = time.time()
 
 while not exp_done:
@@ -115,7 +124,12 @@ while not exp_done:
             failures = Utility.parse_failures(msgs[2])
             rewards = Utility.parse_rewards(msgs[3])
             stats = Utility.parse_stats(msgs[4])
+            obj_stats = Utility.parse_obj_stats(msgs[5])
 
+            # Store the object stats in agent for learning later
+            model.store_object_stats(obj_stats, time_steps>2)
+
+            message_memory = [[] for i in range(Utility.params['num_robots'])]
             agent_states = []
             force_mags = []
             force_angs = []
@@ -123,7 +137,13 @@ while not exp_done:
 
             for i in range(Utility.params['num_robots']):
                 # append env observations and messages in inbox to make agent state
-                agent_state = model.make_agent_state(env_observations[i], i)
+                agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
+
+                if args.comms_scheme == 'Right':
+                    message_memory[i].append(msg.right_msg)
+                elif args.comms_scheme == 'Left':
+                    message_memory[i].append(msg.left_msg)
+
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
@@ -146,6 +166,10 @@ while not exp_done:
                     time_steps += 1
                     # Get Actions
                     #print('-----------------')
+
+                    if len(message_memory[0]) == Utility.params['num_robots']:
+                        for j in range(Utility.params['num_robots']):
+                            message_memory[j].pop(0)
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         #print("[DEBUG] Robot",i,"Failure:", failures[i])
@@ -160,8 +184,10 @@ while not exp_done:
                             model.schedule_message_to_all_contacts(i, message_num)
                             message_codes.append(message_num)
 
+
                     # Carry scheduled messages
                     if model.comms_scheme != 'None':
+                        model.store_state_message(message_codes, time_steps>3)
                         model.carry_mail()
 
                     old_failures = failures[:]
@@ -174,6 +200,11 @@ while not exp_done:
                     #print('[DEBUG] Received Failures ', failures)
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
+                    obj_stats = Utility.parse_obj_stats(msgs[5])
+
+                    # store object stats for learning later
+                    model.store_object_stats(obj_stats, time_steps>2)
+
 
                     # Store Transitions and Learn
                     new_agent_states = []
@@ -192,11 +223,15 @@ while not exp_done:
                         reward += (-0.1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
-                        new_agent_state = model.make_agent_state(env_observations[i], i)
+                        new_agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
+                        if args.comms_scheme == 'Right':
+                            message_memory[i].append(msg.right_msg)
+                        elif args.comms_scheme == 'Left':
+                            message_memory[i].append(msg.left_msg)
                         new_agent_states.append(new_agent_state)
 
                         if train_mode:
-                            if learning_scheme != 'None':
+                            if learning_scheme != 'None' and not args.no_buffer:
                                 if not old_failures[i] and not failures[i]:
                                     model.store_transition(agent_states[i],
                                                            (actions[i], actions_to_take[i]),
@@ -205,17 +240,38 @@ while not exp_done:
                                                            episode_done)
                                     if model.comms_scheme != 'None':
                                         model.store_comms_transition(agent_states[i],
-                                                                     (message_codes[i] - 1, None),
+                                                                     (message_codes[i], None),
                                                                      reward,
                                                                      new_agent_states[i],
                                                                      episode_done)
                         r.append(reward[0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
+                    #for i in range(Utility.params['num_robots']):
+                    #    print('[DEBUG] robot %i memory:'%i, message_memory[i])
+
                     if train_mode:
-                        model.learn()
+                        if args.no_buffer:
+                            sarsd = [np.array(agent_states, dtype = np.float32),
+                                     np.array(actions, dtype = np.int64),
+                                     np.array(r, dtype = np.float32),
+                                     np.array(new_agent_states, dtype = np.float32),
+                                     np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
+
+                            model.learn_no_buffer(sarsd)
+                        else:
+                            model.learn()
                         if model.comms_scheme != 'None':
-                            model.learn_comms()
+                            if args.no_buffer:
+                                sarsd = [np.array(agent_states, dtype = np.float32),
+                                         np.array(message_codes, dtype = np.int64),
+                                         np.array(r, dtype = np.float32),
+                                         np.array(new_agent_states, dtype = np.float32),
+                                         np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
+
+                                model.learn_no_buffer_comms(sarsd)
+                            else:
+                                model.learn_comms()
 
                     running_reward += np.average(r)
                     # Store New Observations
@@ -263,6 +319,10 @@ while not exp_done:
                             print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
                         running_reward = 0
+
+                        print("[INFO] Max Object Statistics: ", model.max_obj_stats)
+                        print("[INFO] Min Object Statistics: ", model.min_obj_stats)
+
                         # Send acknowledgment
                         socket.send(b"ok")
 print("[RUN TIME] Experiment: %.2f" % (time.time() - experiment_start_time))
