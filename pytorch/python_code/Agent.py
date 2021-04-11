@@ -37,9 +37,11 @@ class Agent():
         self.StateDict["count"] = 0
         self.MsgDict = {}
         self.MsgDict["count"] = 0
-        self.angle_bins = [i for i in range(360)]
-        self.decimals = 1
-        self.acceleration_bins = np.around(np.arange(-10, 10, (1/10**self.decimals)), self.decimals)
+        self.decimals = 2
+        min_max = 1.25
+        bins = 8
+        self.angle_bins = np.arange(0, 360, 360/bins)
+        self.acceleration_bins = np.around(np.arange(-min_max, min_max, bins), self.decimals)
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
@@ -493,7 +495,7 @@ class Agent():
 
         q_target = rewards + self.gamma*q_next[indices, max_actions]
 
-        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) # Add comms loss here
         loss.backward()
         self.q_eval.optimizer.step()
         self.learn_step_counter += 1
@@ -637,7 +639,7 @@ class Agent():
 
         q_target = rewards + self.gamma*q_next[indices, max_actions]
 
-        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device)
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device) # Add speaker loss
         loss.backward()
         self.q_comms_eval.optimizer.step()
 
@@ -742,6 +744,14 @@ class Agent():
         if self.comms_scheme != 'None':
             self.q_comms_eval.load_model(path)
 
+    def angle_difference(self, a1, a2):
+        diff = a1 - a2
+        while diff < -180.0:
+            diff += 360.0
+        while diff > 180.0:
+            diff -= 360
+        return diff
+
     def store_object_stats(self, obj_stats, calculate):
         # len = 3 is so that we can calculate velocity and acceleration
         # calculate is a flag that tracks based on episode time steps.
@@ -756,15 +766,10 @@ class Agent():
             velocity_t0 = math.sqrt((self.object_stats[2][0] - self.object_stats[1][0])**2 + (self.object_stats[2][1] - self.object_stats[1][1])**2)/0.1
             velocity_t1 = math.sqrt((self.object_stats[1][0] - self.object_stats[0][0])**2 + (self.object_stats[1][1] - self.object_stats[0][1])**2)/0.1
             acceleration = (velocity_t0 - velocity_t1)/0.1
-            # Need to handle the case where we have -179 and 179 which are only 2 degrees away from eachother.
-            #if((self.object_stats[2][5] < 0 and self.object_stats[1][5] > 0) or (self.object_stats[2][5] > 0 and self.object_stats[1][5]<0)):
-            #    angular_velocity_t0 = (360 - (abs(self.object_stats[2][5]) + abs(self.object_stats[1][5])))/0.1
-            #else:
-            angular_velocity_t0 = (abs(self.object_stats[2][5]) - abs(self.object_stats[1][5]))/0.1
-            #if((self.object_stats[1][5] < 0 and self.object_stats[0][5] > 0) or (self.object_stats[1][5] > 0 and self.object_stats[0][5]<0)):
-            #    angular_velocity_t1 = (360 - (abs(self.object_stats[1][5]) + abs(self.object_stats[0][5])))/0.1
-            #else:
-            angular_velocity_t1 = (abs(self.object_stats[1][5]) - abs(self.object_stats[0][5]))/0.1
+
+            angular_velocity_t0 = self.angle_difference(self.object_stats[2][5], self.object_stats[1][5])/0.1
+
+            angular_velocity_t1 = self.angle_difference(self.object_stats[1][5], self.object_stats[0][5])/0.1
             angular_acceleration = (angular_velocity_t0 - angular_velocity_t1)/0.1
 
             self.binned_acceleration = int(min(self.acceleration_bins, key=lambda x:abs(x-acceleration))*(10**self.decimals))
@@ -782,13 +787,16 @@ class Agent():
             if angular_acceleration > self.max_obj_stats[3]: self.max_obj_stats[3] = angular_acceleration
             if angular_acceleration < self.min_obj_stats[3]: self.min_obj_stats[3] = angular_acceleration
 
-            print("[INFO] Angle: %0.2f" %self.object_stats[0][5])
-            print("[INFO] Velocity[0]: %0.2f m/s" % velocity_t0)
-            print("[INFO] Velocity[1]: %0.2f m/s" % velocity_t1)
-            print("[INFO] Acceleration: %0.5f m/s^2" % acceleration)
-            print("[INFO] Angular Velocity[0]: %0.2f deg/s" % angular_velocity_t0)
-            print("[INFO] Angular Velocity[1]: %0.2f deg/s" % angular_velocity_t1)
-            print("[INFO] Angular Acceleration: %0.5f deg/s^2" % angular_acceleration)
+            #print("[INFO] Angle: %0.2f" %self.object_stats[0][5])
+            #print("[INFO] Velocity[0]: %0.2f m/s" % velocity_t0)
+            #print("[INFO] Velocity[1]: %0.2f m/s" % velocity_t1)
+            #print("[INFO] Acceleration: %0.5f m/s^2" % acceleration)
+            #print("[INFO] Angular Velocity[0]: %0.2f deg/s" % angular_velocity_t0)
+            #print("[INFO] Angular Velocity[1]: %0.2f deg/s" % angular_velocity_t1)
+            #print("[INFO] Angular Acceleration: %0.5f deg/s^2" % angular_acceleration)
+
+    def reset_obj_stats(self):
+        self.object_stats = []
 
     def store_state_message(self, message_codes, calculate):
 
@@ -845,11 +853,12 @@ class Agent():
         if message_key in self.MsgDict.keys() and state_key in self.MsgDict[message_key].keys():
             # check if the state exists in the dict and the message exists in the state
             if state_key in self.StateDict.keys() and message_key in self.StateDict[state_key].keys():
-                probability_of_message = self.MsgDict[message_key]["count"] / self.MsgDict["count"]
-                probability_of_state = self.StateDict[state_key]["count"] / self.StateDict["count"]
-                probability_of_state_given_message = self.MsgDict[message_key][state_key] / self.MsgDict[message_key]["count"]
-                probability_of_message_given_state = self.StateDict[state_key][message_key] / self.self.StateDict[state_key]["count"]
+                probability_of_message = float(self.MsgDict[message_key]["count"]) / float(self.MsgDict["count"])
+                probability_of_state = float(self.StateDict[state_key]["count"]) / float(self.StateDict["count"])
+                probability_of_state_given_message = float(self.MsgDict[message_key][state_key]) / float(self.MsgDict[message_key]["count"])
+                probability_of_message_given_state = float(self.StateDict[state_key][message_key]) / float(self.self.StateDict[state_key]["count"])
                 return probability_of_message, probability_of_state, probability_of_message_given_state, probability_of_state_given_message
+            else: print("Bug in Storing Probabilities")
         # The way this is set up, if one doesnt exist then the other will not exist and all probabilities are 0
         else:
             return 0, 0, 0, 0

@@ -319,7 +319,7 @@ while not exp_done:
                             print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
                         running_reward = 0
-
+                        model.reset_obj_stats()
                         print("[INFO] Max Object Statistics: ", model.max_obj_stats)
                         print("[INFO] Min Object Statistics: ", model.min_obj_stats)
 
