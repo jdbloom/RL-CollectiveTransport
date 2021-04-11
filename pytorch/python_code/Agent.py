@@ -101,7 +101,7 @@ class Agent():
 
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
         if self.comms_scheme == 'None':
-            return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message))
+            return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
         #import ipdb; ipdb.set_trace()
         if not comms_memory:
