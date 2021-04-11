@@ -20,7 +20,7 @@ class DQN(nn.Module):
                  fc1_dims = 64, fc2_dims = 128, name = 'DQN'):
         super().__init__()
 
-        self.name = name        
+        self.name = name
 
         output_dims = num_ops_per_action**num_actions
 
@@ -96,7 +96,8 @@ class DDQNComms(nn.Module):
 ############################################################################
 class DDQN(nn.Module):
     def __init__(self, *, lr = None, num_actions = None, observation_size = None,
-                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN'):
+                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128,
+                 name = 'DDQN', dropout_rate=0.2):
         super().__init__()
 
         self.name = name
@@ -105,10 +106,14 @@ class DDQN(nn.Module):
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
 
         self.fc1 = nn.Linear(observation_size, fc1_dims)
+        #self.bn1 = nn.BatchNorm1d(fc1_dims)
+        #self.dp1 = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
+        #self.bn2 = nn.BatchNorm1d(fc2_dims)
+        #self.dp2 = nn.Dropout(dropout_rate)
         self.fc3 = nn.Linear(fc2_dims, output_dims)
 
-        self.optimizer = optim.RMSprop(self.parameters(), lr = lr)
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay=1e-4)
 
         self.loss = nn.MSELoss()
 
@@ -117,9 +122,17 @@ class DDQN(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-
+        #import ipdb; ipdb.set_trace()
         x = F.relu(self.fc1(state))
+        #l1=self.fc1(state)
+        #act1=l1*(T.tanh(F.softplus(l1))) #mish
+        #bn1=self.bn1(act1)
+        #dp1=self.dp1(bn1)
         x1 = F.relu(self.fc2(x))
+        #l2=self.fc2(act1)
+        #act2=l2*(T.tanh(F.softplus(l2))) #mish
+        #bn2=self.bn2(act2)
+        #dp2=self.dp2(bn2)
         actions = self.fc3(x1)
         return actions
 

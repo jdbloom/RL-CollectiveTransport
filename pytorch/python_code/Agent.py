@@ -318,7 +318,11 @@ class Agent():
     def DQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            # need to turn off batch norm and dropout for network evaluation (batch size = 1)
+            self.q_eval.eval()
             action_values = self.q_eval.forward(state)
+            # need to turn on batch norm and dropout for network training
+            self.q_eval.train()
             action = T.argmax(action_values[0]).item()
         else:
             action = np.random.choice(self.action_space)
@@ -328,7 +332,11 @@ class Agent():
     def DDQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            # need to turn off batch norm and dropout for network evaluation (batch size = 1)
+            #self.q_eval.eval()
             action_values = self.q_eval.forward(state)
+            # need to turn on batch norm and dropout for network training
+            #self.q_eval.train()
             action = T.argmax(action_values[0]).item()
         else:
             action = np.random.choice(self.action_space)
@@ -448,7 +456,6 @@ class Agent():
         indices = np.arange(self.batch_size)
 
         q_pred = self.q_eval(states)[indices, actions]
-
         q_next = self.q_next(states_)
         q_eval = self.q_eval(states_)
 
