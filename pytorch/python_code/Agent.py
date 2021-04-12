@@ -100,6 +100,7 @@ class Agent():
         return msg
 
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
+        # env_obs=self.normalize_obs(env_obs)
         if self.comms_scheme == 'None':
             return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
@@ -365,7 +366,11 @@ class Agent():
     def DDQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
             state = T.tensor([observation], dtype = T.float).to(self.q_eval.device)
+            # need to turn off batch norm and dropout for network evaluation (batch size = 1)
+            self.q_eval.eval()
             action_values = self.q_eval.forward(state)
+            # need to turn on batch norm and dropout for network training
+            self.q_eval.train()
             action = T.argmax(action_values[0]).item()
         else:
             action = np.random.choice(self.action_space)
