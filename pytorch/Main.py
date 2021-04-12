@@ -88,7 +88,8 @@ model = Agent.Agent(Utility.params['num_robots'],
                     comms_memory = args.comms_mem,
                     comms_scheme = comms_scheme,
                     alphabet_size = Utility.params['alphabet_size'],
-                    use_horizon = args.use_horizon)
+                    use_horizon = args.use_horizon,
+                    use_entropy = True)
 if test_mode:
     model.load_model(model_file_path)
 
@@ -105,7 +106,7 @@ exp_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
-
+messaging_frequency = 10
 experiment_start_time = time.time()
 
 while not exp_done:
@@ -161,15 +162,17 @@ while not exp_done:
                     reward = []
                     actions = []
                     actions_to_take = []
-                    messages = []
-                    message_codes = []
                     time_steps += 1
+                    if (time_steps-1)%messaging_frequency == 0:
+                        messages = []
+                        message_codes = []
                     # Get Actions
                     #print('-----------------')
 
                     if len(message_memory[0]) == Utility.params['num_robots']:
                         for j in range(Utility.params['num_robots']):
                             message_memory[j].pop(0)
+
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         #print("[DEBUG] Robot",i,"Failure:", failures[i])
@@ -179,15 +182,16 @@ while not exp_done:
                         #print(i, action)
                         # Choose a message
                         if model.comms_scheme != 'None':
-                            message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
+                            if (time_steps-1)%messaging_frequency == 0:
+                                message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
+                                message_codes.append(message_num)
                             # Schedule the message to neighbors
-                            model.schedule_message_to_all_contacts(i, message_num)
-                            message_codes.append(message_num)
+                            model.schedule_message_to_all_contacts(i, message_codes[i])
+
 
 
                     # Carry scheduled messages
                     if model.comms_scheme != 'None':
-                        model.store_state_message(message_codes, time_steps>3)
                         model.carry_mail()
 
                     old_failures = failures[:]
@@ -204,6 +208,8 @@ while not exp_done:
 
                     # store object stats for learning later
                     model.store_object_stats(obj_stats, time_steps>2)
+                    if model.comms_scheme != 'None':
+                        model.store_state_message(message_codes, time_steps>2)
 
 
                     # Store Transitions and Learn
@@ -230,20 +236,27 @@ while not exp_done:
                             message_memory[i].append(msg.left_msg)
                         new_agent_states.append(new_agent_state)
 
-                        if train_mode:
-                            if learning_scheme != 'None' and not args.no_buffer:
-                                if not old_failures[i] and not failures[i]:
-                                    model.store_transition(agent_states[i],
-                                                           (actions[i], actions_to_take[i]),
-                                                           reward,
-                                                           new_agent_states[i],
-                                                           episode_done)
-                                    if model.comms_scheme != 'None':
-                                        model.store_comms_transition(agent_states[i],
-                                                                     (message_codes[i], None),
-                                                                     reward,
-                                                                     new_agent_states[i],
-                                                                     episode_done)
+                        if time_steps > 2:
+                            if train_mode:
+                                if learning_scheme != 'None' and not args.no_buffer:
+                                    if not old_failures[i] and not failures[i]:
+                                        if model.comms_scheme == 'None':
+                                            message_codes = None
+                                        model.store_transition(agent_states[i],
+                                                               (actions[i], actions_to_take[i]),
+                                                               reward,
+                                                               new_agent_states[i],
+                                                               episode_done,
+                                                               state_vec = model.obj_state,
+                                                               message_vec = message_codes)
+                                        if model.comms_scheme != 'None':
+                                            model.store_comms_transition(agent_states[i],
+                                                                         (message_codes[i], None),
+                                                                         reward,
+                                                                         new_agent_states[i],
+                                                                         episode_done,
+                                                                         state_vec = model.obj_state,
+                                                                         message_vec = message_codes)
                         r.append(reward[0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
@@ -296,7 +309,7 @@ while not exp_done:
                     if args.plot_comms:
                         viz(message_codes, time_steps)
 
-                    message_codes = []
+
                     if episode_done:
                         run_time = time.time() - exp_start_time
                         print('[RUN TIME] %.2f' % run_time)

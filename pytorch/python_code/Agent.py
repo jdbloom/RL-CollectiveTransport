@@ -17,7 +17,7 @@ class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
                  num_ops_per_action, id, learning_scheme, no_buffer,
                  comms_memory, comms_scheme = "None", alphabet_size=4,
-                 min_max_action = 1, use_horizon = False):
+                 min_max_action = 1, use_horizon = False, use_entropy=False):
         self.id = id
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -33,6 +33,7 @@ class Agent():
         self.max_obj_stats = np.zeros(4)
 
         # Dictionaries and binning for loss function calculations
+        self.use_entropy = use_entropy
         self.StateDict = {}
         self.StateDict["count"] = 0
         self.MsgDict = {}
@@ -40,11 +41,12 @@ class Agent():
         self.decimals = 2
         min_max = 1.25
         bins = 8
-        self.angle_bins = np.arange(0, 360, 360/bins)
-        self.acceleration_bins = np.around(np.arange(-min_max, min_max, bins), self.decimals)
+        self.angle_bins = np.arange(-180, 180, 360/bins)
+        self.acceleration_bins = np.around(np.arange(-min_max, min_max, (min_max*2)/bins), self.decimals)
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
+
 
 
         self.make_comms_scheme()
@@ -186,7 +188,10 @@ class Agent():
         print('Communication Network:')
         print(self.q_comms_eval)
         print(self.q_comms_next)
-        self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
+        if self.use_entropy:
+            self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete', 2, self.num_agents)
+        else:
+            self.comms_memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
     def make_DQN(self, comms_memory):
         #define networks for DQN
@@ -219,8 +224,10 @@ class Agent():
         self.q_next = DDQN(**actions_nn_args)
         print(self.q_eval)
         print(self.q_next)
-
-        self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
+        if self.use_entropy:
+            self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete', 2, self.num_agents)
+        else:
+            self.memory = ReplayBuffer(100000, obs_size, 1, 'Discrete')
 
     def make_DDPG(self):
         #define networks for DDPG
@@ -480,7 +487,7 @@ class Agent():
 
         self.replace_target_network()
 
-        states, actions, rewards, states_, dones = self.sample_memory(network = self.q_eval)
+        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.q_eval, get_entropy = self.use_entropy)
 
         indices = np.arange(self.batch_size)
 
@@ -494,8 +501,11 @@ class Agent():
         q_next[dones] = 0.0
 
         q_target = rewards + self.gamma*q_next[indices, max_actions]
+        if self.use_entropy:
+            listener_loss = self.calculate_entropy_loss(state_vec, message_vec, type = 'listener')
+        else: listener_loss = 0
 
-        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) # Add comms loss here
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) + listener_loss
         loss.backward()
         self.q_eval.optimizer.step()
         self.learn_step_counter += 1
@@ -624,7 +634,7 @@ class Agent():
 
         self.replace_target_comms_network()
 
-        states, message, rewards, states_, dones = self.sample_comms_memory()
+        states, message, rewards, states_, dones, state_vec, message_vec = self.sample_comms_memory(get_entropy = self.use_entropy)
 
         indices = np.arange(self.batch_size)
 
@@ -639,7 +649,10 @@ class Agent():
 
         q_target = rewards + self.gamma*q_next[indices, max_actions]
 
-        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device) # Add speaker loss
+        if self.use_entropy:
+            speaker_loss = self.calculate_entropy_loss(state_vec, message_vec, type = 'speaker')
+        else: speaker_loss = 0
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device) + speaker_loss
         loss.backward()
         self.q_comms_eval.optimizer.step()
 
@@ -676,34 +689,50 @@ class Agent():
         loss.backward()
         self.q_comms_eval.optimizer.step()
 
-    def store_transition(self, state, action, reward, state_, done):
-        self.memory.store_transition(state, action, reward, state_, done)
+    def store_transition(self, state, action, reward, state_, done, state_vec = None, message_vec = None):
+        if state_vec is not None and message_vec is not None:
+            self.memory.store_transition(state, action, reward, state_, done, state_vec, message_vec)
+        else:
+            self.memory.store_transition(state, action, reward, state_, done)
 
-    def store_comms_transition(self, state, action, reward, state_, done):
-        self.comms_memory.store_transition(state, action, reward, state_, done)
+    def store_comms_transition(self, state, action, reward, state_, done, state_vec=None, message_vec=None):
+        if state_vec is not None and message_vec is not None:
+            self.comms_memory.store_transition(state, action, reward, state_, done, state_vec, message_vec)
+        else:
+            self.comms_memory.store_transition(state, action, reward, state_, done)
 
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
 
-    def sample_memory(self, network):
-        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+    def sample_memory(self, network, get_entropy = False):
+        if get_entropy:
+            state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
+        else:
+            state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+            state_vec = None
+            message_vec = None
         states = T.tensor(state).to(network.device)
         actions = T.tensor(action).to(network.device)
         rewards = T.tensor(reward).to(network.device)
         states_ = T.tensor(new_state).to(network.device)
         dones = T.tensor(done).to(network.device)
+        return states, actions, rewards, states_, dones, state_vec, message_vec
 
-        return states, actions, rewards, states_, dones
-
-    def sample_comms_memory(self):
-        state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+    def sample_comms_memory(self, get_entropy = False):
+        if get_entropy:
+            state, action, reward, new_state, done, state_vec, message_vec = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy = get_entropy)
+        else:
+            state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+            state_vec = None
+            message_vec = None
         states = T.tensor(state).to(self.q_comms_eval.device)
         actions = T.tensor(action).to(self.q_comms_eval.device)
         rewards = T.tensor(reward).to(self.q_comms_eval.device)
         states_ = T.tensor(new_state).to(self.q_comms_eval.device)
         dones = T.tensor(done).to(self.q_comms_eval.device)
 
-        return states, actions, rewards, states_, dones
+        return states, actions, rewards, states_, dones, state_vec, message_vec
+
 
     def save_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
@@ -773,7 +802,7 @@ class Agent():
             angular_acceleration = (angular_velocity_t0 - angular_velocity_t1)/0.1
 
             self.binned_acceleration = int(min(self.acceleration_bins, key=lambda x:abs(x-acceleration))*(10**self.decimals))
-            self.binned_angle = min(self.angle_bins, key=lambda x:abs(x-self.object_stats[2][5]))
+            self.binned_angle = int(min(self.angle_bins, key=lambda x:abs(x-self.object_stats[2][5])))
             self.obj_state = [self.binned_acceleration, self.binned_angle]
 
 
@@ -799,7 +828,6 @@ class Agent():
         self.object_stats = []
 
     def store_state_message(self, message_codes, calculate):
-
         if calculate:
             # Create Dict Keys from message and state
             message_key = [str(i) for i in message_codes]
@@ -845,7 +873,7 @@ class Agent():
                 self.StateDict[state_key][message_key] = 1
 
     def calculate_probabilities(self, message_code, obj_state):
-        message_key = [str(i) for i in message_codes]
+        message_key = [str(i) for i in message_code]
         message_key = ("".join(message_key))
         state_key = [str(i) for i in obj_state]
         state_key = ("".join(state_key))
@@ -856,9 +884,34 @@ class Agent():
                 probability_of_message = float(self.MsgDict[message_key]["count"]) / float(self.MsgDict["count"])
                 probability_of_state = float(self.StateDict[state_key]["count"]) / float(self.StateDict["count"])
                 probability_of_state_given_message = float(self.MsgDict[message_key][state_key]) / float(self.MsgDict[message_key]["count"])
-                probability_of_message_given_state = float(self.StateDict[state_key][message_key]) / float(self.self.StateDict[state_key]["count"])
+                probability_of_message_given_state = float(self.StateDict[state_key][message_key]) / float(self.StateDict[state_key]["count"])
                 return probability_of_message, probability_of_state, probability_of_message_given_state, probability_of_state_given_message
             else: print("Bug in Storing Probabilities")
         # The way this is set up, if one doesnt exist then the other will not exist and all probabilities are 0
         else:
+            print("Message Key", message_key, 'or State Key', state_key, 'Does Not Exist')
             return 0, 0, 0, 0
+
+    def calculate_entropy_loss(self, state_vec, message_vec, type):
+        p_m =[]
+        p_s = []
+        p_m_s = []
+        p_s_m = []
+        for i in range(message_vec.shape[0]):
+            p1, p2, p3, p4 = self.calculate_probabilities(message_vec[i], state_vec[i])
+            p_m.append(p1)
+            p_s.append(p2)
+            p_m_s.append(p3)
+            p_s_m.append(p4)
+        if type == 'speaker':
+            speaker_loss = 0
+            for i in range(message_vec.shape[0]):
+                speaker_loss += p_m[i]*math.log(p_m_s[i])
+            return speaker_loss
+        elif type == 'listener':
+            listener_loss = 0
+            for i in range(state_vec.shape[0]):
+                listener_loss += p_s[i]*math.log(p_s_m[i])
+            return listener_loss
+        else:
+            raise Exception('UNKNOWN ENTROPY LOSS'+type)
