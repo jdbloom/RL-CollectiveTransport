@@ -59,7 +59,7 @@ class ReplayBuffer():
                 states_vec, messages_vec = self.entropy_memory.sample_buffer(batch_start, use_horizon, batch_end)
         if get_entropy:
             return states, actions, rewards, next_states, dones, states_vec, messages_vec
-        return states, actions, rewards, next_states, dones
+        return states, actions, rewards, next_states, dones, 0, 0
 
     class EntropyBuffer():
         def __init__(self, max_size, state_size, num_agents):

@@ -466,7 +466,7 @@ class Agent():
 
         self.replace_target_network()
 
-        states, actions, rewards, states_, dones = self.sample_memory(network = self.q_eval)
+        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.q_eval)
 
         indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
 
@@ -556,7 +556,7 @@ class Agent():
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
 
-        states, actions, rewards, states_, dones = self.sample_memory(network = self.actor)
+        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
         target_actions = self.target_actor(states_)
         q_value_ = self.target_critic([states_, target_actions])
         q_value_[dones] = 0.0
@@ -585,7 +585,7 @@ class Agent():
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
 
-        states, actions, rewards, states_, dones = self.sample_memory(network = self.target_actor)
+        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.target_actor)
 
         target_actions = self.target_actor.forward(states_)
         target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
