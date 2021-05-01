@@ -120,7 +120,6 @@ class Agent():
         return agent_state, msg
 
     def normalize_obs(self, env_obs):
-        import ipdb; ipdb.set_trace()
         env_obs[0] = env_obs[0]/self.normalization['distance']
         env_obs[1] = (env_obs[1]+180)/self.normalization['angle']
         env_obs[2] = (env_obs[2]+10)/self.normalization['wheel_speeds']
@@ -725,7 +724,7 @@ class Agent():
         if get_entropy:
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
         else:
-            state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+            state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
             state_vec = None
             message_vec = None
         states = T.tensor(state).to(network.device)

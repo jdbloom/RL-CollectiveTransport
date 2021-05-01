@@ -31,6 +31,7 @@ parser.add_argument("--model_path")
 parser.add_argument("--no_buffer", default = False, action = "store_true")
 parser.add_argument("--comms_mem", default = False, action = "store_true")
 parser.add_argument("--use_horizon", default = False, action = "store_true")
+parser.add_argument("--use_entropy", default = False, action = "store_true")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -91,7 +92,7 @@ model = Agent.Agent(Utility.params['num_robots'],
                     comms_scheme = comms_scheme,
                     alphabet_size = Utility.params['alphabet_size'],
                     use_horizon = args.use_horizon,
-                    use_entropy = True)
+                    use_entropy = args.use_entropy)
 if test_mode:
     model.load_model(model_file_path)
 
