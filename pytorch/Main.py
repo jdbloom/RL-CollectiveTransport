@@ -74,9 +74,10 @@ print("  num_obs -------", Utility.params['num_obs'])
 print("  alphabet_size -", Utility.params['alphabet_size'])
 print("  num_actions ---", Utility.params['num_actions'])
 print("  num_stats -----", Utility.params['num_stats'])
-print("  Arena Limits--- X:[", Utility.params['arena_min_x'], Utility.params['arena_max_x'],"], Y:[" ,Utility.params['arena_min_y'], Utility.params['arena_max_y'],"]")
 # Path to save data
 data_file_path = recording_path + '/Data/'
+
+normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 
 model = Agent.Agent(Utility.params['num_robots'],
                     Utility.params['num_obs'],
@@ -86,6 +87,7 @@ model = Agent.Agent(Utility.params['num_robots'],
                     learning_scheme = learning_scheme,
                     no_buffer = args.no_buffer,
                     comms_memory = args.comms_mem,
+                    normalization = normalization,
                     comms_scheme = comms_scheme,
                     alphabet_size = Utility.params['alphabet_size'],
                     use_horizon = args.use_horizon,

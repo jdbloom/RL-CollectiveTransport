@@ -5,8 +5,8 @@ import numpy as np
 class ZMQ_Utility:
     def __init__(self):
         self.PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats', 'alphabet_size',
-                              'arena_max_y', 'arena_min_y', 'arena_max_x', 'arena_min_x']
-        self.PARAMS_FMT = '9f'
+                              'distance_to_goal_normalization_factor']
+        self.PARAMS_FMT = '6f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',

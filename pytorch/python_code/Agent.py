@@ -16,7 +16,7 @@ Loss = nn.MSELoss()
 class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
                  num_ops_per_action, id, learning_scheme, no_buffer,
-                 comms_memory, comms_scheme = "None", alphabet_size=4,
+                 comms_memory, normalization, comms_scheme = "None", alphabet_size=4,
                  min_max_action = 1, use_horizon = False, use_entropy=False):
         self.id = id
         self.num_agents = num_agents
@@ -31,6 +31,7 @@ class Agent():
         self.object_stats = []
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
         self.max_obj_stats = np.zeros(4)
+        self.normalization = normalization
 
         # Dictionaries and binning for loss function calculations
         self.use_entropy = use_entropy
@@ -102,7 +103,7 @@ class Agent():
         return msg
 
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
-        # env_obs=self.normalize_obs(env_obs)
+        env_obs=self.normalize_obs(env_obs)
         if self.comms_scheme == 'None':
             return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
@@ -117,6 +118,17 @@ class Agent():
                 zeros_to_add = (self.num_observations + self.num_agents * self.alphabet_size) - len(agent_state)
                 agent_state = np.concatenate((agent_state, np.zeros(zeros_to_add)))
         return agent_state, msg
+
+    def normalize_obs(self, env_obs):
+        import ipdb; ipdb.set_trace()
+        env_obs[0] = env_obs[0]/self.normalization['distance']
+        env_obs[1] = (env_obs[1]+180)/self.normalization['angle']
+        env_obs[2] = (env_obs[2]+10)/self.normalization['wheel_speeds']
+        env_obs[3] = (env_obs[3]+10)/self.normalization['wheel_speeds']
+        env_obs[4] = env_obs[4]
+        env_obs[5] = env_obs[2] = (env_obs[5]+180)/self.normalization['angle']
+        env_obs[6] = env_obs[6]/self.normalization['distance']
+        return env_obs
 
     def clear_agent_inbox(self, agent_id):
         self.mailbox.clear_inbox(agent_id)

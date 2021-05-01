@@ -856,10 +856,32 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unNumActions);
    vecParams.push_back(m_unNumStats);
    vecParams.push_back(m_unAlphabetSize);
-   vecParams.push_back(GetSpace().GetArenaLimits().GetMax().GetY());
-   vecParams.push_back(GetSpace().GetArenaLimits().GetMin().GetY());
-   vecParams.push_back(GetSpace().GetArenaLimits().GetMax().GetX());
-   vecParams.push_back(GetSpace().GetArenaLimits().GetMin().GetX());
+   /* Calculate normalizing constants*/
+   float maxY = GetSpace().GetArenaLimits().GetMax().GetY();
+   float minY = GetSpace().GetArenaLimits().GetMin().GetY();
+   float maxX = GetSpace().GetArenaLimits().GetMax().GetX();
+   float minX = GetSpace().GetArenaLimits().GetMin().GetX();
+   float goalX = m_cGoal.GetX();
+   float goalY = m_cGoal.GetY();
+   /* normalize distance to goal by looking at the max distance to the goal possible*/
+   /* calculate distance to goal from all corners and then compare to get the max */
+   float dist1 = Sqrt((maxX - goalX)*(maxX - goalX)+(maxY - goalY)*(maxY - goalY));
+   float dist2 = Sqrt((minX - goalX)*(minX - goalX)+(maxY - goalY)*(maxY - goalY));
+   float dist3 = Sqrt((maxX - goalX)*(maxX - goalX)+(minY - goalY)*(minY - goalY));
+   float dist4 = Sqrt((minX - goalX)*(minX - goalX)+(minY - goalY)*(minY - goalY));
+   float maxDist = dist1;
+   if(dist2 > maxDist){
+     maxDist = dist2;
+   }
+   if(dist3 > maxDist){
+     maxDist = dist3;
+   }
+   if(dist4 > maxDist){
+     maxDist = dist4;
+   }
+   vecParams.push_back(maxDist);
+
+
 
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);

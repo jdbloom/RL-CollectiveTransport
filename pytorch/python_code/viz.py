@@ -146,15 +146,28 @@ if args.test:
 
 episode_fail = 0
 episode_struggle = 0
+end_episode_fail = 0
+rolling_fail = 0
+rolling = []
+rolling_x = []
 for i in range(len(reward)):
     if reward[i] < -8000:
         episode_fail += 1
+        rolling_fail += 1
+        if i > 599:
+            end_episode_fail += 1
     elif reward[i] < -3000:
         episode_struggle += 1
+    if i % 10 == 0:
+        rolling.append(rolling_fail/10)
+        rolling_x.append(i)
+        rolling_fail = 0
 
 print('. . . Plotting')
-
+gate_x = np.arange(49, 850, 50)
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+for i in range(gate_x.shape[0]):
+    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
 plt.title(args.figure_name)
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
@@ -166,6 +179,16 @@ plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
 plt.ylim(-14000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")
+
+plt.clf()
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.plot(rolling_x, rolling, c='r')
+for i in range(gate_x.shape[0]):
+    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
+plt.title(args.figure_name+'_rolling_failure_tracking')
+plt.ylim(0, 1)
+plt.savefig(args.figure_path+args.figure_name+"_rolling_failure_tracking"+".png")
+
 if args.test:
     plt.clf()
     plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
@@ -231,6 +254,7 @@ if args.test:
 print('Failure Episodes:', episode_fail)
 print('Struggling Episodes:', episode_struggle)
 print('Percentage Failure: %.2f' % (episode_fail*100/len(reward)))
+print('Percentage Failure after ep 600: %.2f' % (end_episode_fail*100/(len(reward)-600)))
 if args.test:
     print('Base Failure Episodes:', base_fail)
     print('Base Percentage Failure: %.2f' % (base_fail*100/len(base_reward)))
