@@ -109,7 +109,7 @@ exp_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
-messaging_frequency = 10
+messaging_frequency = 1
 experiment_start_time = time.time()
 
 while not exp_done:
@@ -201,6 +201,7 @@ while not exp_done:
                     # Take Step
                     socket.send(Utility.serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
+
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
                     env_observations = Utility.parse_obs(msgs[1])
                     failures = Utility.parse_failures(msgs[2])

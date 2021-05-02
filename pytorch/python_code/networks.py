@@ -105,10 +105,10 @@ class DDQN(nn.Module):
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
 
         self.fc1 = nn.Linear(observation_size, fc1_dims)
-        self.bn1 = nn.BatchNorm1d(fc1_dims)
+        #self.bn1 = nn.BatchNorm1d(fc1_dims)
         #self.dp1 = nn.Dropout(0.2)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
-        self.bn2 = nn.BatchNorm1d(fc2_dims)
+        #self.bn2 = nn.BatchNorm1d(fc2_dims)
         #self.dp2 = nn.Dropout(0.2)
         self.fc3 = nn.Linear(fc2_dims, output_dims)
 

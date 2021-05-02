@@ -103,7 +103,7 @@ class Agent():
         return msg
 
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
-        env_obs=self.normalize_obs(env_obs)
+        #env_obs=self.normalize_obs(env_obs)
         if self.comms_scheme == 'None':
             return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
@@ -499,6 +499,7 @@ class Agent():
     def DDQN_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return
+
         self.q_eval.optimizer.zero_grad()
 
         self.replace_target_network()
@@ -725,8 +726,7 @@ class Agent():
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
         else:
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
-            state_vec = None
-            message_vec = None
+
         states = T.tensor(state).to(network.device)
         actions = T.tensor(action).to(network.device)
         rewards = T.tensor(reward).to(network.device)

@@ -166,8 +166,8 @@ for i in range(len(reward)):
 print('. . . Plotting')
 gate_x = np.arange(49, 850, 50)
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-for i in range(gate_x.shape[0]):
-    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
+#for i in range(gate_x.shape[0]):
+#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
 plt.title(args.figure_name)
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
