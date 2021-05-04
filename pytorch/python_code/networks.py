@@ -121,17 +121,18 @@ class DDQN(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        #x = F.relu(self.fc1(state))
-        l1=self.fc1(state)
-        act1=l1*(T.tanh(F.softplus(l1))) #mish
+        x = F.relu(self.fc1(state))
+        #l1=self.fc1(state)
+        #act1=l1*(T.tanh(F.softplus(l1))) #mish
         #bn1=self.bn1(act1)
         #dp1=self.dp1(bn1)
-        #x1 = F.relu(self.fc2(x))
-        l2=self.fc2(act1)
-        act2=l2*(T.tanh(F.softplus(l2))) #mish
+        x1 = F.relu(self.fc2(x))
+        #l2=self.fc2(act1)
+        #act2=l2*(T.tanh(F.softplus(l2))) #mish
         #bn2=self.bn2(act2)
         #dp2=self.dp2(bn2)
-        actions = self.fc3(act2)
+        #actions = self.fc3(act2)
+        actions = self.fc3(x1)
         return actions
 
     def save_model(self, file_path):

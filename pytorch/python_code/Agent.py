@@ -522,7 +522,7 @@ class Agent():
             listener_loss = self.calculate_entropy_loss(state_vec, message_vec, type = 'listener')
         else: listener_loss = 0
 
-        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) + listener_loss
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)# + listener_loss
         loss.backward()
         self.q_eval.optimizer.step()
         self.learn_step_counter += 1
