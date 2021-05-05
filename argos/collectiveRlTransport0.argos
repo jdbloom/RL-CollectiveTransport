@@ -56,7 +56,7 @@
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "4"
                   proximity_range = "1"
-                  num_obstacles = "0"
+                  num_obstacles = "2"
                   use_gate = "0"
                   gate_curriculum = "0"
                   gate_update_frequency = "50"
@@ -81,6 +81,12 @@
     <box id="wall_west" size="0.1,10,0.5" movable="false">
       <body position="-9.9,0,0" orientation="0,0,0" />
     </box>
+    <!--<box id="barrier_1" size="0.1,2,0.5" movable="false">
+      <body position="0,-0.7,0" orientation="-45,0,0" />
+    </box>
+    <box id="barrier_2" size="0.1,2,0.5" movable="false">
+      <body position="0,0.7,0" orientation="45,0,0" />
+    </box>-->
   </arena>
 
   <!-- ******************* -->

@@ -707,13 +707,13 @@ class Agent():
         self.q_comms_eval.optimizer.step()
 
     def store_transition(self, state, action, reward, state_, done, state_vec = None, message_vec = None):
-        if state_vec is not None and message_vec is not None:
+        if self.use_entropy:
             self.memory.store_transition(state, action, reward, state_, done, state_vec, message_vec)
         else:
             self.memory.store_transition(state, action, reward, state_, done)
 
     def store_comms_transition(self, state, action, reward, state_, done, state_vec=None, message_vec=None):
-        if state_vec is not None and message_vec is not None:
+        if self.use_entropy:
             self.comms_memory.store_transition(state, action, reward, state_, done, state_vec, message_vec)
         else:
             self.comms_memory.store_transition(state, action, reward, state_, done)
@@ -738,9 +738,8 @@ class Agent():
         if get_entropy:
             state, action, reward, new_state, done, state_vec, message_vec = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy = get_entropy)
         else:
-            state, action, reward, new_state, done = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
-            state_vec = None
-            message_vec = None
+            state, action, reward, new_state, done, state_vec, message_vec = self.comms_memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
+
         states = T.tensor(state).to(self.q_comms_eval.device)
         actions = T.tensor(action).to(self.q_comms_eval.device)
         rewards = T.tensor(reward).to(self.q_comms_eval.device)
