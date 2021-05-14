@@ -63,43 +63,40 @@ class Agent():
         self.dead_channel_message = self.alphabet_space[0]
         self.dead_channel_code = -1
         obs_size = self.num_observations+2*self.alphabet_size
-
         if self.comms_scheme == 'None':
-            self.left_contacts = {i:[] for i in range(self.num_agents)}
-            self.right_contacts = self.left_contacts
+            self.contacts = {i:[] for i in range(self.num_agents)}
         elif self.comms_scheme == 'Left':
-            self.left_contacts = {i:[i+1] for i in range(self.num_agents)}
-            self.left_contacts[self.num_agents-1] = [0]
-            self.right_contacts = {i:[] for i in range(self.num_agents)}
+            self.contacts = {i:[i+1] for i in range(self.num_agents)}
+            self.contacts[self.num_agents-1] = 0
         elif self.comms_scheme == 'Right':
-            self.left_contacts = {i:[] for i in range(self.num_agents)}
-            self.right_contacts = {i:[i-1] for i in range(self.num_agents)}
-            self.right_contacts[0] = [self.num_agents - 1]
+            self.contacts = {i:[i-1] for i in range(self.num_agents)}
+            self.contacts[0] = self.num_agents - 1
         elif self.comms_scheme == 'Neighbors':
-            self.left_contacts = {i:[i+1] for i in range(self.num_agents)}
-            self.left_contacts[self.num_agents-1] = [0]
-            self.right_contacts = {i:[i-1] for i in range(self.num_agents)}
-            self.right_contacts[0] = [self.num_agents - 1]
+            self.contacts = {i:[] for i in range(self.num_agents)}
+            [self.contacts[i].append(i-1) for i in range(self.num_agents)]
+            [self.contacts[i].append(i+1) for i in range(self.num_agents)]
+            self.contacts[self.num_agents-1][0] = 0
+            self.contacts[0][1] = self.num_agents -1
+        elif self.comms_scheme == 'Broadcast':
+            self.contacts = {i:[] for i in range(self.num_agents)}
+            for i in range(self.num_agents):
+                for j in range(self.num_agents):
+                    if i != j:
+                        self.contacts[i].append(j)
         else:
             raise Exception('Unknown Communication Scheme ' + self.comms_scheme)
-
-        self.contacts = {key:val+self.right_contacts[key] for (key,val) in self.left_contacts.items()}
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
 
     def get_agent_incoming_communications(self, agent_id):
         messages = self.mailbox.inbox[agent_id]
-        incoming_comms = namedtuple('incoming_comms', 'left_msg right_msg')
-        left_msg = self.dead_channel_message
-        right_msg = self.dead_channel_message
+        incoming_comms = namedtuple('incoming_comms', 'msgs')
+        msgs = [self.dead_channel_message for i in range(len(self.contacts.keys()))]
         for message in messages:
-            if agent_id in self.left_contacts[message.sender]:
+            if agent_id in self.contacts[message.sender]:
                 if message.contents != -1:
-                    left_msg = self.alphabet_space[message.contents]
-            elif agent_id in self.right_contacts[message.sender]:
-                if message.contents != -1:
-                    right_msg = self.alphabet_space[message.contents]
+                    msgs[message.sender] = self.alphabet_space[message.contents]
 
-        msg = incoming_comms(left_msg, right_msg)
+        msg = incoming_comms(msgs)
         return msg
 
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
@@ -107,9 +104,9 @@ class Agent():
         if self.comms_scheme == 'None':
             return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
-        #import ipdb; ipdb.set_trace()
         if not comms_memory:
-            agent_state = np.concatenate((env_obs, msg.left_msg, msg.right_msg))
+            messages = np.concatenate(msg.msgs)
+            agent_state = np.concatenate((env_obs, messages))
         else:
             agent_state = env_obs
             for i in range(len(message_memory)):
@@ -190,7 +187,7 @@ class Agent():
 
     def make_comms_network(self, comms_memory):
         if not comms_memory:
-            obs_size = self.num_observations + 2*self.alphabet_size
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         else:
             obs_size = self.num_observations + self.num_agents*self.alphabet_size
         print('MODEL SPECIFICS:')
@@ -209,7 +206,7 @@ class Agent():
         #define networks for DQN
         self.min_max_action = 0.1
         if not comms_memory:
-            obs_size = self.num_observations + 2*self.alphabet_size
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         else:
             obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
@@ -226,7 +223,7 @@ class Agent():
     def make_DDQN(self, comms_memory):
         self.min_max_action = 0.1
         if not comms_memory:
-            obs_size = self.num_observations + 2*self.alphabet_size
+            obs_size = self.num_observations + self.num_agents*self.alphabet_size
         else:
             obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
@@ -244,7 +241,7 @@ class Agent():
     def make_DDPG(self):
         #define networks for DDPG
         self.min_max_action = 1
-        obs_size = self.num_observations + 2*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action,
                          'min_max_action':self.min_max_action}
@@ -273,7 +270,7 @@ class Agent():
     def make_TD3(self):
         #difine networks for TD3
         self.min_max_action = 1
-        obs_size = self.num_observations + 2*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size
         actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':self.num_actions}
         critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,

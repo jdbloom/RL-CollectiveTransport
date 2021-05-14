@@ -23,6 +23,7 @@ function step(){
 	#log("failure ", failure)
 	vec_to_goal = math.vec2.newp(1.0, AngleToGoal/180.0*math.pi)
 	debug.rays.add(255, 0, 0, vec_to_goal.x, vec_to_goal.y, 0.1)
+	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
   if(gripped){
     # Should we use the base model to control the robots or the learned model
     #log(id, BaseModel)

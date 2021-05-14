@@ -111,6 +111,8 @@ high_score = -np.inf
 mean_axis = []
 messaging_frequency = 1
 experiment_start_time = time.time()
+Testing_Failures = 0
+Testing_Successes = 0
 
 while not exp_done:
     #receive initial observations
@@ -138,15 +140,11 @@ while not exp_done:
             force_mags = []
             force_angs = []
             running_reward = 0
-
             for i in range(Utility.params['num_robots']):
                 # append env observations and messages in inbox to make agent state
                 agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
-
-                if args.comms_scheme == 'Right':
-                    message_memory[i].append(msg.right_msg)
-                elif args.comms_scheme == 'Left':
-                    message_memory[i].append(msg.left_msg)
+                if args.comms_scheme != 'None':
+                    message_memory[i].append(msg.msgs)
 
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
@@ -230,14 +228,12 @@ while not exp_done:
                         #print('[DEBUG] Prox Values', prox_values)
                         prox_value = np.sum(prox_values)
                         #print('[DEBUG] Prox Value Reward:', (-0.1)*prox_value)
-                        reward += (-0.1)*prox_value
+                        reward += (-1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
                         new_agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
-                        if args.comms_scheme == 'Right':
-                            message_memory[i].append(msg.right_msg)
-                        elif args.comms_scheme == 'Left':
-                            message_memory[i].append(msg.left_msg)
+                        if args.comms_scheme != 'Right':
+                            message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
 
                         if time_steps > 2:
@@ -320,8 +316,12 @@ while not exp_done:
                         exp_rewards.append(running_reward)
                         if not reached_goal:
                             print("Episode", ep_counter ,"timed out")
+                            if test_mode:
+                                Testing_Failures += 1
                         else:
                             print("Episode", ep_counter ,"reached goal")
+                            if test_mode:
+                                Testing_Successes += 1
                         for i in range(Utility.params['num_robots']):
                             print('Agent', i, 'reward %.1f' % running_reward,
                                   'epsilon:%.2f' % model.epsilon,
@@ -343,4 +343,7 @@ while not exp_done:
                         # Send acknowledgment
                         socket.send(b"ok")
 print("[RUN TIME] Experiment: %.2f" % (time.time() - experiment_start_time))
+if test_mode:
+    print("[Statistics] Success Percentage", (Testing_Successes/(Testing_Successes+Testing_Failures)))
+    print("[Statistics] Failure Percentage", (Testing_Failures/(Testing_Successes+Testing_Failures)))
 print("Experiment Done\n")

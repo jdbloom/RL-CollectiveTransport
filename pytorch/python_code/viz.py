@@ -100,6 +100,7 @@ last_10_reward = [sum(reward[i:i + 10])/10
                   for i in last_10_axis[0:len(last_10_axis)-1]]
 for i in range(len(last_10_axis)-1):
     print(last_10_axis[i], last_10_reward[i])
+'''
 if args.test:
     print('. . . Loading Baseline Data')
     file_names = []
@@ -143,7 +144,7 @@ if args.test:
     for i in range(len(base_reward)):
         if base_reward[i] < -6500:
             base_fail += 1
-
+    '''
 episode_fail = 0
 episode_struggle = 0
 end_episode_fail = 0
@@ -183,8 +184,8 @@ plt.savefig(args.figure_path+args.figure_name+".png")
 plt.clf()
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.plot(rolling_x, rolling, c='r')
-for i in range(gate_x.shape[0]):
-    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
+#for i in range(gate_x.shape[0]):
+#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
 plt.title(args.figure_name+'_rolling_failure_tracking')
 plt.ylim(0, 1)
 plt.savefig(args.figure_path+args.figure_name+"_rolling_failure_tracking"+".png")
@@ -246,7 +247,7 @@ if args.test:
 
 print('Average Reward for Experiment:', AVERAGE)
 if not args.test and len(last_10_reward)>0:
-    print('Best Model:', (np.argmax(last_10_reward)+1)*10, last_10_reward[np.argmax(last_10_reward)])
+    print('Best Model:', (np.argmax(last_10_reward))*10, last_10_reward[np.argmax(last_10_reward)])
 print('Score STD:', np.std(reward))
 if args.test:
     print('Adjusted Score STD:', score_std)
@@ -258,14 +259,14 @@ print('Percentage Failure after ep 600: %.2f' % (end_episode_fail*100/(len(rewar
 if args.test:
     print('Base Failure Episodes:', base_fail)
     print('Base Percentage Failure: %.2f' % (base_fail*100/len(base_reward)))
-
+'''
 print('\nBASELINE AVERAGE SCORES')
 print('4 Agents: %.2f, %.2f' % (base_model_average, base_model_2_obstacle_average))
 print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average, base_model_8_agents_2_obstacles_average))
 print('\nBASELINE AVERAGE SCORES WITH NEW REWARD STRUCTURE')
 print('4 Agents: %.2f, %.2f' % (base_model_average_reward, base_model_2_obstacle_average_reward))
 print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average_reward, base_model_8_agents_2_obstacles_average_reward))
-
+'''
 #print('BASELINE----------  0        1        2        3')
 #print('Baseline score avg: %.2f %.2f %.2f %.2f' % (base_model_average, base_model_1_obstacle_average, base_model_2_obstacle_average, base_model_3_obstacle_average))
 #print('Baseline score std:  %.2f    %.2f  %.2f  %.2f' % (base_model_score_std, base_model_1_obstacle_score_std, base_model_2_obstacle_score_std, base_model_3_obstacle_score_std))
