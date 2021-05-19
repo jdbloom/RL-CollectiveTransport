@@ -113,6 +113,8 @@ messaging_frequency = 1
 experiment_start_time = time.time()
 Testing_Failures = 0
 Testing_Successes = 0
+speaker_loss = 0
+listener_loss = 0
 
 while not exp_done:
     #receive initial observations
@@ -121,7 +123,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'force magnitude', 'force angle', 'average force vector'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector'])
 
         if not exp_done:
             time_steps = 0
@@ -273,7 +275,7 @@ while not exp_done:
 
                             model.learn_no_buffer(sarsd)
                         else:
-                            model.learn()
+                            listener_loss = model.learn()
                         if model.comms_scheme != 'None':
                             if args.no_buffer:
                                 sarsd = [np.array(agent_states, dtype = np.float32),
@@ -284,7 +286,7 @@ while not exp_done:
 
                                 model.learn_no_buffer_comms(sarsd)
                             else:
-                                model.learn_comms()
+                                speaker_loss = model.learn_comms()
 
                     running_reward += np.average(r)
                     # Store New Observations
@@ -304,7 +306,7 @@ while not exp_done:
                             average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
                             average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
 
-                    writer.writerow([r, model.epsilon, reached_goal, message_codes, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
+                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)

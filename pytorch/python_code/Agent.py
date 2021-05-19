@@ -459,13 +459,13 @@ class Agent():
         if self.learning_scheme == 'None':
             return
         elif self.learning_scheme == 'DQN':
-            self.DQN_learn()
+            return self.DQN_learn()
         elif self.learning_scheme == 'DDQN':
-            self.DDQN_learn()
+            return self.DDQN_learn()
         elif self.learning_scheme == 'DDPG':
-            self.DDPG_learn()
+            return self.DDPG_learn()
         elif self.learning_scheme == 'TD3':
-            self.TD3_learn()
+            return self.TD3_learn()
 
     def DQN_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
@@ -495,7 +495,7 @@ class Agent():
 
     def DDQN_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return
+            return 0
 
         self.q_eval.optimizer.zero_grad()
 
@@ -519,12 +519,13 @@ class Agent():
             listener_loss = self.calculate_entropy_loss(state_vec, message_vec, type = 'listener')
         else: listener_loss = 0
 
-        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)# + listener_loss
+        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) + abs(listener_loss)
         loss.backward()
         self.q_eval.optimizer.step()
         self.learn_step_counter += 1
 
         self.decrement_epsilon()
+        return loss.item()
 
     def learn_no_buffer(self, sarsd):
         self.q_eval.optimizer.zero_grad()
@@ -642,7 +643,7 @@ class Agent():
 
     def learn_comms(self):
         if self.comms_memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return
+            return 0
 
         self.q_comms_eval.optimizer.zero_grad()
 
@@ -666,9 +667,10 @@ class Agent():
         if self.use_entropy:
             speaker_loss = self.calculate_entropy_loss(state_vec, message_vec, type = 'speaker')
         else: speaker_loss = 0
-        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device) + speaker_loss
+        loss = self.q_comms_eval.loss(q_target, q_pred).to(self.q_comms_eval.device) + abs(speaker_loss)
         loss.backward()
         self.q_comms_eval.optimizer.step()
+        return loss.item()
 
     def learn_no_buffer_comms(self, sarsd):
 
@@ -884,7 +886,9 @@ class Agent():
                 # we add the message key and initialize the count to 1
                 self.StateDict[state_key][message_key] = 1
 
-    def calculate_probabilities(self, message_code, obj_state):
+    def calculate_probabilities(self, code_message_state):
+        message_code = code_message_state[0]
+        obj_state = code_message_state[1]
         message_key = [str(i) for i in message_code]
         message_key = ("".join(message_key))
         state_key = [str(i) for i in obj_state]
@@ -905,25 +909,15 @@ class Agent():
             return 0, 0, 0, 0
 
     def calculate_entropy_loss(self, state_vec, message_vec, type):
-        p_m =[]
-        p_s = []
-        p_m_s = []
-        p_s_m = []
-        for i in range(message_vec.shape[0]):
-            p1, p2, p3, p4 = self.calculate_probabilities(message_vec[i], state_vec[i])
-            p_m.append(p1)
-            p_s.append(p2)
-            p_m_s.append(p3)
-            p_s_m.append(p4)
+        probabilities = map(self.calculate_probabilities, zip(message_vec, state_vec))
+        # Probabilities = (probability of message, probability of state, probability of message given state, probability of state given message)
         if type == 'speaker':
-            speaker_loss = 0
-            for i in range(message_vec.shape[0]):
-                speaker_loss += p_m[i]*math.log(p_m_s[i])
+            speaker_loss = np.sum(np.fromiter(map(lambda x: x[0]*math.log(x[2]), probabilities), dtype = np.float32))
+            #print("[DEBUG] Speaker Loss: %.4f" % speaker_loss)
             return speaker_loss
         elif type == 'listener':
-            listener_loss = 0
-            for i in range(state_vec.shape[0]):
-                listener_loss += p_s[i]*math.log(p_s_m[i])
+            listener_loss = np.sum(np.fromiter(map(lambda x: x[1]*math.log(x[3]), probabilities), dtype = np.float32))
+            #print("[DEBUG] Listener Loss: %.4f" % listener_loss)
             return listener_loss
         else:
             raise Exception('UNKNOWN ENTROPY LOSS'+type)

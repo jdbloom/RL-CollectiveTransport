@@ -75,7 +75,8 @@ for i in range(len(file_names)-1):
     df_list.append((i, df))
 
 episode_rewards = []
-losses = []
+speaker_loss = []
+listener_loss = []
 epsilons = []
 terminals = 0
 print('. . . Consolodating Model Data')
@@ -85,7 +86,8 @@ for episode in df_list:
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
         #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
-        #losses.append(episode[1]['loss'][t].strip('][').split(','))
+        speaker_loss.append(episode[1]['speaker_loss'][t])
+        listener_loss.append(episode[1]['listener_loss'][t])
         #terminals += episode[1]['termination'][t]
     reward = []
     for robot in range(len(rewards[0])):
@@ -176,8 +178,8 @@ plt.scatter(np.arange(0, len(reward), 1), reward, c = 'darkturquoise', label = '
 #plt.plot(reward, c = 'lightsteelblue', label = 'Episode Scores')
 #plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
-plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
-plt.ylim(-14000, 500)
+#plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
+plt.ylim(-32000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")
 
@@ -190,6 +192,18 @@ plt.title(args.figure_name+'_rolling_failure_tracking')
 plt.ylim(0, 1)
 plt.savefig(args.figure_path+args.figure_name+"_rolling_failure_tracking"+".png")
 
+plt.clf()
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.plot(speaker_loss, c='r', label = 'speaker')
+plt.plot(listener_loss, c='b', label = 'listener')
+#for i in range(gate_x.shape[0]):
+#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
+plt.title(args.figure_name+'_LOSSES')
+plt.legend()
+plt.savefig(args.figure_path+args.figure_name+"_LOSSES"+".png")
+
+
+
 if args.test:
     plt.clf()
     plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
@@ -200,7 +214,7 @@ if args.test:
     plt.plot(base_last_10_axis[1:len(base_last_10_axis)], base_last_10_reward, c = 'r', label = 'Baseline Running Average')
     plt.scatter(np.arange(0, len(reward), 1), reward, c = 'lightsteelblue', label = 'Model Raw Scores')
     plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Model Running Average')
-    plt.ylim(-12000, 500)
+    plt.ylim(-32000, 500)
     plt.legend(loc = 1)
     plt.savefig(args.figure_path+args.figure_name+"_overlay.png")
 
