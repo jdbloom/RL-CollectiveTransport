@@ -6,7 +6,7 @@ Python 3 is needed to run this project.
 
 Run `$python Main.py recording_folder -flags`
 
-`Main.py` Houses the main loop which works in tandom with Argos.
+`Main.py` houses the main loop which works in tandom with Argos.
 
 The `recording_folder` must contain two empty sub directories: `Data` and `Models`. The `recording_folder` is required for both testing and training.
 For example: `Test_Run/Data` and `Test_Run/Models`
