@@ -32,7 +32,7 @@ There are many optional Flags. Here are all of the options with their implementa
 - `--plot_comms` (default: False) triggers a "real-time" plot of the current messages being sent by the robots. This function should only be used during testing as it significantly slows run-time.
 -  `--test` (default: False) triggers the loop to run in test mode. This will bypass all learning functionality and will load a model. The loaded model will only be asked to output actions.
 -  `--model_path` takes a path to a specific saved model to be loaded in. For example: `Test_Run/Models/Episode_100` this will load both the action network and the communication network (if a communication network was trained and the `--comms_scheme` flag has an input.
-- `--port` This argument is defaulted to `55555` which is the same as Argos. If you change this you must also change it in `collectiveRlTransport0.argos. 
+- `--port` This argument is defaulted to `55555` which is the same as Argos. If you change this you must also change it in `collectiveRlTransport0.argos`. 
 
 
 # Runing ARGoS + BUZZ
