@@ -63,5 +63,6 @@ There are several flags and parameters to set in the `loop_functions` section:
 - `gate_update_amount` indicates by how much to increase the wall sizes (shrink the opening). This is a per wall measure so multiply by 2 to get the opening shrinkage (m)
 - `gate_minimum` is the minimum opening length (m)
 - `use_base_model` (0/1) indicates to BUZZ to use a hand coded controller for the robots. This should be used in conjunction with setting both `--learning_scheme` and `--comms_scheme` to None and setting the flag `--test` when running `Main.py`
+
 **Note on Gate Obstacle**
 To test using the gate, set `use_gate = 1` and `gate_curriculum = 0` this will set the gate to the distance corresponding to `gate_minimum`
