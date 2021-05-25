@@ -1,6 +1,8 @@
 # RL-CollectiveTransport
 Collective transport done with reinforcement learning
 
+To run the simulation you must start `Main.py` in a terminal with all required flags and then run `collectiveRlTransport.argos` in another terminal window.
+
 # Running Python:
 Python 3 is needed to run this project.
 
