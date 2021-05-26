@@ -72,6 +72,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
 
 # Possible Projects to be completed
 **Full projects are expected to take 8-16 weeks (1 quarter to 1 semester) with the posibility of publication pending results**
+
 **Partial projects are expected to take 1-4 weeks of work and are not intended to produce a publication alone. (Can combine partials for possible publications)**
 - **Implement a Graph Neural Network to explore truly distributed RL** (Full Project)
     - Would need to decide what information to communicate within the network
