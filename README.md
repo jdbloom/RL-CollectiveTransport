@@ -68,3 +68,13 @@ There are several flags and parameters to set in the `loop_functions` section:
 
 **Note on Gate Obstacle**
 To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this will set the gate to the distance corresponding to `gate_minimum`
+
+
+# Possible Projects to be completed
+- Exploring Alternative Reward Structures
+    - This project involves developing and comparing a couple different reward structures and functions to evaluate which one is best suited for the task and study how the changes effect the learning process
+    - Experiment with delayed rewards
+    - Experiment with end of episode rewards only
+    - Determine the process required for learning when rewards are sparce
+- Implement History Batch Storage
+    - Instead of storing `[s, a, r, s', d]` we store `[s_1, a1, r1, s'1, d1, ..., st-1, at-1, rt-1, s't-1, dt-1]`
