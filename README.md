@@ -71,10 +71,41 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
 
 
 # Possible Projects to be completed
-- Exploring Alternative Reward Structures
+**Full projects are expected to take 8-16 weeks (1 quarter to 1 semester) with the posibility of publication pending results**
+**Partial projects are expected to take 1-4 weeks of work and are not intended to produce a publication alone. (Can combine partials for possible publications)**
+- **Implement a Graph Neural Network to explore truly distributed RL** (Full Project)
+    - Would need to decide what information to communicate within the network
+    - Might play with encoders/decoders
+    - Need to answer the question of "How do we do back propagation in this distributed system?"
+- **Implement DQN, DDQN with Recurrent Neural Network Structure** (Full Project)
+    - Explore using RNN for DQN and DDQN
+    - Study how learning strategies effect learning
+    - Compare working model with Linear DQN and DDQN
+- **Exploring Alternative Reward Structures** (Full Project)
     - This project involves developing and comparing a couple different reward structures and functions to evaluate which one is best suited for the task and study how the changes effect the learning process
     - Experiment with delayed rewards
     - Experiment with end of episode rewards only
     - Determine the process required for learning when rewards are sparce
-- Implement History Batch Storage
-    - Instead of storing `[s, a, r, s', d]` we store `[s_1, a1, r1, s'1, d1, ..., st-1, at-1, rt-1, s't-1, dt-1]`
+- **Experiment with DDPG, TD3, and AC3** (Full Project)
+    - Implement AC3
+    - Explore hyperparameters 
+    - Fix TD3 (there is some error in the algorithm or the learning idiology)
+    - Conduct comparison between the three Actor Critic Methods
+    - Document shortcomings and pitfalls regarding specific algorithms
+- **Develop Turret based Gipper for Khepera** (MQP)
+    - Design, prototype, and build a turret based gripper for the khepera
+    - Implement prototype in ARGoS and test
+    - Show working prototype on a Khepera in the Real and in Sim
+-------------------------------------------------------------------------------
+- **Implement History Batch Storage** (Partial Project)
+    - Instead of storing `[s, a, r, s', d]` we store `[s_t-h, a_t-h, r_t-h, s'_t-h, d_t-h, ..., s_t-1, a_t-1, r_t-1, s'_t-1, d_t-1]` where `h=1` is normal batch learning
+    - Procede with Batch Learning 
+- **Explore Alternative State Spaces** (Partial Project)
+    - possibly build a history of states consisting of the previous couple states.
+- **Explore Alternative Loss Functions** (Partial Project)
+    - Implement widely used loss functions and study the effect on the model
+    - Using the knowledge from this implementation, develop custom loss function and compare
+- **Optimality Upgrade** (Partial Project)
+    - Study implemented code and implement upgrades to increase performance
+    - Suggest alternative solutions to currently implemented methods
+    - Develop a working solution for the Cluster (optional)
