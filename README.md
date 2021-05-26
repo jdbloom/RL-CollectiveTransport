@@ -75,7 +75,9 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
 
 **Major Qualifying Projects (MQPs) are meant for a team of students and are expected to take 3 quarters to complete with the possibility of publication.**
 
-**Partial projects are expected to take 1-4 weeks of work and are not intended to produce a publication alone. (Can combine partials for possible publication)**
+**Partial Projects are expected to take 1-4 weeks of work and are not intended to produce a publication alone. (Can combine partials for possible publication)**
+
+**Partially formed projects are ideas that aren't completely formed yet but are open as proposals for either Full or Partial depending on the amount of work**
 - **Implement a Graph Neural Network to explore truly distributed RL** (Full Project)
     - Would need to decide what information to communicate within the network
     - Might play with encoders/decoders
@@ -112,3 +114,6 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Study implemented code and implement upgrades to increase performance
     - Suggest alternative solutions to currently implemented methods
     - Develop a working solution for the Cluster (optional)
+--------------------------------------------------------------------------------
+**Partially formed projects**
+- Explore Attention???
