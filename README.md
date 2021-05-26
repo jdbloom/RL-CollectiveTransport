@@ -67,4 +67,4 @@ There are several flags and parameters to set in the `loop_functions` section:
 - `use_base_model` (0/1) indicates to BUZZ to use a hand coded controller for the robots. This should be used in conjunction with setting both `--learning_scheme` and `--comms_scheme` to None and setting the flag `--test` when running `Main.py`
 
 **Note on Gate Obstacle**
-To test using the gate, set `use_gate = 1` and `gate_curriculum = 0` this will set the gate to the distance corresponding to `gate_minimum`
+To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this will set the gate to the distance corresponding to `gate_minimum`
