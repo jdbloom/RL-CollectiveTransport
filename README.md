@@ -97,7 +97,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Fix TD3 (there is some error in the algorithm or the learning idiology)
     - Conduct comparison between the three Actor Critic Methods
     - Document shortcomings and pitfalls regarding specific algorithms
-- **Experiment with RL Algorithms and Deformable Objects**
+- **Experiment with RL Algorithms and Deformable Objects** (Full Project)
     - Develop deformable object in ARGoS
     - Experiement with various RL algorithms and emergent communications with deformable objects
 - **Develop Turret based Gipper for Khepera** (MQP)
