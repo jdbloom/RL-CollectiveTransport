@@ -113,7 +113,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
 - **Explore Alternative Loss Functions** (Partial Project)
     - Implement widely used loss functions and study the effect on the model
     - Using the knowledge from this implementation, develop custom loss function and compare
-- **Optimality Upgrade** (Partial Project)
+- **Optimality Upgrade** (Tony)
     - Study implemented code and implement upgrades to increase performance
     - Suggest alternative solutions to currently implemented methods
     - Develop a working solution for the Cluster (optional)
