@@ -91,7 +91,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Experiment with delayed rewards
     - Experiment with end of episode rewards only
     - Determine the process required for learning when rewards are sparce
-- **Experiment with DDPG, TD3, and AC3** (Full Project)
+- **Experiment with DDPG, TD3, and AC3** (Apratim)
     - Implement AC3
     - Explore hyperparameters 
     - Fix TD3 (there is some error in the algorithm or the learning idiology)
