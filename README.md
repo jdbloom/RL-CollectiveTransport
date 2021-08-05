@@ -86,7 +86,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Explore using RNN for DQN and DDQN
     - Study how learning strategies effect learning
     - Compare working model with Linear DQN and DDQN
-- **Exploring Alternative Reward Structures** (Full Project)
+- **Exploring Alternative Reward Structures** (Brian)
     - This project involves developing and comparing a couple different reward structures and functions to evaluate which one is best suited for the task and study how the changes effect the learning process
     - Experiment with delayed rewards
     - Experiment with end of episode rewards only
