@@ -82,7 +82,7 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Would need to decide what information to communicate within the network
     - Might play with encoders/decoders
     - Need to answer the question of "How do we do back propagation in this distributed system?"
-- **Implement DQN, DDQN with Recurrent Neural Network Structure** (Full Project)
+- **Implement DQN, DDQN with Recurrent Neural Network Structure** (Tony)
     - Explore using RNN for DQN and DDQN
     - Study how learning strategies effect learning
     - Compare working model with Linear DQN and DDQN
