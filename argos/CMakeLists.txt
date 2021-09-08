@@ -27,5 +27,5 @@ add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
 #
 # Buzz code
 #
-include(UseBuzz)
+
 buzz_make(collectiveRlTransport.bzz)
