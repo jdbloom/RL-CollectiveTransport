@@ -24,14 +24,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--learning_scheme")
 parser.add_argument("--comms_scheme", default = "Neighbors")
-parser.add_argument("--test", default = False, action = "store_true")
-parser.add_argument("--plot_comms", default = False, action = "store_true")
-parser.add_argument("--port", default = "55555")
-parser.add_argument("--model_path")
-parser.add_argument("--no_buffer", default = False, action = "store_true")
 parser.add_argument("--comms_mem", default = False, action = "store_true")
+parser.add_argument("--no_buffer", default = False, action = "store_true")
 parser.add_argument("--use_horizon", default = False, action = "store_true")
 parser.add_argument("--use_entropy", default = False, action = "store_true")
+parser.add_argument("--plot_comms", default = False, action = "store_true")
+parser.add_argument("--test", default = False, action = "store_true")
+parser.add_argument("--model_path")
+parser.add_argument("--port", default = "55555")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -234,7 +234,7 @@ while not exp_done:
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
                         new_agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
-                        if args.comms_scheme != 'Right':
+                        if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
                             message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
 

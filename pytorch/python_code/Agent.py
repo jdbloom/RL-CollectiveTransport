@@ -85,6 +85,7 @@ class Agent():
                         self.contacts[i].append(j)
         else:
             raise Exception('Unknown Communication Scheme ' + self.comms_scheme)
+
         self.mailbox = Mailbox(self.contacts, self.dead_channel_code)
 
     def get_agent_incoming_communications(self, agent_id):
@@ -102,7 +103,8 @@ class Agent():
     def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
         #env_obs=self.normalize_obs(env_obs)
         if self.comms_scheme == 'None':
-            return np.concatenate((env_obs, self.dead_channel_message, self.dead_channel_message)), self.dead_channel_code
+            # need to append empty messages for all agents to keep networks the same size
+            return np.concatenate((env_obs, np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
         if not comms_memory:
             messages = np.concatenate(msg.msgs)
@@ -265,7 +267,7 @@ class Agent():
         self.critic.cuda()
         self.target_critic.cuda()
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
+        self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
 
     def make_TD3(self):
         #difine networks for TD3
@@ -291,7 +293,7 @@ class Agent():
 
         self.update_network_parameters(tau = 1)
 
-        self.memory = ReplayBuffer(100000, self.num_observations + 2*self.alphabet_size, self.num_actions, 'Continuous')
+        self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
 
     def update_network_parameters(self, tau = None):
         # If tau = 1 -> hard update (should only be done during init)
@@ -397,7 +399,7 @@ class Agent():
         actions = self.actor(state)
         if not test:
             actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
-        actions = T.clip(actions, -self.min_max_action, self.min_max_action)
+        actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
         gripper = np.zeros((1, 1))
         actions = np.append(actions[0].cpu().detach().numpy(), gripper)
         return (actions, None)
