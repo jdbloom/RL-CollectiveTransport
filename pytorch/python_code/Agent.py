@@ -5,6 +5,7 @@ from .communications import Mailbox
 import numpy as np
 import math
 from collections import namedtuple
+import statistics
 
 import torch as T
 import torch.nn as nn
@@ -150,7 +151,7 @@ class Agent():
         self.lr = 0.0001
         self.epsilon = 1.0
         self.eps_min = 0.01
-        self.eps_dec = 1e-6
+        self.eps_dec = 1e-5
         self.batch_size = 100
         self.replace_target_cnt = 1000
         self.failed = False
@@ -471,7 +472,7 @@ class Agent():
 
     def DQN_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return
+            return 0,0
         self.q_eval.optimizer.zero_grad()
 
         self.replace_target_network()
@@ -490,14 +491,22 @@ class Agent():
 
         loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
         loss.backward()
+
+        gradients = []
+        #for param in self.q_eval.parameters():
+        #  gradients.append(param.grad)
+        #var_grad = statistics.variance(gradients)
+
         self.q_eval.optimizer.step()
         self.learn_step_counter += 1
 
         self.decrement_epsilon()
 
+        return loss.item(), 0
+
     def DDQN_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return 0
+            return 0, 0
 
         self.q_eval.optimizer.zero_grad()
 
@@ -522,12 +531,26 @@ class Agent():
         else: listener_loss = 0
 
         loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device) + abs(listener_loss)
+        #if loss > 100:
+        #    import ipdb; ipdb.set_trace()
+
         loss.backward()
+
+        gradients = []
+        var_grad = 0
+        #for param in self.q_eval.parameters():
+        #    gradients = np.concatenate((gradients, T.clip(param.grad, -10, 10).cpu().detach().numpy().flatten()))
+
+        #var_grad = np.var(gradients)
+
+
         self.q_eval.optimizer.step()
+
         self.learn_step_counter += 1
 
         self.decrement_epsilon()
-        return loss.item()
+
+        return loss.item(), var_grad
 
     def learn_no_buffer(self, sarsd):
         self.q_eval.optimizer.zero_grad()
@@ -771,9 +794,9 @@ class Agent():
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
             self.q_eval.load_model(path)
-            print('-------------------- Weights ------------------')
-            for param in self.q_eval.parameters():
-                print(param.data)
+            #print('-------------------- Weights ------------------')
+            #for param in self.q_eval.parameters():
+            #    print(param.data)
         elif self.learning_scheme == 'DDPG':
             self.actor.load_checkpoint(path)
             self.target_actor.load_checkpoint(path)

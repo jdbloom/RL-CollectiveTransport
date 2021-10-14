@@ -203,6 +203,12 @@ private:
    /** The vector of object stats*/
    std::vector<float> m_vecObjStats;
 
+   /** The vector of gate stats*/
+   std::vector<float> m_vecGateStats;
+
+   /** The vector for obstacle stats*/
+   std::vector<float> m_vecObstacleStats;
+
    /** The vector of actions */
    std::vector<float> m_vecActions;
 
@@ -288,6 +294,12 @@ private:
    void ZMQGetActions();
 
    void ZMQSendObjectStats();
+
+   void ZMQSendObjectStatsFinal();
+
+   void ZMQSendGateStats();
+
+   void ZMQSendObstacleStats();
 
    void ZMQGetAck();
 

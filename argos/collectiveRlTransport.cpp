@@ -119,6 +119,10 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecObjStats.resize(6, 0.0);
+      m_vecGateStats.resize(4, 0.0);
+      if (m_unNumObstacles > 0){
+          m_vecObstacleStats.resize(m_unNumObstacles*2, 0.0);
+      }
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       /* Create a new RNG */
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
@@ -526,6 +530,18 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+   if(m_unUseGate == 1){
+     m_vecGateStats[0] = m_vecGateWallPos[m_unEpisodeCounter][0].GetX();
+     m_vecGateStats[1] = m_vecGateWallSize[m_unEpisodeCounter][0].GetY();
+     m_vecGateStats[2] = m_vecGateWallPos[m_unEpisodeCounter][1].GetX();
+     m_vecGateStats[3] = m_vecGateWallSize[m_unEpisodeCounter][1].GetY();
+   }
+   else if(m_unNumObstacles > 0){
+     for(size_t i = 0; i < m_unNumObstacles; ++i){
+       m_vecObstacleStats[i*2] = m_vecObstaclePos[m_unEpisodeCounter][i].GetX();
+       m_vecObstacleStats[i*2+1] = m_vecObstaclePos[m_unEpisodeCounter][i].GetY();
+     }
+   }
 
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       /* Get robot pose */
@@ -639,7 +655,19 @@ void CCollectiveRLTransport::PreStep() {
    ZMQSendFailures();
    ZMQSendRewards();
    ZMQSendRobotStats();
-   ZMQSendObjectStats();
+   if(m_unNumObstacles> 0){
+     ZMQSendObjectStats();
+     ZMQSendObstacleStats();
+
+   }
+   else if(m_unUseGate == 1){
+     ZMQSendObjectStats();
+     ZMQSendGateStats();
+
+   }
+   else{
+     ZMQSendObjectStatsFinal();
+   }
    /* Get actions from PyTorch */
    ZMQGetActions();
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -735,7 +763,17 @@ void CCollectiveRLTransport::PostStep() {
       ZMQSendFailures();
       ZMQSendRewards();
       ZMQSendRobotStats();
-      ZMQSendObjectStats();
+      if(m_unNumObstacles> 0){
+        ZMQSendObjectStats();
+        ZMQSendObstacleStats();
+      }
+      else if(m_unUseGate == 1){
+        ZMQSendObjectStats();
+        ZMQSendGateStats();
+      }
+      else{
+        ZMQSendObjectStatsFinal();
+      }
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -853,10 +891,12 @@ void CCollectiveRLTransport::ZMQSendParams() {
    /* Make the parameter buffer */
    std::vector<float> vecParams;
    vecParams.push_back(m_unNumRobots);
+   vecParams.push_back(m_unNumObstacles);
    vecParams.push_back(m_unNumObs);
    vecParams.push_back(m_unNumActions);
    vecParams.push_back(m_unNumStats);
    vecParams.push_back(m_unAlphabetSize);
+   vecParams.push_back(m_unUseGate);
    /* Calculate normalizing constants*/
    float maxY = GetSpace().GetArenaLimits().GetMax().GetY();
    float minY = GetSpace().GetArenaLimits().GetMin().GetY();
@@ -967,12 +1007,50 @@ void CCollectiveRLTransport::ZMQSendObjectStats(){
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecObjStats[0]),  // data pointer
     sizeof(float)*m_vecObjStats.size(),      // data size in bytes
-    0)                                    //no special flags
+    ZMQ_SNDMORE)                                    //more to come
   < 0) {                                  // >= 0 means success
     THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
   }
 }
 
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendObjectStatsFinal(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecObjStats[0]),  // data pointer
+    sizeof(float)*m_vecObjStats.size(),      // data size in bytes
+    0)                                    // final message
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendGateStats(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecGateStats[0]),  // data pointer
+    sizeof(float)*m_vecGateStats.size(),      // data size in bytes
+    0)                                    //final message
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendObstacleStats(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecObstacleStats[0]),  // data pointer
+    sizeof(float)*m_vecObstacleStats.size(),      // data size in bytes
+    0)                                    //no special flags
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
 /****************************************/
 /****************************************/
 

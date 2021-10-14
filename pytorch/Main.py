@@ -31,6 +31,8 @@ parser.add_argument("--use_entropy", default = False, action = "store_true")
 parser.add_argument("--plot_comms", default = False, action = "store_true")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
+parser.add_argument("--scaled_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
+parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
 args = parser.parse_args()
 
@@ -69,30 +71,49 @@ socket.bind("tcp://*:" + port)
 print("Server Started")
 # Get Parameters
 Utility.get_params(socket.recv())
-print("PARAMETERS:")
-print("  num_robots ----", Utility.params['num_robots'])
-print("  num_obs -------", Utility.params['num_obs'])
-print("  alphabet_size -", Utility.params['alphabet_size'])
-print("  num_actions ---", Utility.params['num_actions'])
-print("  num_stats -----", Utility.params['num_stats'])
+if not args.no_print:
+    print("PARAMETERS:")
+    print("  num_robots ----", Utility.params['num_robots'])
+    print("  num_obstacles -", Utility.params['num_obstacles'])
+    print("  num_obs -------", Utility.params['num_obs'])
+    print("  alphabet_size -", Utility.params['alphabet_size'])
+    print("  num_actions ---", Utility.params['num_actions'])
+    print("  num_stats -----", Utility.params['num_stats'])
+
+Utility.set_obstacles_fields();
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
 normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 
-model = Agent.Agent(Utility.params['num_robots'],
-                    Utility.params['num_obs'],
-                    Utility.params['num_actions'] - 1, # -1 to account for gripper
-                    num_ops_per_action = 3,
-                    id = 0,
-                    learning_scheme = learning_scheme,
-                    no_buffer = args.no_buffer,
-                    comms_memory = args.comms_mem,
-                    normalization = normalization,
-                    comms_scheme = comms_scheme,
-                    alphabet_size = Utility.params['alphabet_size'],
-                    use_horizon = args.use_horizon,
-                    use_entropy = args.use_entropy)
+if args.scaled_robots is not None:
+    model = Agent.Agent(int(args.scaled_robots),
+                        Utility.params['num_obs'],
+                        Utility.params['num_actions'] - 1, # -1 to account for gripper
+                        num_ops_per_action = 3,
+                        id = 0,
+                        learning_scheme = learning_scheme,
+                        no_buffer = args.no_buffer,
+                        comms_memory = args.comms_mem,
+                        normalization = normalization,
+                        comms_scheme = comms_scheme,
+                        alphabet_size = Utility.params['alphabet_size'],
+                        use_horizon = args.use_horizon,
+                        use_entropy = args.use_entropy)
+else:
+    model = Agent.Agent(Utility.params['num_robots'],
+                        Utility.params['num_obs'],
+                        Utility.params['num_actions'] - 1, # -1 to account for gripper
+                        num_ops_per_action = 3,
+                        id = 0,
+                        learning_scheme = learning_scheme,
+                        no_buffer = args.no_buffer,
+                        comms_memory = args.comms_mem,
+                        normalization = normalization,
+                        comms_scheme = comms_scheme,
+                        alphabet_size = Utility.params['alphabet_size'],
+                        use_horizon = args.use_horizon,
+                        use_entropy = args.use_entropy)
 if test_mode:
     model.load_model(model_file_path)
 
@@ -115,6 +136,11 @@ Testing_Failures = 0
 Testing_Successes = 0
 speaker_loss = 0
 listener_loss = 0
+var_grad = 0
+gate = 0
+gate_stats = 0
+obstacles = 0
+obstacle_stats = 0
 
 while not exp_done:
     #receive initial observations
@@ -123,7 +149,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad'])
 
         if not exp_done:
             time_steps = 0
@@ -133,6 +159,11 @@ while not exp_done:
             rewards = Utility.parse_rewards(msgs[3])
             stats = Utility.parse_stats(msgs[4])
             obj_stats = Utility.parse_obj_stats(msgs[5])
+
+            if Utility.params['num_obstacles'] > 0:
+                obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
+            elif Utility.params['use_gate'] == 1:
+                gate_stats = Utility.parse_gate_stats(msgs[6])
 
             # Store the object stats in agent for learning later
             model.store_object_stats(obj_stats, time_steps>2)
@@ -209,6 +240,11 @@ while not exp_done:
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
                     obj_stats = Utility.parse_obj_stats(msgs[5])
+                    if Utility.params['num_obstacles'] > 0:
+                        obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
+                    elif Utility.params['use_gate'] == 1:
+                        gate_stats = Utility.parse_gate_stats(msgs[6])
+
 
                     # store object stats for learning later
                     model.store_object_stats(obj_stats, time_steps>2)
@@ -242,23 +278,24 @@ while not exp_done:
                             if train_mode:
                                 if learning_scheme != 'None' and not args.no_buffer:
                                     if not old_failures[i] and not failures[i]:
-                                        if model.comms_scheme == 'None':
-                                            message_codes = None
-                                        model.store_transition(agent_states[i],
-                                                               (actions[i], actions_to_take[i]),
-                                                               reward,
-                                                               new_agent_states[i],
-                                                               episode_done,
-                                                               state_vec = model.obj_state,
-                                                               message_vec = message_codes)
-                                        if model.comms_scheme != 'None':
-                                            model.store_comms_transition(agent_states[i],
-                                                                         (message_codes[i], None),
-                                                                         reward,
-                                                                         new_agent_states[i],
-                                                                         episode_done,
-                                                                         state_vec = model.obj_state,
-                                                                         message_vec = message_codes)
+                                        if not episode_done:
+                                            if model.comms_scheme == 'None':
+                                                message_codes = None
+                                            model.store_transition(agent_states[i],
+                                                                   (actions[i], actions_to_take[i]),
+                                                                   reward,
+                                                                   new_agent_states[i],
+                                                                   episode_done,
+                                                                   state_vec = model.obj_state,
+                                                                   message_vec = message_codes)
+                                            if model.comms_scheme != 'None':
+                                                model.store_comms_transition(agent_states[i],
+                                                                             (message_codes[i], None),
+                                                                             reward,
+                                                                             new_agent_states[i],
+                                                                             episode_done,
+                                                                             state_vec = model.obj_state,
+                                                                             message_vec = message_codes)
                         r.append(reward[0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
@@ -275,7 +312,7 @@ while not exp_done:
 
                             model.learn_no_buffer(sarsd)
                         else:
-                            listener_loss = model.learn()
+                            listener_loss, var_grad = model.learn()
                         if model.comms_scheme != 'None':
                             if args.no_buffer:
                                 sarsd = [np.array(agent_states, dtype = np.float32),
@@ -286,7 +323,7 @@ while not exp_done:
 
                                 model.learn_no_buffer_comms(sarsd)
                             else:
-                                speaker_loss = model.learn_comms()
+                                speaker_loss, var_grad = model.learn_comms()
 
                     running_reward += np.average(r)
                     # Store New Observations
@@ -303,10 +340,24 @@ while not exp_done:
                             average_force_ang = force_angs[i]
                         else:
                             angle = abs(average_force_ang - force_angs[i])
-                            average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
-                            average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
+                            #average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
+                            #average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
+                            average_force_mag = 0
+                            average_force_ang = 0
 
-                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)]])
+
+
+
+                    if type(gate_stats) != np.int:
+                        gate = []
+                        for i in range(len(gate_stats)):
+                            gate.append(gate_stats[i])
+                    if type(obstacle_stats) != np.int:
+                        obstacles = []
+                        for i in range(len(obstacle_stats)):
+                            obstacles.append(obstacle_stats[i])
+
+                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)
@@ -314,20 +365,24 @@ while not exp_done:
 
                     if episode_done:
                         run_time = time.time() - exp_start_time
-                        print('[RUN TIME] %.2f' % run_time)
+                        if not args.no_print:
+                            print('[RUN TIME] %.2f' % run_time)
                         exp_rewards.append(running_reward)
                         if not reached_goal:
-                            print("Episode", ep_counter ,"timed out")
+                            if not args.no_print:
+                                print("Episode", ep_counter ,"timed out")
                             if test_mode:
                                 Testing_Failures += 1
                         else:
-                            print("Episode", ep_counter ,"reached goal")
+                            if not args.no_print:
+                                print("Episode", ep_counter ,"reached goal")
                             if test_mode:
                                 Testing_Successes += 1
-                        for i in range(Utility.params['num_robots']):
-                            print('Agent', i, 'reward %.1f' % running_reward,
-                                  'epsilon:%.2f' % model.epsilon,
-                                  'steps:', model.learn_step_counter)
+                        if not args.no_print:
+                            for i in range(Utility.params['num_robots']):
+                                print('Agent', i, 'reward %.1f' % running_reward,
+                                      'epsilon:%.2f' % model.epsilon,
+                                      'steps:', model.learn_step_counter)
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []
@@ -335,17 +390,23 @@ while not exp_done:
                             path = recording_path + "/Models/" +file_name
                             if train_mode:
                                 model.save_model(path)
-                            print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+                            if not args.no_print:
+                                print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
                         running_reward = 0
                         model.reset_obj_stats()
-                        print("[INFO] Max Object Statistics: ", model.max_obj_stats)
-                        print("[INFO] Min Object Statistics: ", model.min_obj_stats)
+                        if not args.no_print:
+                            print("[INFO] Max Object Statistics: ", model.max_obj_stats)
+                            print("[INFO] Min Object Statistics: ", model.min_obj_stats)
 
                         # Send acknowledgment
                         socket.send(b"ok")
 print("[RUN TIME] Experiment: %.2f" % (time.time() - experiment_start_time))
 if test_mode:
+    print('Experiment:', args.recording_path)
     print("[Statistics] Success Percentage", (Testing_Successes/(Testing_Successes+Testing_Failures)))
     print("[Statistics] Failure Percentage", (Testing_Failures/(Testing_Successes+Testing_Failures)))
+print("Closing Server")
+#socket.unbind("tcp://:" + port)
+#socket.close()
 print("Experiment Done\n")

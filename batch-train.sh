@@ -21,11 +21,11 @@ until [ $num_robots -gt 12 ]; do
 	echo "Generated argos file"
 	cd ..
 	argos3 -c argos/collectiveRlTransport.argos
-	cd pytorch/python_code/
-	python viz.py Data/train/$experiment_name/Data/ $figure_path
-	cd ../..
+	#cd pytorch/python_code/
+	#python viz.py Data/train/$experiment_name/Data/ $figure_path
+	#cd ../..
 	let fourths_robot_failures+=1
-	
+
     done
     let num_robots=num_robots*2
 done

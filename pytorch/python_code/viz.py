@@ -78,26 +78,41 @@ episode_rewards = []
 speaker_loss = []
 listener_loss = []
 epsilons = []
-terminals = 0
+terminals = []
+episode_success_reward = []
+episode_success_index = []
+episode_failure_reward = []
+episode_failure_index = []
+ep_counter = 0
 print('. . . Consolodating Model Data')
 for episode in df_list:
     rewards = []
-    terminal = []
+    terminal = 0
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
         #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
-        speaker_loss.append(episode[1]['speaker_loss'][t])
-        listener_loss.append(episode[1]['listener_loss'][t])
-        #terminals += episode[1]['termination'][t]
+        #speaker_loss.append(episode[1]['speaker_loss'][t])
+        #listener_loss.append(episode[1]['listener_loss'][t])
+        terminal += 1
+    terminals.append(terminal)
     reward = []
     for robot in range(len(rewards[0])):
         reward.append(sum(float(row[robot]) for row in rewards))
     episode_rewards.append(reward)
-    #print(episode[0], reward[0])
+    if terminal < 4500:
+        episode_success_index.append(ep_counter)
+        episode_success_reward.append(np.average(reward))
 
-reward = [row[0] for row in episode_rewards]
+    else:
+        episode_failure_index.append(ep_counter)
+        episode_failure_reward.append(np.average(reward))
+    #print(episode[0], reward[0])
+    ep_counter+=1
+
+reward = [np.average(row) for row in episode_rewards]
+print(len(episode_rewards[0]), "Agents Tested")
 AVERAGE = np.average(reward)
-last_10_axis = np.arange(0, len(reward), 10)
+last_10_axis = np.arange(10, len(reward), 10)
 last_10_reward = [sum(reward[i:i + 10])/10
                   for i in last_10_axis[0:len(last_10_axis)-1]]
 for i in range(len(last_10_axis)-1):
@@ -153,13 +168,16 @@ end_episode_fail = 0
 rolling_fail = 0
 rolling = []
 rolling_x = []
+terminal_failures = 0
 for i in range(len(reward)):
-    if reward[i] < -8000:
+    if terminals[i] == 4500:
+        terminal_failures += 1
+    if reward[i] < -24000:
         episode_fail += 1
         rolling_fail += 1
-        if i > 599:
+        if i > 550:
             end_episode_fail += 1
-    elif reward[i] < -3000:
+    elif reward[i] < -15000:
         episode_struggle += 1
     if i % 10 == 0:
         rolling.append(rolling_fail/10)
@@ -169,17 +187,20 @@ for i in range(len(reward)):
 print('. . . Plotting')
 gate_x = np.arange(49, 850, 50)
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.rcParams.update({'font.size': 22})
 #for i in range(gate_x.shape[0]):
 #    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
-plt.title(args.figure_name)
+#plt.title(args.figure_name)
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
-plt.scatter(np.arange(0, len(reward), 1), reward, c = 'darkturquoise', label = 'Episode Scores')
+plt.scatter(episode_success_index, episode_success_reward, c = 'darkturquoise', label = 'Reached Goal')
+plt.scatter(episode_failure_index, episode_failure_reward, c = 'lightcoral', marker = 'x', label = 'Failure')
 #plt.plot(reward, c = 'lightsteelblue', label = 'Episode Scores')
 #plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
 plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
 #plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
-plt.ylim(-32000, 500)
+#plt.plot((550, 550), (-32000, 0), 'r--')
+plt.ylim(-40000, 500)
 plt.legend(loc = 1)
 plt.savefig(args.figure_path+args.figure_name+".png")
 
@@ -261,15 +282,15 @@ if args.test:
 
 print('Average Reward for Experiment:', AVERAGE)
 if not args.test and len(last_10_reward)>0:
-    print('Best Model:', (np.argmax(last_10_reward))*10, last_10_reward[np.argmax(last_10_reward)])
+    print('Best Model:', (np.argmax(last_10_reward)+1)*10, last_10_reward[np.argmax(last_10_reward)])
 print('Score STD:', np.std(reward))
 if args.test:
     print('Adjusted Score STD:', score_std)
     print('PCT STD:', pct_std)
-print('Failure Episodes:', episode_fail)
-print('Struggling Episodes:', episode_struggle)
-print('Percentage Failure: %.2f' % (episode_fail*100/len(reward)))
-print('Percentage Failure after ep 600: %.2f' % (end_episode_fail*100/(len(reward)-600)))
+print('Failure Episodes:', terminal_failures)
+#print('Struggling Episodes:', episode_struggle)
+print('Percentage Failure: %.2f' % (terminal_failures*100/len(reward)))
+#print('Percentage Failure after ep 600: %.2f' % (end_episode_fail*100/(len(reward)-600)))
 if args.test:
     print('Base Failure Episodes:', base_fail)
     print('Base Percentage Failure: %.2f' % (base_fail*100/len(base_reward)))

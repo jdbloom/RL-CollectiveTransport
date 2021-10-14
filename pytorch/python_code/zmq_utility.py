@@ -4,9 +4,9 @@ import numpy as np
 
 class ZMQ_Utility:
     def __init__(self):
-        self.PARAMS_FIELDS = ['num_robots','num_obs','num_actions', 'num_stats', 'alphabet_size',
-                              'distance_to_goal_normalization_factor']
-        self.PARAMS_FMT = '6f'
+        self.PARAMS_FIELDS = ['num_robots','num_obstacles', 'num_obs','num_actions', 'num_stats', 'alphabet_size',
+                               'use_gate', 'distance_to_goal_normalization_factor']
+        self.PARAMS_FMT = '8f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',
@@ -26,6 +26,13 @@ class ZMQ_Utility:
         self.STATS_FMT = '2f'
         self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.OBJ_STATS_FMT = '6f'
+        self.GATE_STATS_FIELDS = ['neg_wall_1_x', 'neg_wall_1_length_y',
+                                  'pos_wall_2_x', 'pos_wall_2_length_y']
+        self.GATE_STATS_FMT = '4f'
+        # Need to account for differing numbers of obstacles
+        self.OBSTACLE_STATS_FIELDS = []
+
+
         self.ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
         self.ACTIONS_FMT = '3f'
 
@@ -34,13 +41,22 @@ class ZMQ_Utility:
         # Byte size of int in C++
         self.INT_SIZE = 4
 
+
     def get_params(self, msg):
         self.params = self.parse_msg(msg, 'params', self.PARAMS_FIELDS, self.PARAMS_FMT)
         self.params['num_robots'] = int(self.params['num_robots'])
+        self.params['num_obstacles'] = int(self.params['num_obstacles'])
         self.params['num_obs'] = int(self.params['num_obs'])
         self.params['num_actions'] = int(self.params['num_actions'])
         self.params['num_stats'] = int(self.params['num_stats'])
         self.params['alphabet_size'] = int(self.params['alphabet_size'])
+        self.params['use_gate'] = int(self.params['use_gate'])
+
+    def set_obstacles_fields(self):
+        for i in range(self.params['num_obstacles']):
+            self.OBSTACLE_STATS_FIELDS.append('obs_'+str(i)+'_x')
+            self.OBSTACLE_STATS_FIELDS.append('obs_'+str(i)+'_y')
+        self.OBSTACLE_STATS_FMT = str(self.params['num_obstacles']*2)+'f'
 
     #
     # Parse the fields from a message
@@ -128,6 +144,21 @@ class ZMQ_Utility:
         # Make a numpy array
         obj_stats = np.fromiter(data.values(), dtype=np.float32, count = len(data))
         return obj_stats
+
+    def parse_obstacle_stats(self, msg):
+        # Parse the bytes into a dictionary
+        data = self.parse_msg(msg, 'obstacle_stats', self.OBSTACLE_STATS_FIELDS, self.OBSTACLE_STATS_FMT)
+        # Make a numpy array
+        obj_stats = np.fromiter(data.values(), dtype=np.float32, count = len(data))
+        return obj_stats
+
+    def parse_gate_stats(self, msg):
+        # Parse the bytes into a dictionary
+        data = self.parse_msg(msg, 'gate_stats', self.GATE_STATS_FIELDS, self.GATE_STATS_FMT)
+        # Make a numpy array
+        obj_stats = np.fromiter(data.values(), dtype=np.float32, count = len(data))
+        return obj_stats
+
 
     def serialize_actions(self, actions):
         packer = Struct(self.ACTIONS_FMT)
