@@ -273,7 +273,7 @@ class TD3ActorNetwork(nn.Module):
 
     def load_checkpoint(self, path):
         print('... loading', self.name, 'checkpoint ...')
-        T.load_state_dict(T.load(path + '_' + self.name))
+        self.load_state_dict(T.load(path + '_' + self.name))
 
 ############################################################################
 # Critic Network for TD3
@@ -311,4 +311,4 @@ class TD3CriticNetwork(nn.Module):
 
     def load_checkpoint(self, path):
         print('... loading', self.name, 'checkpoint ...')
-        T.load_state_dict(T.load(path + '_' + self.name))
+        self.load_state_dict(T.load(path + '_' + self.name))

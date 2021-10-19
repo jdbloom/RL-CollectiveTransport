@@ -70,6 +70,7 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:" + port)
 print("Server Started")
 # Get Parameters
+import ipdb; ipdb.set_trace()
 Utility.get_params(socket.recv())
 if not args.no_print:
     print("PARAMETERS:")
@@ -222,8 +223,6 @@ while not exp_done:
                             # Schedule the message to neighbors
                             model.schedule_message_to_all_contacts(i, message_codes[i])
 
-
-
                     # Carry scheduled messages
                     if model.comms_scheme != 'None':
                         model.carry_mail()
@@ -330,7 +329,6 @@ while not exp_done:
                     agent_states = new_agent_states
                     actions = []
 
-
                     # Calculate average force vector
                     average_force_mag = None
                     average_force_ang = None
@@ -344,9 +342,6 @@ while not exp_done:
                             #average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
                             average_force_mag = 0
                             average_force_ang = 0
-
-
-
 
                     if type(gate_stats) != np.int:
                         gate = []

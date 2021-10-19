@@ -589,7 +589,7 @@ class Agent():
 
     def DDPG_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return
+            return 0, 0
 
         states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
         target_actions = self.target_actor(states_)
@@ -616,9 +616,11 @@ class Agent():
 
         self.learn_step_counter += 1
 
+        return 0, 0
+
     def TD3_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return
+            return 0, 0
 
         states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.target_actor)
 
@@ -656,7 +658,7 @@ class Agent():
         self.learn_step_counter += 1
 
         if self.learn_step_counter % self.update_actor_iter != 0:
-            return
+            return 0, 0
         #print('Actor Learn Step')
         self.actor.optimizer.zero_grad()
         actor_q1_loss = self.critic_1.forward(states, self.actor.forward(states))
@@ -665,6 +667,8 @@ class Agent():
         self.actor.optimizer.step()
 
         self.update_network_parameters()
+
+        return 0, 0
 
     def learn_comms(self):
         if self.comms_memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
