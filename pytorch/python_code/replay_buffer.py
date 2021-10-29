@@ -1,18 +1,22 @@
 import numpy as np
 
 class ReplayBuffer():
-    def __init__(self, max_size, num_observations, num_actions, action_type, state_size = None, num_agents = None):
+    def __init__(self, max_size, num_observations, num_actions, action_type = None, state_size = None, num_agents = None, use_intention = False):
         self.mem_size = max_size
+        self.use_intention = use_intention
         self.mem_ctr = 0
         self.action_type = action_type
         self.state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
         self.new_state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
-        if self.action_type == 'Discrete':
-            self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
-        elif self.action_type == 'Continuous':
-            self.action_memory = np.zeros((self.mem_size, num_actions), dtype = np.float32)
+        if not use_intention:
+            if self.action_type == 'Discrete':
+                self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
+            elif self.action_type == 'Continuous':
+                self.action_memory = np.zeros((self.mem_size, num_actions), dtype = np.float32)
+            else:
+                raise Exception('Unknown Action Type:' + action_type)
         else:
-            raise Exception('Unknown Action Type:' + action_type)
+            self.action_memory = np.zeros((self.mem_size), dtype=np.float32)
         self.reward_memory = np.zeros((self.mem_size), dtype = np.float32)
         self.terminal_memory = np.zeros((self.mem_size), dtype = np.bool)
         if state_size is not None and num_agents is not None:
@@ -22,10 +26,13 @@ class ReplayBuffer():
     def store_transition(self, state, action, reward, state_, done, state_vec=None, message_vec=None):
         mem_index = self.mem_ctr % self.mem_size
         self.state_memory[mem_index] = state
-        if self.action_type == 'Discrete':
-            self.action_memory[mem_index] = action[0]
-        elif self.action_type == 'Continuous':
-            self.action_memory[mem_index] = action[1][0:2]
+        if not self.use_intention:
+            if self.action_type == 'Discrete':
+                self.action_memory[mem_index] = action[0]
+            elif self.action_type == 'Continuous':
+                self.action_memory[mem_index] = action[1][0:2]
+        else:
+            self.action_memory[mem_index] = action
         self.reward_memory[mem_index] = reward
         self.new_state_memory[mem_index] = state_
         self.terminal_memory[mem_index] = done
@@ -34,7 +41,7 @@ class ReplayBuffer():
             self.entropy_memory.store_transition(state_vec, message_vec)
 
 
-    def sample_buffer(self, batch_size, use_horizon, num_agents, get_entropy = False):
+    def sample_buffer(self, batch_size, use_horizon=False, num_agents=None, get_entropy = False):
         max_mem = min(self.mem_ctr, self.mem_size)
         if not use_horizon:
             batch = np.random.choice(max_mem, batch_size, replace = False)

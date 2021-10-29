@@ -31,9 +31,10 @@ parser.add_argument("--use_entropy", default = False, action = "store_true")
 parser.add_argument("--plot_comms", default = False, action = "store_true")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
-parser.add_argument("--scaled_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
+parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
+parser.add_argument("--use_intention", default = False, action = "store_true")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -86,7 +87,7 @@ data_file_path = recording_path + '/Data/'
 
 normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 
-if args.scaled_robots is not None:
+if args.trained_num_robots is not None:
     model = Agent.Agent(int(args.scaled_robots),
                         Utility.params['num_obs'],
                         Utility.params['num_actions'] - 1, # -1 to account for gripper
@@ -98,8 +99,10 @@ if args.scaled_robots is not None:
                         normalization = normalization,
                         comms_scheme = comms_scheme,
                         alphabet_size = Utility.params['alphabet_size'],
+                        horizon = 2,
                         use_horizon = args.use_horizon,
-                        use_entropy = args.use_entropy)
+                        use_entropy = args.use_entropy,
+                        use_intention = args.use_intention)
 else:
     model = Agent.Agent(Utility.params['num_robots'],
                         Utility.params['num_obs'],
@@ -112,8 +115,11 @@ else:
                         normalization = normalization,
                         comms_scheme = comms_scheme,
                         alphabet_size = Utility.params['alphabet_size'],
+                        horizon = 2,
                         use_horizon = args.use_horizon,
-                        use_entropy = args.use_entropy)
+                        use_entropy = args.use_entropy,
+                        use_intention = args.use_intention)
+
 if test_mode:
     model.load_model(model_file_path)
 
@@ -127,6 +133,7 @@ socket.send(b"ok")
 exp_done = False
 ep_counter = 0
 exp_rewards = []
+exp_intention_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
@@ -142,6 +149,8 @@ gate_stats = 0
 obstacles = 0
 obstacle_stats = 0
 
+
+
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
@@ -149,16 +158,25 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad', 'intention_reward'])
 
         if not exp_done:
             time_steps = 0
+
+            object_positions = []
+            agent_prox_flags = []
+            last_object_heading = None
+            next_heading_intention = 0
+            episode_intention_rewards = 0
+
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
             failures = Utility.parse_failures(msgs[2])
             rewards = Utility.parse_rewards(msgs[3])
             stats = Utility.parse_stats(msgs[4])
             obj_stats = Utility.parse_obj_stats(msgs[5])
+
+            object_positions.append([obj_stats[0], obj_stats[1]])
 
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
@@ -173,9 +191,10 @@ while not exp_done:
             force_mags = []
             force_angs = []
             running_reward = 0
+
             for i in range(Utility.params['num_robots']):
                 # append env observations and messages in inbox to make agent state
-                agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
+                agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
                 if args.comms_scheme != 'None':
                     message_memory[i].append(msg.msgs)
 
@@ -243,6 +262,24 @@ while not exp_done:
                     elif Utility.params['use_gate'] == 1:
                         gate_stats = Utility.parse_gate_stats(msgs[6])
 
+                    old_object_positions = copy.deepcopy(object_positions)
+                    object_positions.append([obj_stats[0], obj_stats[1]])
+                    intention_reward = 0
+                    if args.use_intention:
+                        if len(object_positions) > 2:
+                            object_positions.pop(0)
+                            last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
+                            if next_heading_intention is not None:
+                                x1 = math.cos(last_object_heading)
+                                y1 = math.sin(last_object_heading)
+                                x2 = math.cos(next_heading_intention*math.pi)
+                                y2 = math.sin(next_heading_intention*math.pi)
+
+                                diff = np.dot([x1, y1], [x2, y2])
+
+                                intention_reward = -1 + diff
+                                episode_intention_rewards+=intention_reward
+
 
                     # store object stats for learning later
                     model.store_object_stats(obj_stats, time_steps>2)
@@ -251,10 +288,31 @@ while not exp_done:
 
 
                     # Store Transitions and Learn
+                    old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
+
                     new_agent_states = []
                     force_mags = []
                     force_angs = []
                     r = []
+                    agent_prox_flags = []
+
+                    if args.use_intention:
+                        for i in range(Utility.params['num_robots']):
+                            prox_values = env_observations[i][7:]
+                            #print('[DEBUG] Prox Values', prox_values)
+                            prox_value = np.sum(prox_values)
+                            if prox_value/24 > 0.5:
+                                agent_prox_flags.append(1)
+                            else:
+                                agent_prox_flags.append(0)
+                        if len(object_positions) == 2:
+                            old_heading_intention = next_heading_intention
+                            next_heading_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                        if len(old_object_positions) == 2:
+                            #store transitions of intentions
+                            model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention, intention_reward, np.append(object_positions, old_agent_prox_flags), 0)
+
+
 
                     for i in range(Utility.params['num_robots']):
                         #print('[DEBUG] ROBOT', i)
@@ -267,7 +325,7 @@ while not exp_done:
                         reward += (-1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
-                        new_agent_state, msg = model.make_agent_state(env_observations[i], i, args.comms_mem, message_memory[i])
+                        new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
                         if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
                             message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
@@ -351,7 +409,7 @@ while not exp_done:
                         for i in range(len(obstacle_stats)):
                             obstacles.append(obstacle_stats[i])
 
-                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad])
+                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)
@@ -377,6 +435,7 @@ while not exp_done:
                                 print('Agent', i, 'reward %.1f' % running_reward,
                                       'epsilon:%.2f' % model.epsilon,
                                       'steps:', model.learn_step_counter)
+                            print('Intention rewards %.2f' % episode_intention_rewards)
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []

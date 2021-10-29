@@ -17,8 +17,8 @@ Loss = nn.MSELoss()
 class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
                  num_ops_per_action, id, learning_scheme, no_buffer,
-                 comms_memory, normalization, comms_scheme = "None", alphabet_size=4,
-                 min_max_action = 1, use_horizon = False, use_entropy=False):
+                 comms_memory, normalization, comms_scheme = "None", alphabet_size=4, horizon = 2,
+                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False):
         self.id = id
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -33,6 +33,9 @@ class Agent():
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
         self.max_obj_stats = np.zeros(4)
         self.normalization = normalization
+        self.use_horizon = use_horizon
+        self.horizon = horizon
+        self.use_intention = use_intention
 
         # Dictionaries and binning for loss function calculations
         self.use_entropy = use_entropy
@@ -49,10 +52,10 @@ class Agent():
         self.binned_acceleration = None
         self.obj_state = None
 
-
-
         self.make_comms_scheme()
         self.make_learning_scheme(comms_memory)
+        if self.use_intention:
+            self.build_intention(self.horizon)
 
 
     def make_comms_scheme(self):
@@ -101,11 +104,11 @@ class Agent():
         msg = incoming_comms(msgs)
         return msg
 
-    def make_agent_state(self, env_obs, agent_id, comms_memory, message_memory):
+    def make_agent_state(self, env_obs, heading_intention, agent_id, comms_memory, message_memory):
         #env_obs=self.normalize_obs(env_obs)
         if self.comms_scheme == 'None':
             # need to append empty messages for all agents to keep networks the same size
-            return np.concatenate((env_obs, np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
+            return np.concatenate((env_obs, np.array([heading_intention]), np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
         if not comms_memory:
             messages = np.concatenate(msg.msgs)
@@ -158,6 +161,7 @@ class Agent():
         self.failure_action = [0, 0, 1]
         self.failure_action_code = len(self.action_space)
         self.learn_step_counter = 0
+        self.intention_learn_step_counter = 0
         self.noise = 0.1
         self.update_actor_iter = 2
         self.warmup = 1000
@@ -208,10 +212,9 @@ class Agent():
     def make_DQN(self, comms_memory):
         #define networks for DQN
         self.min_max_action = 0.1
-        if not comms_memory:
-            obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        else:
-            obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        if self.use_intention: obs_size+=1
+
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
         comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
@@ -225,10 +228,9 @@ class Agent():
 
     def make_DDQN(self, comms_memory):
         self.min_max_action = 0.1
-        if not comms_memory:
-            obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        else:
-            obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        if self.use_intention: obs_size+=1
+
         actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
 
@@ -245,6 +247,8 @@ class Agent():
         #define networks for DDPG
         self.min_max_action = 1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        if self.use_intention: obs_size+=1
+
         actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action,
                          'min_max_action':self.min_max_action}
@@ -261,7 +265,7 @@ class Agent():
         print(self.critic)
         print(self.target_critic)
 
-        self.update_network_parameters(tau = 1)
+        self.update_network_parameters(tau = 1, learning_scheme ='DDPG')
 
         self.actor.cuda()
         self.target_actor.cuda()
@@ -274,6 +278,8 @@ class Agent():
         #difine networks for TD3
         self.min_max_action = 1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        if use_intention: obs_size+=1
+
         actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':self.num_actions}
         critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
@@ -292,23 +298,23 @@ class Agent():
         print(self.critic_2)
         print(self.target_critic_2)
 
-        self.update_network_parameters(tau = 1)
+        self.update_network_parameters(tau = 1, learning_scheme ='TD3')
 
         self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
 
-    def update_network_parameters(self, tau = None):
+    def update_network_parameters(self, tau = None, learning_scheme = None):
         # If tau = 1 -> hard update (should only be done during init)
         if tau is None:
             tau = self.tau
 
-        if self.learning_scheme == 'DDPG':
+        if learning_scheme == 'DDPG':
             # Update Actor Network
             for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
                 target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
             # Update Critic Network
             for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
                 target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
-        elif self.learning_scheme == 'TD3':
+        elif learning_scheme == 'TD3':
             actor_params = self.actor.named_parameters()
             critic_1_params = self.critic_1.named_parameters()
             critic_2_params = self.critic_2.named_parameters()
@@ -335,8 +341,37 @@ class Agent():
             self.target_critic_1.load_state_dict(critic_1)
             self.target_critic_2.load_state_dict(critic_2)
             self.target_actor.load_state_dict(actor)
+
+        elif  learning_scheme == 'intention_TD3':
+            actor_params = self.intention_actor.named_parameters()
+            critic_1_params = self.intention_critic_1.named_parameters()
+            critic_2_params = self.intention_critic_2.named_parameters()
+            target_actor_params = self.intention_target_actor.named_parameters()
+            target_critic_1_params = self.intention_target_critic_1.named_parameters()
+            target_critic_2_params = self.intention_target_critic_2.named_parameters()
+
+            critic_1 = dict(critic_1_params)
+            critic_2 = dict(critic_2_params)
+            actor = dict(actor_params)
+            target_actor = dict(target_actor_params)
+            target_critic_1 = dict(target_critic_1_params)
+            target_critic_2 = dict(target_critic_2_params)
+
+            for name in critic_1:
+                critic_1[name] = tau*critic_1[name].clone() + (1-tau)*target_critic_1[name].clone()
+
+            for name in critic_2:
+                critic_2[name] = tau*critic_2[name].clone() + (1-tau)*target_critic_2[name].clone()
+
+            for name in actor:
+                actor[name] = tau*actor[name].clone() + (1-tau)*target_actor[name].clone()
+
+            self.intention_target_critic_1.load_state_dict(critic_1)
+            self.intention_target_critic_2.load_state_dict(critic_2)
+            self.intention_target_actor.load_state_dict(actor)
         else:
             raise Exception('UNKNOWN NETWORK UPDATE RULE'+self.learning_scheme)
+
 
     def replace_target_network(self):
         if self.learn_step_counter % self.replace_target_cnt == 0:
@@ -459,6 +494,8 @@ class Agent():
         return outgoing_message, outgoing_message_code
 
     def learn(self):
+        if self.use_intention:
+            self.learn_intention()
         if self.learning_scheme == 'None':
             return
         elif self.learning_scheme == 'DQN':
@@ -612,7 +649,7 @@ class Agent():
         actor_loss.backward()
         self.actor_optimizer.step()
 
-        self.update_network_parameters()
+        self.update_network_parameters(learning_scheme = 'DDPG')
 
         self.learn_step_counter += 1
 
@@ -666,7 +703,7 @@ class Agent():
         actor_loss.backward()
         self.actor.optimizer.step()
 
-        self.update_network_parameters()
+        self.update_network_parameters(learning_scheme = 'TD3')
 
         return 0, 0
 
@@ -746,10 +783,13 @@ class Agent():
         else:
             self.comms_memory.store_transition(state, action, reward, state_, done)
 
+    def store_intention_transition(self, state, action, reward, state_, done):
+        self.intention_memory.store_transition(state, action, reward, state_, done)
+
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
 
-    def sample_memory(self, network, get_entropy = False):
+    def sample_memory(self, network, get_entropy = False, intention = False):
         if get_entropy:
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
         else:
@@ -776,6 +816,15 @@ class Agent():
 
         return states, actions, rewards, states_, dones, state_vec, message_vec
 
+    def sample_intention_memory(self, network):
+        state, action, reward, new_state, done, _, _ = self.intention_memory.sample_buffer(self.batch_size)
+        states = T.tensor(state).to(network.device)
+        actions = T.tensor(action).to(network.device)
+        rewards = T.tensor(reward).to(network.device)
+        states_ = T.tensor(new_state).to(network.device)
+        dones = T.tensor(done).to(network.device)
+
+        return states, actions, rewards, states_, dones
 
     def save_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
@@ -950,3 +999,96 @@ class Agent():
             return listener_loss
         else:
             raise Exception('UNKNOWN ENTROPY LOSS'+type)
+
+
+    def build_intention(self, horizon):
+        #difine networks for TD3
+        print("----- Building Intention Model ------")
+        min_max_action = 1
+        obs_size = horizon*2 + self.num_agents*self.alphabet_size
+        actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
+                         'fc2_dims':300, 'n_actions':1}
+        critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
+                          'fc2_dims':300, 'n_actions':1}
+
+        self.intention_actor = TD3ActorNetwork(**actor_nn_args, name = 'intention_actor')
+        self.intention_target_actor = TD3ActorNetwork(**actor_nn_args, name = 'intention_target_actor')
+        print(self.intention_actor)
+        print(self.intention_target_actor)
+        self.intention_critic_1 = TD3CriticNetwork(**critic_nn_args, name = 'intention_critic_1')
+        self.intention_target_critic_1 = TD3CriticNetwork(**critic_nn_args, name = 'intention_target_critic_1')
+        print(self.intention_critic_1)
+        print(self.intention_target_critic_1)
+        self.intention_critic_2 = TD3CriticNetwork(**critic_nn_args, name = 'intention_critic_2')
+        self.intention_target_critic_2 = TD3CriticNetwork(**critic_nn_args, name = 'intention_target_critic_2')
+        print(self.intention_critic_2)
+        print(self.intention_target_critic_2)
+        self.update_network_parameters(tau=1, learning_scheme = 'intention_TD3')
+        self.intention_memory = ReplayBuffer(100000, obs_size, self.num_actions, use_intention = True)
+
+    def learn_intention(self):
+        if self.intention_memory.mem_ctr < self.batch_size:
+            return 0, 0
+
+        states, actions, rewards, states_, dones = self.sample_intention_memory(network = self.intention_target_actor)
+
+        target_actions = self.intention_target_actor.forward(states_)
+        target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
+        target_actions = T.clamp(target_actions, -1, 1)
+
+        q1_ = self.intention_target_critic_1.forward(states_, target_actions)
+        q2_ = self.intention_target_critic_2.forward(states_, target_actions)
+
+        q1 = self.intention_critic_1.forward(states, actions.unsqueeze(1))
+        q2 = self.intention_critic_2.forward(states, actions.unsqueeze(1))
+
+        q1_[dones] = 0.0
+        q2_[dones] = 0.0
+
+        q1_ = q1_.view(-1)
+        q2_ = q2_.view(-1)
+
+        critic_value_ = T.min(q1_, q2_)
+
+        target = rewards + self.gamma*critic_value_
+        target = target.view(self.batch_size, 1)
+
+        self.intention_critic_1.optimizer.zero_grad()
+        self.intention_critic_2.optimizer.zero_grad()
+
+        q1_loss = F.mse_loss(target, q1)
+        q2_loss = F.mse_loss(target, q2)
+        critic_loss = q1_loss + q2_loss
+        critic_loss.backward()
+        self.intention_critic_1.optimizer.step()
+        self.intention_critic_2.optimizer.step()
+
+        self.intention_learn_step_counter += 1
+
+        if self.intention_learn_step_counter % self.update_actor_iter != 0:
+            return 0, 0
+        #print('Actor Learn Step')
+        self.intention_actor.optimizer.zero_grad()
+        actor_q1_loss = self.intention_critic_1.forward(states, self.intention_actor.forward(states))
+        actor_loss = -T.mean(actor_q1_loss)
+        actor_loss.backward()
+        self.intention_actor.optimizer.step()
+
+        self.update_network_parameters(learning_scheme = 'intention_TD3')
+
+        return 0, 0
+
+    def choose_object_intention(self, positions, agent_prox_flags, test = False):
+        observation = np.append(np.array(positions), np.array(agent_prox_flags))
+        if self.time_step < self.warmup:
+            mu = T.tensor(np.random.normal(scale = self.noise,
+                                           size = (1,))
+                          ).to(self.intention_actor.device)
+        else:
+            state = T.tensor(observation, dtype = T.float).to(self.intention_actor.device)
+            mu = self.intention_actor.forward(state).to(self.intention_actor.device)
+        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.intention_actor.device)
+        mu_prime = T.clamp(mu_prime, -1, 1)
+        self.time_step += 1
+        actions = mu_prime.cpu().detach().item()
+        return actions

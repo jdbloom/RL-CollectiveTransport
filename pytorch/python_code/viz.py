@@ -84,17 +84,21 @@ episode_success_index = []
 episode_failure_reward = []
 episode_failure_index = []
 ep_counter = 0
+intention_reward = []
+exp_intention_rewards = []
 print('. . . Consolodating Model Data')
 for episode in df_list:
     rewards = []
     terminal = 0
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
+        intention_reward.append(episode[1]['intention_reward'][t])
         #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
         #speaker_loss.append(episode[1]['speaker_loss'][t])
         #listener_loss.append(episode[1]['listener_loss'][t])
         terminal += 1
     terminals.append(terminal)
+    exp_intention_rewards.append(np.average(intention_reward))
     reward = []
     for robot in range(len(rewards[0])):
         reward.append(sum(float(row[robot]) for row in rewards))
@@ -223,6 +227,11 @@ plt.title(args.figure_name+'_LOSSES')
 plt.legend()
 plt.savefig(args.figure_path+args.figure_name+"_LOSSES"+".png")
 
+plt.clf()
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.plot(exp_intention_rewards, c='g')
+plt.title('Intention Rewards')
+plt.savefig(args.figure_path+args.figure_name+"_intention_rewards.png")
 
 
 if args.test:
