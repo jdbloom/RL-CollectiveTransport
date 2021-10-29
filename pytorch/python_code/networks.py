@@ -312,3 +312,31 @@ class TD3CriticNetwork(nn.Module):
     def load_checkpoint(self, path):
         print('... loading', self.name, 'checkpoint ...')
         self.load_state_dict(T.load(path + '_' + self.name))
+
+
+class IntentionDDPGActorNetwork(nn.Module):
+    def __init__(self, alpha, input_dims, fc1_dims=128, fc2_dims=256, n_actions=1, name='DDPGIntentionActor'):
+        super(IntentionDDPGActorNetwork, self).__init__()
+
+        self.name = name
+
+        self.conv1 = nn.Conv2d(*input_dims, fc1_dims, (3, 3), 4)
+        f1 = 1 / np.sqrt(self.conv1.weight.data.size()[0])
+        T.nn.init.uniform_(self.conv1.weight.data, -f1, f1)
+        T.nn.init.uniform_(self.conv1.bias.data, -f1, f1)
+        self.bn1 = nn.LayerNorm(fc1_dims)
+
+        self.conv2 = nn.Conv2d(fc1_dims, fc2_dims, (3, 3), 4)
+        f2 = 1 / np.sqrt(self.conv2.weight.data.size()[0])
+        T.nn.init.uniform_(self.conv2.weight.data, -f2, f2)
+        T.nn.init.uniform_(self.conv2.bias.data, -f2, f2)
+        self.bn1 = nn.LayerNorm(fc2_dims)
+
+        f3 = 0.003
+        self.mu = nn.Linear(fc2_dims, n_actions)
+        T.nn.init.uniform_(self.mu.weight.data, -f3, f3)
+        T.nn.init.uniform_(self.mu.bias.data, -f3, f3)
+
+        self.optimize = optim.Adam(self.parameters(), lr = alpha)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)

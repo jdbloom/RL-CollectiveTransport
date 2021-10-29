@@ -70,7 +70,6 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:" + port)
 print("Server Started")
 # Get Parameters
-import ipdb; ipdb.set_trace()
 Utility.get_params(socket.recv())
 if not args.no_print:
     print("PARAMETERS:")
