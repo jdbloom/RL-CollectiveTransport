@@ -84,11 +84,12 @@ episode_success_index = []
 episode_failure_reward = []
 episode_failure_index = []
 ep_counter = 0
-intention_reward = []
+
 exp_intention_rewards = []
 print('. . . Consolodating Model Data')
 for episode in df_list:
     rewards = []
+    intention_reward = []
     terminal = 0
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
@@ -98,7 +99,7 @@ for episode in df_list:
         #listener_loss.append(episode[1]['listener_loss'][t])
         terminal += 1
     terminals.append(terminal)
-    exp_intention_rewards.append(np.average(intention_reward))
+    exp_intention_rewards.append(sum(intention_reward))
     reward = []
     for robot in range(len(rewards[0])):
         reward.append(sum(float(row[robot]) for row in rewards))
