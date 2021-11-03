@@ -106,9 +106,11 @@ class Agent():
 
     def make_agent_state(self, env_obs, heading_intention, agent_id, comms_memory, message_memory):
         #env_obs=self.normalize_obs(env_obs)
+        if self.use_intention:
+            env_obs = np.concatenate((env_obs, np.array([heading_intention])))
         if self.comms_scheme == 'None':
             # need to append empty messages for all agents to keep networks the same size
-            return np.concatenate((env_obs, np.array([heading_intention]), np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
+            return np.concatenate((env_obs, np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
         msg = self.get_agent_incoming_communications(agent_id)
         if not comms_memory:
             messages = np.concatenate(msg.msgs)
@@ -278,7 +280,7 @@ class Agent():
         #difine networks for TD3
         self.min_max_action = 1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        if use_intention: obs_size+=1
+        if self.use_intention: obs_size+=1
 
         actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':self.num_actions}
