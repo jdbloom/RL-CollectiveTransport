@@ -200,7 +200,7 @@ class Agent():
         else:
             obs_size = self.num_observations + self.num_agents*self.alphabet_size
         print('MODEL SPECIFICS:')
-        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
+        comms_nn_args = {'id':self.id, 'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
         self.q_comms_eval = DDQNComms(**comms_nn_args)
         self.q_comms_next = DDQNComms(**comms_nn_args)
         print('Communication Network:')
@@ -217,9 +217,8 @@ class Agent():
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
         if self.use_intention: obs_size+=1
 
-        actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
+        actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
-        comms_nn_args = {'lr':self.lr, 'observation_size':obs_size, 'alphabet_size':self.alphabet_size}
 
         self.q_eval = DQN(**actions_nn_args)
         self.q_next = DQN(**actions_nn_args)
@@ -233,7 +232,7 @@ class Agent():
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
         if self.use_intention: obs_size+=1
 
-        actions_nn_args = {'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
+        actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
 
         self.q_eval = DDQN(**actions_nn_args)
@@ -251,10 +250,10 @@ class Agent():
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
         if self.use_intention: obs_size+=1
 
-        actor_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size,
+        actor_nn_args = {'id':self.id, 'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action,
                          'min_max_action':self.min_max_action}
-        critic_nn_args = {'num_actions':self.num_actions, 'observation_size':obs_size}
+        critic_nn_args = {'id':self.id, 'num_actions':self.num_actions, 'observation_size':obs_size}
 
         self.actor = DDPGActorNetwork(**actor_nn_args, name = 'actor')
         self.target_actor = DDPGActorNetwork(**actor_nn_args, name = 'target_actor')
@@ -282,9 +281,9 @@ class Agent():
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
         if self.use_intention: obs_size+=1
 
-        actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
+        actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':self.num_actions}
-        critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
+        critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
                           'fc2_dims':300, 'n_actions':self.num_actions}
 
         self.actor = TD3ActorNetwork(**actor_nn_args, name = 'actor')
@@ -1022,9 +1021,9 @@ class Agent():
         print("----- Building Intention Model ------")
         min_max_action = 1
         obs_size = horizon*2 + self.num_agents*self.alphabet_size
-        actor_nn_args = {'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
+        actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':1}
-        critic_nn_args = {'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
+        critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
                           'fc2_dims':300, 'n_actions':1}
 
         self.intention_actor = TD3ActorNetwork(**actor_nn_args, name = 'intention_actor')

@@ -87,42 +87,61 @@ Utility.set_obstacles_fields();
 data_file_path = recording_path + '/Data/'
 
 normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
-
-if args.trained_num_robots is not None:
-    model = Agent.Agent(int(args.scaled_robots),
-                        Utility.params['num_obs'],
-                        Utility.params['num_actions'] - 1, # -1 to account for gripper
-                        num_ops_per_action = 3,
-                        id = 0,
-                        learning_scheme = learning_scheme,
-                        no_buffer = args.no_buffer,
-                        comms_memory = args.comms_mem,
-                        normalization = normalization,
-                        comms_scheme = comms_scheme,
-                        alphabet_size = Utility.params['alphabet_size'],
-                        horizon = 2,
-                        use_horizon = args.use_horizon,
-                        use_entropy = args.use_entropy,
-                        use_intention = args.use_intention)
+if args.independent_learning:
+    models = [Agent.Agent(Utility.params['num_robots'],
+                          Utility.params['num_obs'],
+                          Utility.params['num_actions'] - 1, # -1 to account for gripper
+                          num_ops_per_action = 3,
+                          id = i,
+                          learning_scheme = learning_scheme,
+                          no_buffer = args.no_buffer,
+                          comms_memory = args.comms_mem,
+                          normalization = normalization,
+                          comms_scheme = comms_scheme,
+                          alphabet_size = Utility.params['alphabet_size'],
+                          horizon = 2,
+                          use_horizon = args.use_horizon,
+                          use_entropy = args.use_entropy,
+                          use_intention = args.use_intention)
+             for i in range(Utility.params['num_robots'])]
+    if test_mode:
+        [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
 else:
-    model = Agent.Agent(Utility.params['num_robots'],
-                        Utility.params['num_obs'],
-                        Utility.params['num_actions'] - 1, # -1 to account for gripper
-                        num_ops_per_action = 3,
-                        id = 0,
-                        learning_scheme = learning_scheme,
-                        no_buffer = args.no_buffer,
-                        comms_memory = args.comms_mem,
-                        normalization = normalization,
-                        comms_scheme = comms_scheme,
-                        alphabet_size = Utility.params['alphabet_size'],
-                        horizon = 2,
-                        use_horizon = args.use_horizon,
-                        use_entropy = args.use_entropy,
-                        use_intention = args.use_intention)
+    if args.trained_num_robots is not None:
+        model = Agent.Agent(int(args.scaled_robots),
+                            Utility.params['num_obs'],
+                            Utility.params['num_actions'] - 1, # -1 to account for gripper
+                            num_ops_per_action = 3,
+                            id = 0,
+                            learning_scheme = learning_scheme,
+                            no_buffer = args.no_buffer,
+                            comms_memory = args.comms_mem,
+                            normalization = normalization,
+                            comms_scheme = comms_scheme,
+                            alphabet_size = Utility.params['alphabet_size'],
+                            horizon = 2,
+                            use_horizon = args.use_horizon,
+                            use_entropy = args.use_entropy,
+                            use_intention = args.use_intention)
+    else:
+        model = Agent.Agent(Utility.params['num_robots'],
+                            Utility.params['num_obs'],
+                            Utility.params['num_actions'] - 1, # -1 to account for gripper
+                            num_ops_per_action = 3,
+                            id = 0,
+                            learning_scheme = learning_scheme,
+                            no_buffer = args.no_buffer,
+                            comms_memory = args.comms_mem,
+                            normalization = normalization,
+                            comms_scheme = comms_scheme,
+                            alphabet_size = Utility.params['alphabet_size'],
+                            horizon = 2,
+                            use_horizon = args.use_horizon,
+                            use_entropy = args.use_entropy,
+                            use_intention = args.use_intention)
 
-if test_mode:
-    model.load_model(model_file_path)
+    if test_mode:
+        model.load_model(model_file_path)
 
 
 # Send acknowledgment
@@ -167,8 +186,12 @@ while not exp_done:
             object_positions = []
             agent_prox_flags = []
             last_object_heading = None
-            next_heading_intention = 0
-            episode_intention_rewards = 0
+            if args.independent_learning:
+                next_heading_intention = np.zeros(Utility.params['num_robots'])
+                episode_intention_rewards = np.zeros(Utility.params['num_robots'])
+            else:
+                next_heading_intention = 0
+                episode_intention_rewards = 0
 
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
@@ -185,7 +208,10 @@ while not exp_done:
                 gate_stats = Utility.parse_gate_stats(msgs[6])
 
             # Store the object stats in agent for learning later
-            model.store_object_stats(obj_stats, time_steps>2)
+            if args.independent_learning:
+                [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
+            else:
+                model.store_object_stats(obj_stats, time_steps>2)
 
             message_memory = [[] for i in range(Utility.params['num_robots'])]
             agent_states = []
@@ -195,7 +221,10 @@ while not exp_done:
 
             for i in range(Utility.params['num_robots']):
                 # append env observations and messages in inbox to make agent state
-                agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
+                if args.independent_learning:
+                    agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                else:
+                    agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
                 if args.comms_scheme != 'None':
                     message_memory[i].append(msg.msgs)
 
@@ -230,21 +259,37 @@ while not exp_done:
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         #print("[DEBUG] Robot",i,"Failure:", failures[i])
-                        action, action_num = model.choose_action(agent_states[i], failures[i], test_mode)
+                        if args.independent_learning:
+                            action, action_num = models[i].choose_action(agent_states[i], failures[i], test_mode)
+                        else:
+                            action, action_num = model.choose_action(agent_states[i], failures[i], test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
                         #print(i, action)
                         # Choose a message
-                        if model.comms_scheme != 'None':
-                            if (time_steps-1)%messaging_frequency == 0:
-                                message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
-                                message_codes.append(message_num)
-                            # Schedule the message to neighbors
-                            model.schedule_message_to_all_contacts(i, message_codes[i])
+                        if args.independent_learning:
+                            if models[i].comms_scheme != 'None':
+                                if (time_steps-1)%messaging_frequency == 0:
+                                    message, message_num = models[i].choose_message(agent_states[i], failures[i], test_mode)
+                                    message_codes.append(message_num)
+                                # Schedule the message to neighbors
+                                    models[i].schedule_message_to_all_contacts(i, message_codes[i])
+                        else:
+                            if model.comms_scheme != 'None':
+                                if (time_steps-1)%messaging_frequency == 0:
+                                    message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
+                                    message_codes.append(message_num)
+                                # Schedule the message to neighbors
+                                    model.schedule_message_to_all_contacts(i, message_codes[i])
 
                     # Carry scheduled messages
-                    if model.comms_scheme != 'None':
-                        model.carry_mail()
+                    if args.independent_learning:
+                        for i in range(Utility.params['num_robots']):
+                            if models[i].comms_scheme != 'None':
+                                models[i].carry_mail()
+                    else:
+                        if model.comms_scheme != 'None':
+                            model.carry_mail()
 
                     old_failures = failures[:]
                     # Take Step
@@ -265,14 +310,26 @@ while not exp_done:
 
                     old_object_positions = copy.deepcopy(object_positions)
                     object_positions.append([obj_stats[0], obj_stats[1]])
-                    intention_reward = 0
+                    if args.independent_learning:
+                        intention_reward = np.zeros(Utility.params['num_robots'])
+                    else:
+                        intention_reward = 0
                     if args.use_intention:
                         if len(object_positions) > 2:
                             object_positions.pop(0)
                             last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
-                            if next_heading_intention is not None:
-                                x1 = math.cos(last_object_heading)
-                                y1 = math.sin(last_object_heading)
+                            x1 = math.cos(last_object_heading)
+                            y1 = math.sin(last_object_heading)
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    x2 = math.cos(next_heading_intention[i]*math.pi)
+                                    y2 = math.sin(next_heading_intention[i]*math.pi)
+
+                                    diff = np.dot([x1, y1], [x2, y2])
+
+                                    intention_reward[i] = -1 + diff
+                                    episode_intention_rewards[i]+=intention_reward[i]
+                            else:
                                 x2 = math.cos(next_heading_intention*math.pi)
                                 y2 = math.sin(next_heading_intention*math.pi)
 
@@ -283,9 +340,15 @@ while not exp_done:
 
 
                     # store object stats for learning later
-                    model.store_object_stats(obj_stats, time_steps>2)
-                    if model.comms_scheme != 'None':
-                        model.store_state_message(message_codes, time_steps>2)
+                    if args.independent_learning:
+                        for i in range(Utility.params['num_robots']):
+                            models[i].store_object_stats(obj_stats, time_steps>2)
+                            if models[i].comms_scheme != 'None':
+                                models[i].store_state_message(message_codes, time_steps>2)
+                    else:
+                        model.store_object_stats(obj_stats, time_steps>2)
+                        if model.comms_scheme != 'None':
+                            model.store_state_message(message_codes, time_steps>2)
 
 
                     # Store Transitions and Learn
@@ -307,26 +370,36 @@ while not exp_done:
                             else:
                                 agent_prox_flags.append(0)
                         if len(object_positions) == 2:
-                            old_heading_intention = next_heading_intention
-                            next_heading_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    next_heading_intention[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                            else:
+                                next_heading_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
                         if len(old_object_positions) == 2:
                             #store transitions of intentions
-                            model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention, intention_reward, np.append(object_positions, old_agent_prox_flags), 0)
-
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                            else:
+                                model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention, intention_reward, np.append(object_positions, old_agent_prox_flags), 0)
 
 
                     for i in range(Utility.params['num_robots']):
                         #print('[DEBUG] ROBOT', i)
-                        reward = rewards[i]
+                        #reward = rewards[i]
                         #print('[DEBUG] OBS:', env_observations[i])
                         prox_values = env_observations[i][7:]
                         #print('[DEBUG] Prox Values', prox_values)
                         prox_value = np.sum(prox_values)
                         #print('[DEBUG] Prox Value Reward:', (-0.1)*prox_value)
-                        reward += (-1)*prox_value
+                        #reward += (-1)*prox_value
+                        rewards[i] += (-1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
-                        new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
+                        if args.independent_learning:
+                            new_agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                        else:
+                            new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
                         if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
                             message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
@@ -336,24 +409,43 @@ while not exp_done:
                                 if learning_scheme != 'None' and not args.no_buffer:
                                     if not old_failures[i] and not failures[i]:
                                         if not episode_done:
-                                            if model.comms_scheme == 'None':
-                                                message_codes = None
-                                            model.store_transition(agent_states[i],
-                                                                   (actions[i], actions_to_take[i]),
-                                                                   reward,
-                                                                   new_agent_states[i],
-                                                                   episode_done,
-                                                                   state_vec = model.obj_state,
-                                                                   message_vec = message_codes)
-                                            if model.comms_scheme != 'None':
-                                                model.store_comms_transition(agent_states[i],
-                                                                             (message_codes[i], None),
-                                                                             reward,
-                                                                             new_agent_states[i],
-                                                                             episode_done,
-                                                                             state_vec = model.obj_state,
-                                                                             message_vec = message_codes)
-                        r.append(reward[0])
+                                            if args.independent_learning:
+                                                if models[i].comms_scheme == 'None':
+                                                    message_codes = None
+                                                models[i].store_transition(agent_states[i],
+                                                                       (actions[i], actions_to_take[i]),
+                                                                       rewards[i],
+                                                                       new_agent_states[i],
+                                                                       episode_done,
+                                                                       state_vec = models[i].obj_state,
+                                                                       message_vec = message_codes)
+                                                if models[i].comms_scheme != 'None':
+                                                    models[i].store_comms_transition(agent_states[i],
+                                                                                 (message_codes[i], None),
+                                                                                 rewards[i],
+                                                                                 new_agent_states[i],
+                                                                                 episode_done,
+                                                                                 state_vec = models[i].obj_state,
+                                                                                 message_vec = message_codes)
+                                            else:
+                                                if model.comms_scheme == 'None':
+                                                    message_codes = None
+                                                model.store_transition(agent_states[i],
+                                                                       (actions[i], actions_to_take[i]),
+                                                                       rewards[i],
+                                                                       new_agent_states[i],
+                                                                       episode_done,
+                                                                       state_vec = model.obj_state,
+                                                                       message_vec = message_codes)
+                                                if model.comms_scheme != 'None':
+                                                    model.store_comms_transition(agent_states[i],
+                                                                                 (message_codes[i], None),
+                                                                                 rewards[i],
+                                                                                 new_agent_states[i],
+                                                                                 episode_done,
+                                                                                 state_vec = model.obj_state,
+                                                                                 message_vec = message_codes)
+                        r.append(rewards[0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
                     #for i in range(Utility.params['num_robots']):
@@ -369,18 +461,36 @@ while not exp_done:
 
                             model.learn_no_buffer(sarsd)
                         else:
-                            listener_loss, var_grad = model.learn()
-                        if model.comms_scheme != 'None':
-                            if args.no_buffer:
-                                sarsd = [np.array(agent_states, dtype = np.float32),
-                                         np.array(message_codes, dtype = np.int64),
-                                         np.array(r, dtype = np.float32),
-                                         np.array(new_agent_states, dtype = np.float32),
-                                         np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
-
-                                model.learn_no_buffer_comms(sarsd)
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    listener_loss, var_grad = models[i].learn()
                             else:
-                                speaker_loss, var_grad = model.learn_comms()
+                                listener_loss, var_grad = model.learn()
+
+                        if args.independent_learning:
+                            if models[i].comms_scheme != 'None':
+                                if args.no_buffer:
+                                    sarsd = [np.array(agent_states, dtype = np.float32),
+                                             np.array(message_codes, dtype = np.int64),
+                                             np.array(r, dtype = np.float32),
+                                             np.array(new_agent_states, dtype = np.float32),
+                                             np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
+
+                                    models[i].learn_no_buffer_comms(sarsd)
+                                else:
+                                    speaker_loss, var_grad = models[i].learn_comms()
+                        else:
+                            if model.comms_scheme != 'None':
+                                if args.no_buffer:
+                                    sarsd = [np.array(agent_states, dtype = np.float32),
+                                             np.array(message_codes, dtype = np.int64),
+                                             np.array(r, dtype = np.float32),
+                                             np.array(new_agent_states, dtype = np.float32),
+                                             np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
+
+                                    model.learn_no_buffer_comms(sarsd)
+                                else:
+                                    speaker_loss, var_grad = model.learn_comms()
 
                     running_reward += np.average(r)
                     # Store New Observations
@@ -409,8 +519,10 @@ while not exp_done:
                         obstacles = []
                         for i in range(len(obstacle_stats)):
                             obstacles.append(obstacle_stats[i])
-
-                    writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
+                    if args.independent_learning:
+                        writer.writerow([r, models[i].epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
+                    else:
+                        writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)
@@ -433,25 +545,39 @@ while not exp_done:
                                 Testing_Successes += 1
                         if not args.no_print:
                             for i in range(Utility.params['num_robots']):
-                                print('Agent', i, 'reward %.1f' % running_reward,
-                                      'epsilon:%.2f' % model.epsilon,
-                                      'steps:', model.learn_step_counter)
-                            print('Intention rewards %.2f' % episode_intention_rewards)
+                                if args.independent_learning:
+                                    print('Agent', i, 'reward %.1f' % running_reward,
+                                          'epsilon:%.2f' % models[i].epsilon,
+                                          'steps:', models[i].learn_step_counter)
+                                    print('Intention rewards %.2f' % episode_intention_rewards[i])
+                                else:
+                                    print('Agent', i, 'reward %.1f' % running_reward,
+                                          'epsilon:%.2f' % model.epsilon,
+                                          'steps:', model.learn_step_counter)
+                                    print('Intention rewards %.2f' % episode_intention_rewards)
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []
                             file_name = 'Episode_'+str(ep_counter)
                             path = recording_path + "/Models/" +file_name
                             if train_mode:
-                                model.save_model(path)
+                                if args.independent_learning:
+                                    for i in range(Utility.params['num_robots']):
+                                        models[i].save_model(path)
+                                else:
+                                    model.save_model(path)
                             if not args.no_print:
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
                         running_reward = 0
-                        model.reset_obj_stats()
-                        if not args.no_print:
-                            print("[INFO] Max Object Statistics: ", model.max_obj_stats)
-                            print("[INFO] Min Object Statistics: ", model.min_obj_stats)
+                        if args.independent_learning:
+                            for i in range(Utility.params['num_robots']):
+                                models[i].reset_obj_stats()
+                        else:
+                            model.reset_obj_stats()
+                        #if not args.no_print:
+                        #    print("[INFO] Max Object Statistics: ", model.max_obj_stats)
+                        #    print("[INFO] Min Object Statistics: ", model.min_obj_stats)
 
                         # Send acknowledgment
                         socket.send(b"ok")

@@ -16,11 +16,11 @@ def fanin_init(size, fanin = None):
 # Action Network for DQN
 ############################################################################
 class DQN(nn.Module):
-    def __init__(self, lr, num_actions, observation_size, num_ops_per_action,
-                 fc1_dims = 64, fc2_dims = 128, name = 'DQN'):
+    def __init__(self, id, lr, num_actions, observation_size, num_ops_per_action,
+                 fc1_dims = 64, fc2_dims = 128, name = 'DQN_'):
         super().__init__()
 
-        self.name = name
+        self.name = name+str(id)
 
         output_dims = num_ops_per_action**num_actions
 
@@ -44,22 +44,22 @@ class DQN(nn.Module):
         return actions
 
     def save_model(self, file_path):
-        print('... saving DeepQNetwork model ...')
+        print('... saving',self.name,'...')
         T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
-        print('... loading DeepQNetwork model ...')
+        print('... loading', self.name, '...')
         self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Communication Network for DDQN
 ############################################################################
 class DDQNComms(nn.Module):
-    def __init__(self, *, lr=None, observation_size=None, alphabet_size=None,
-                 fc1_dims = 64, fc2_dims = 128, name = 'DDQN_COMMS'):
+    def __init__(self, *, id = None, lr=None, observation_size=None, alphabet_size=None,
+                 fc1_dims = 64, fc2_dims = 128, name = 'DDQN_COMMS_'):
         super().__init__()
 
-        self.name = name
+        self.name = name+str(id)
 
         output_dims = alphabet_size
 
@@ -84,22 +84,22 @@ class DDQNComms(nn.Module):
         return raw_message
 
     def save_model(self, file_path):
-        print('... saving DoubleDeepQComms model ...')
+        print('... saving',self.name ,'...')
         T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
-        print('... loading DoubleDeepQComms model ...')
+        print('... loading',self.name,'...')
         self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Action Network for DDQN
 ############################################################################
 class DDQN(nn.Module):
-    def __init__(self, *, lr = None, num_actions = None, observation_size = None,
-                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN'):
+    def __init__(self, *,id = None, lr = None, num_actions = None, observation_size = None,
+                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN_'):
         super().__init__()
 
-        self.name = name
+        self.name = name+str(id)
 
         output_dims = (num_ops_per_action**num_actions)
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
@@ -136,18 +136,18 @@ class DDQN(nn.Module):
         return actions
 
     def save_model(self, file_path):
-        print('... saving DoubleDeepQNetwork model ...')
+        print('... saving', self.name, '...')
         T.save(self.state_dict(), file_path+'_'+self.name)
 
     def load_model(self, file_path):
-        print('... loading DoubleDeepQNetwork model ...')
+        print('... loading', self.name, ' ...')
         self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Actor Network for DDPG
 ############################################################################
 class DDPGActorNetwork(nn.Module):
-    def __init__(self, num_actions, observation_size, num_ops_per_action, name, min_max_action = 1):
+    def __init__(self, id, num_actions, observation_size, num_ops_per_action, name, min_max_action = 1):
         super().__init__()
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -170,7 +170,7 @@ class DDPGActorNetwork(nn.Module):
 
         self.init_weights(3e-3) #find where this comes from and maybe find the purpose of this line???
 
-        self.name = name
+        self.name = name+'_'+str(id)+'_DDPG'
 
 
     def init_weights(self, init_w):
@@ -188,18 +188,18 @@ class DDPGActorNetwork(nn.Module):
         return mu
 
     def save_checkpoint(self, path):
-        print('... saving', self.name,'chekpoint ...')
+        print('... saving', self.name,'...')
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...', path)
+        print('... loading', self.name, '...', path)
         self.load_state_dict(T.load(path + '_' + self.name))
 
 ############################################################################
 # Critic Network for DDPG
 ############################################################################
 class DDPGCriticNetwork(nn.Module):
-    def __init__(self, num_actions, observation_size, name):
+    def __init__(self, id, num_actions, observation_size, name):
         super().__init__()
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -213,7 +213,7 @@ class DDPGCriticNetwork(nn.Module):
         self.relu = nn.ReLU()
         self.init_weights(3e-3)
 
-        self.name = name
+        self.name = name+'_'+str(id)+'_DDPG'
 
     def init_weights(self, init_w):
         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
@@ -230,25 +230,25 @@ class DDPGCriticNetwork(nn.Module):
         return action_value
 
     def save_checkpoint(self, path):
-        print('... saving', self.name,'chekpoint ...')
+        print('... saving', self.name,'...')
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...', path)
+        print('... loading', self.name, '...', path)
         self.load_state_dict(T.load(path + '_' + self. name))
 
 ############################################################################
 # Actor Network for TD3
 ############################################################################
 class TD3ActorNetwork(nn.Module):
-    def __init__(self, alpha, input_dims, fc1_dims, fc2_dims, n_actions, name, min_max_action = 1):
+    def __init__(self, id, alpha, input_dims, fc1_dims, fc2_dims, n_actions, name, min_max_action = 1):
         super().__init__()
         self.input_dims = input_dims
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.n_actions = n_actions
         self.min_max_action = min_max_action
-        self.name = name + '_TD3'
+        self.name = name +'_'+str(id)+'_TD3'
 
 
         self.fc1 = nn.Linear(input_dims, self.fc1_dims)
@@ -268,24 +268,24 @@ class TD3ActorNetwork(nn.Module):
         return mu
 
     def save_checkpoint(self, path):
-        print('... saving', self.name,'chekpoint ...')
+        print('... saving', self.name,'...')
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...')
+        print('... loading', self.name, '...')
         self.load_state_dict(T.load(path + '_' + self.name))
 
 ############################################################################
 # Critic Network for TD3
 ############################################################################
 class TD3CriticNetwork(nn.Module):
-    def __init__(self, beta, input_dims, fc1_dims, fc2_dims, n_actions, name):
+    def __init__(self, id, beta, input_dims, fc1_dims, fc2_dims, n_actions, name):
         super().__init__()
         self.input_dims = input_dims
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.name = name + '_TD3'
+        self.name = name +'_'+str(id)+'_TD3'
 
 
 
@@ -306,9 +306,9 @@ class TD3CriticNetwork(nn.Module):
         return q1
 
     def save_checkpoint(self, path):
-        print('... saving', self.name,'chekpoint ...')
+        print('... saving', self.name,'...')
         T.save(self.state_dict(), path + '_' + self.name)
 
     def load_checkpoint(self, path):
-        print('... loading', self.name, 'checkpoint ...')
+        print('... loading', self.name, '...')
         self.load_state_dict(T.load(path + '_' + self.name))
