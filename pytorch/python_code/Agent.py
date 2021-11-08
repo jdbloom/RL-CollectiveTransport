@@ -845,6 +845,13 @@ class Agent():
             self.target_critic_2.save_checkpoint(path)
         if self.comms_scheme != 'None':
             self.q_comms_eval.save_model(path)
+        if self.use_intention:
+            self.intention_actor.save_checkpoint(path)
+            self.intention_target_actor.save_checkpoint(path)
+            self.intention_critic_1.save_checkpoint(path)
+            self.intention_target_critic_1.save_checkpoint(path)
+            self.intention_critic_2.save_checkpoint(path)
+            self.intention_target_critic_2.save_checkpoint(path)
 
     def load_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
@@ -866,6 +873,13 @@ class Agent():
             self.target_critic_2.load_checkpoint(path)
         if self.comms_scheme != 'None':
             self.q_comms_eval.load_model(path)
+        if self.use_intention:
+            self.intention_actor.load_checkpoint(path)
+            self.intention_target_actor.load_checkpoint(path)
+            self.intention_critic_1.load_checkpoint(path)
+            self.intention_target_critic_1.load_checkpoint(path)
+            self.intention_critic_2.load_checkpoint(path)
+            self.intention_target_critic_2.load_checkpoint(path)
 
     def angle_difference(self, a1, a2):
         diff = a1 - a2

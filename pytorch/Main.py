@@ -35,6 +35,7 @@ parser.add_argument("--trained_num_robots")                                     
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
 parser.add_argument("--use_intention", default = False, action = "store_true")
+parser.add_argument("--independent_learning", default = False, action = "store_true")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
