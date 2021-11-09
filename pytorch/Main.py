@@ -177,7 +177,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad', 'intention_reward'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad', 'intention_reward', 'run_time'])
 
         if not exp_done:
             time_steps = 0
@@ -246,7 +246,7 @@ while not exp_done:
             #
             # Start the Episode Loop
             #
-            exp_start_time = time.time()
+            episode_start_time = time.time()
             while not episode_done:
                 if not exp_done:
                     reward = []
@@ -527,14 +527,14 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    writer.writerow([r, tmp_epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
+                    writer.writerow([r, tmp_epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward, time.time() - episode_start_time])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)
 
 
                     if episode_done:
-                        run_time = time.time() - exp_start_time
+                        run_time = time.time() - episode_start_time
                         if not args.no_print:
                             print('[RUN TIME] %.2f' % run_time)
                         if args.independent_learning:

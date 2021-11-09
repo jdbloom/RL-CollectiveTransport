@@ -39,6 +39,9 @@ terminals = []
 last_10_axis = []
 last_10_rewards = []
 
+episode_run_times = []
+cumulative_episode_run_times = [0]
+
 print('. . . Consolodating Model Data')
 IL_flag = False
 for episode in df_list:
@@ -49,6 +52,9 @@ for episode in df_list:
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
         intention_reward.append(episode[1]['intention_reward'][t].strip('][').split(','))
         terminal+=1
+        run_t = episode[1]['run_time'][t]
+    episode_run_times.append(run_t)
+    cumulative_episode_run_times.append(cumulative_episode_run_times[-1] + run_t)
     terminals.append(terminal)
 
     robot_rewards = []
@@ -58,11 +64,11 @@ for episode in df_list:
         tmp_i = 0
         for j in range(len(rewards)):
             tmp_r += float(rewards[j][i])
-            #tmp_i += float(intention_reward[j][i])
+            tmp_i += float(intention_reward[j][i])
         robot_rewards.append(tmp_r)
         robot_intentions.append(tmp_i)
     episode_rewards.append(robot_rewards)
-    #episode_intentions.append(robot_intentions)
+    episode_intentions.append(robot_intentions)
 
 robot_exp_rewards = []
 robot_exp_intentions = []
@@ -76,7 +82,7 @@ for j in range(len(episode_rewards[0])):
 
     for i in range(len(episode_rewards)):
         robot_exp_rewards[j].append(episode_rewards[i][j])
-        #robot_exp_intentions[j].append(episode_intentions[i][j])
+        robot_exp_intentions[j].append(episode_intentions[i][j])
         if terminals[i] < 4500:
             episode_success_reward[j].append(episode_rewards[i][j])
             episode_success_index[j].append(i)
@@ -85,7 +91,7 @@ for j in range(len(episode_rewards[0])):
             episode_failure_index[j].append(i)
     last_10_axis.append(np.arange(0, len(episode_rewards), 10))
     last_10_rewards.append([np.average(robot_exp_rewards[j][i:i+10]) for i in last_10_axis[j]])
-
+cumulative_episode_run_times.pop(0)
 
 print('. . . Plotting')
 
@@ -107,7 +113,7 @@ plt.title(args.figure_name)
 plt.savefig(args.figure_path+args.figure_name+".png")
 
 plt.close()
-'''
+
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.rcParams.update({'font.size': 22})
 plt.xlabel('Episodes')
@@ -117,4 +123,17 @@ for i in range(len(robot_exp_intentions)):
 plt.legend(loc = 1)
 plt.title(args.figure_name + ' Intention Reward')
 plt.savefig(args.figure_path+args.figure_name+"_Intention.png")
-'''
+
+plt.close()
+
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.rcParams.update({'font.size': 22})
+plt.xlabel('Run Time (s)')
+plt.ylabel('Reward')
+for i in range(len(episode_success_reward)):
+    plt.scatter(cumulative_episode_run_times, robot_exp_rewards[i], c = success_colors[i])#, label = 'Reached Goal')
+    #plt.plot(last_10_axis[i], last_10_rewards[i], c=avg_colors[i], label = 'Robot '+str(i))
+plt.ylim(-40000, 500)
+#plt.legend(loc = 1)
+plt.title(args.figure_name+' Run Time')
+plt.savefig(args.figure_path+args.figure_name+"_Run_Time.png")
