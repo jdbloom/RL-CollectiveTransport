@@ -333,6 +333,8 @@ while not exp_done:
                                 diff = np.dot([x1, y1], [x2, y2])
                                 intention_reward.append(-1 + diff)
                                 episode_intention_rewards[i]+=intention_reward[i]
+                        else:
+                            intention_reward = [0 for i in range(Utility.params['num_robots'])]
 
                     else:
                         intention_reward = [0 for i in range(Utility.params['num_robots'])]

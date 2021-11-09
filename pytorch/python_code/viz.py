@@ -64,6 +64,7 @@ for episode in df_list:
         tmp_i = 0
         for j in range(len(rewards)):
             tmp_r += float(rewards[j][i])
+            import ipdb; ipdb.set_trace()
             tmp_i += float(intention_reward[j][i])
         robot_rewards.append(tmp_r)
         robot_intentions.append(tmp_i)
