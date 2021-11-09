@@ -89,7 +89,7 @@ for j in range(len(episode_rewards[0])):
         else:
             episode_failure_reward[j].append(episode_rewards[i][j])
             episode_failure_index[j].append(i)
-    last_10_axis.append(np.arange(0, len(episode_rewards), 10))
+    last_10_axis.append(np.arange(10, len(episode_rewards), 10))
     last_10_rewards.append([np.average(robot_exp_rewards[j][i:i+10]) for i in last_10_axis[j]])
 cumulative_episode_run_times.pop(0)
 
@@ -136,4 +136,16 @@ for i in range(len(episode_success_reward)):
 plt.ylim(-40000, 500)
 #plt.legend(loc = 1)
 plt.title(args.figure_name+' Run Time')
-plt.savefig(args.figure_path+args.figure_name+"_Run_Time.png")
+plt.savefig(args.figure_path+args.figure_name+"_Experiment_Run_Time.png")
+
+plt.close()
+
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.rcParams.update({'font.size': 22})
+plt.xlabel('Episodes')
+plt.ylabel('Run Time (s)')
+plt.scatter(np.arange(0, len(episode_run_times), 1), episode_run_times, c = success_colors[i])#, label = 'Reached Goal')
+    #plt.plot(last_10_axis[i], last_10_rewards[i], c=avg_colors[i], label = 'Robot '+str(i))
+#plt.legend(loc = 1)
+plt.title(args.figure_name+' Episode Run Time')
+plt.savefig(args.figure_path+args.figure_name+"_Episode_Run_Time.png")
