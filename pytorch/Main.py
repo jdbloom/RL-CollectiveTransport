@@ -153,7 +153,6 @@ socket.send(b"ok")
 exp_done = False
 ep_counter = 0
 exp_rewards = []
-exp_intention_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
@@ -186,12 +185,12 @@ while not exp_done:
             object_positions = []
             agent_prox_flags = []
             last_object_heading = None
+            episode_intention_rewards = np.zeros(Utility.params['num_robots'])
             if args.independent_learning:
                 next_heading_intention = np.zeros(Utility.params['num_robots'])
-                episode_intention_rewards = np.zeros(Utility.params['num_robots'])
             else:
                 next_heading_intention = 0
-                episode_intention_rewards = 0
+
 
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
@@ -217,11 +216,15 @@ while not exp_done:
             agent_states = []
             force_mags = []
             force_angs = []
-            running_reward = 0
+            if args.independent_learning:
+                running_reward = []
+            else:
+                running_reward = 0
 
             for i in range(Utility.params['num_robots']):
                 # append env observations and messages in inbox to make agent state
                 if args.independent_learning:
+                    running_reward.append(0)
                     agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                 else:
                     agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
@@ -232,7 +235,11 @@ while not exp_done:
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
             # reward is the same across all agents. If it were per agent then this would need to move into the loop above
-            running_reward += rewards[0]
+            if args.independent_learning:
+                for i in range(Utility.params['num_robots']):
+                    running_reward[i]+= rewards[i]
+            else:
+                running_reward += rewards[0]
             # failures should all be false because we havent started the episode yet
             failure = failures[0]
 
@@ -310,33 +317,25 @@ while not exp_done:
 
                     old_object_positions = copy.deepcopy(object_positions)
                     object_positions.append([obj_stats[0], obj_stats[1]])
-                    if args.independent_learning:
-                        intention_reward = np.zeros(Utility.params['num_robots'])
-                    else:
-                        intention_reward = 0
+
+                    intention_reward = []
+
                     if args.use_intention:
                         if len(object_positions) > 2:
                             object_positions.pop(0)
                             last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
                             x1 = math.cos(last_object_heading)
                             y1 = math.sin(last_object_heading)
-                            if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    x2 = math.cos(next_heading_intention[i]*math.pi)
-                                    y2 = math.sin(next_heading_intention[i]*math.pi)
-
-                                    diff = np.dot([x1, y1], [x2, y2])
-
-                                    intention_reward[i] = -1 + diff
-                                    episode_intention_rewards[i]+=intention_reward[i]
-                            else:
-                                x2 = math.cos(next_heading_intention*math.pi)
-                                y2 = math.sin(next_heading_intention*math.pi)
+                            for i in range(Utility.params['num_robots']):
+                                x2 = math.cos(next_heading_intention[i]*math.pi)
+                                y2 = math.sin(next_heading_intention[i]*math.pi)
 
                                 diff = np.dot([x1, y1], [x2, y2])
+                                intention_reward.append(-1 + diff)
+                                episode_intention_rewards[i]+=intention_reward[i]
 
-                                intention_reward = -1 + diff
-                                episode_intention_rewards+=intention_reward
+                    else:
+                        intention_reward = [0 for i in range(Utility.params['num_robots'])]
 
 
                     # store object stats for learning later
@@ -445,7 +444,8 @@ while not exp_done:
                                                                                  episode_done,
                                                                                  state_vec = model.obj_state,
                                                                                  message_vec = message_codes)
-                        r.append(rewards[0])
+
+                        r.append(rewards[i][0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
                     #for i in range(Utility.params['num_robots']):
@@ -491,8 +491,11 @@ while not exp_done:
                                     model.learn_no_buffer_comms(sarsd)
                                 else:
                                     speaker_loss, var_grad = model.learn_comms()
-
-                    running_reward += np.average(r)
+                    if args.independent_learning:
+                        for i in range(Utility.params['num_robots']):
+                            running_reward[i] += r[i]
+                    else:
+                        running_reward += np.average(r)
                     # Store New Observations
                     agent_states = new_agent_states
                     actions = []
@@ -520,9 +523,11 @@ while not exp_done:
                         for i in range(len(obstacle_stats)):
                             obstacles.append(obstacle_stats[i])
                     if args.independent_learning:
-                        writer.writerow([r, models[i].epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
+                        tmp_epsilon = models[0].epsilon
                     else:
-                        writer.writerow([r, model.epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
+                        tmp_epsilon = model.epsilon
+
+                    writer.writerow([r, tmp_epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward])
 
                     if args.plot_comms:
                         viz(message_codes, time_steps)
@@ -532,7 +537,10 @@ while not exp_done:
                         run_time = time.time() - exp_start_time
                         if not args.no_print:
                             print('[RUN TIME] %.2f' % run_time)
-                        exp_rewards.append(running_reward)
+                        if args.independent_learning:
+                            exp_rewards.append(np.average(running_reward))
+                        else:
+                            exp_rewards.append(running_reward)
                         if not reached_goal:
                             if not args.no_print:
                                 print("Episode", ep_counter ,"timed out")
@@ -546,15 +554,14 @@ while not exp_done:
                         if not args.no_print:
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
-                                    print('Agent', i, 'reward %.1f' % running_reward,
+                                    print('Agent', i, 'reward %.1f' % running_reward[i],
                                           'epsilon:%.2f' % models[i].epsilon,
                                           'steps:', models[i].learn_step_counter)
-                                    print('Intention rewards %.2f' % episode_intention_rewards[i])
                                 else:
                                     print('Agent', i, 'reward %.1f' % running_reward,
                                           'epsilon:%.2f' % model.epsilon,
                                           'steps:', model.learn_step_counter)
-                                    print('Intention rewards %.2f' % episode_intention_rewards)
+                                print('Intention rewards %.2f' % episode_intention_rewards[i])
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []
@@ -569,7 +576,6 @@ while not exp_done:
                             if not args.no_print:
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
                         ep_counter += 1
-                        running_reward = 0
                         if args.independent_learning:
                             for i in range(Utility.params['num_robots']):
                                 models[i].reset_obj_stats()

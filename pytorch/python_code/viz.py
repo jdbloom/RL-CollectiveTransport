@@ -6,58 +6,12 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-# Base Model Stats over 1000 eps:
-base_model_average = -1110.54
-base_model_average_reward = -1495.51
-base_model_score_std = 93.48
-base_model_pct_std = 8.44
-base_model_path = 'Data/BaseModel/Data/'
-
-# Base Model with 1 obstacle over 1000 eps:
-base_model_1_obstacle_average = -1621.16
-base_model_1_obstacle_score_std = 1791.59
-base_model_1_obstacle_pct_std = 161.32
-base_model_1_obstacle_path = 'Data/BaseModel_1_obstacle/Data/'
-
-# Base Model with 2 obstacle over 1000 eps:
-base_model_2_obstacle_average = -1983.07
-base_model_2_obstacle_average_reward = -2550.82
-base_model_2_obstacle_score_std = 2292.86
-base_model_2_obstacle_pct_std = 206.46
-base_model_2_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
-
-# Base Model with 3 obstacle over 1000 eps:
-base_model_3_obstacle_average = -2478.83
-base_model_3_obstacle_score_std = 2747.92
-base_model_3_obstacle_pct_std = 247.44
-base_model_1_obstacle_path = 'Data/BaseModel_2_obstacle/Data/'
-
-# Base Models with 8 aganets
-# Base Model with 0 obstacles over 1000 eps
-base_model_8_agents_average = -1106.49
-base_model_8_agents_average_reward = -1501.54
-base_model_8_agents_score_std = 92.38
-base_model_8_agents_pct_std = 0
-base_model_8_agents_path = 'Data/BaseModel_8_agents/Data/'
-
-# Base Model with 2 obstacles over 1000 eps
-base_model_8_agents_2_obstacles_average = -2136.96
-base_model_8_agents_2_obstacles_average_reward = -2755.08
-base_model_8_agents_2_obstacles_score_std = 2491.55
-base_model_8_agents_2_obstacles_pct_std = 0
-base_model_8_agents_2_obstacles_path = 'Data/BaseModel_8_agents_2_obstacles/Data/'
-
-base_avg = base_model_2_obstacle_average
-base_score_std = base_model_2_obstacle_score_std
-base_pct_std = base_model_2_obstacle_pct_std
-base_path = base_model_2_obstacle_path
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
 parser.add_argument("figure_path")
 parser.add_argument("figure_name")
-parser.add_argument("--test", default = False, action = "store_true")
+parser.add_argument("--IL", default = False, action = "store_true")
+
 args = parser.parse_args()
 
 data_path = args.data_path + 'Data/'
@@ -75,244 +29,92 @@ for i in range(len(file_names)-1):
     df_list.append((i, df))
 
 episode_rewards = []
-speaker_loss = []
-listener_loss = []
-epsilons = []
-terminals = []
+episode_intentions = []
+episode_intention_rewards = []
 episode_success_reward = []
 episode_success_index = []
 episode_failure_reward = []
 episode_failure_index = []
-ep_counter = 0
+terminals = []
+last_10_axis = []
+last_10_rewards = []
 
-exp_intention_rewards = []
 print('. . . Consolodating Model Data')
+IL_flag = False
 for episode in df_list:
     rewards = []
     intention_reward = []
     terminal = 0
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
-        intention_reward.append(episode[1]['intention_reward'][t])
-        #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
-        #speaker_loss.append(episode[1]['speaker_loss'][t])
-        #listener_loss.append(episode[1]['listener_loss'][t])
-        terminal += 1
+        intention_reward.append(episode[1]['intention_reward'][t].strip('][').split(','))
+        terminal+=1
     terminals.append(terminal)
-    exp_intention_rewards.append(sum(intention_reward))
-    reward = []
-    for robot in range(len(rewards[0])):
-        reward.append(sum(float(row[robot]) for row in rewards))
-    episode_rewards.append(reward)
-    if terminal < 4500:
-        episode_success_index.append(ep_counter)
-        episode_success_reward.append(np.average(reward))
 
-    else:
-        episode_failure_index.append(ep_counter)
-        episode_failure_reward.append(np.average(reward))
-    #print(episode[0], reward[0])
-    ep_counter+=1
+    robot_rewards = []
+    robot_intentions = []
+    for i in range(len(rewards[0])):
+        tmp_r = 0
+        tmp_i = 0
+        for j in range(len(rewards)):
+            tmp_r += float(rewards[j][i])
+            #tmp_i += float(intention_reward[j][i])
+        robot_rewards.append(tmp_r)
+        robot_intentions.append(tmp_i)
+    episode_rewards.append(robot_rewards)
+    #episode_intentions.append(robot_intentions)
 
-reward = [np.average(row) for row in episode_rewards]
-print(len(episode_rewards[0]), "Agents Tested")
-AVERAGE = np.average(reward)
-last_10_axis = np.arange(10, len(reward), 10)
-last_10_reward = [sum(reward[i:i + 10])/10
-                  for i in last_10_axis[0:len(last_10_axis)-1]]
-for i in range(len(last_10_axis)-1):
-    print(last_10_axis[i], last_10_reward[i])
-'''
-if args.test:
-    print('. . . Loading Baseline Data')
-    file_names = []
-    for file in os.listdir(base_path):
-        file_names.append(file)
+robot_exp_rewards = []
+robot_exp_intentions = []
+for j in range(len(episode_rewards[0])):
+    robot_exp_rewards.append([])
+    robot_exp_intentions.append([])
+    episode_success_reward.append([])
+    episode_success_index.append([])
+    episode_failure_reward.append([])
+    episode_failure_index.append([])
 
-    df_list = []
-    for i in range(len(file_names)-1):
-        name = 'Data_Episode_'+str(i)+'.csv'
-        file_path = base_path+name
-        df = pd.read_csv(file_path)
-        df_list.append((i, df))
+    for i in range(len(episode_rewards)):
+        robot_exp_rewards[j].append(episode_rewards[i][j])
+        #robot_exp_intentions[j].append(episode_intentions[i][j])
+        if terminals[i] < 4500:
+            episode_success_reward[j].append(episode_rewards[i][j])
+            episode_success_index[j].append(i)
+        else:
+            episode_failure_reward[j].append(episode_rewards[i][j])
+            episode_failure_index[j].append(i)
+    last_10_axis.append(np.arange(0, len(episode_rewards), 10))
+    last_10_rewards.append([np.average(robot_exp_rewards[j][i:i+10]) for i in last_10_axis[j]])
 
-    episode_rewards = []
-    losses = []
-    epsilons = []
-    base_terminals = 0
-    print('. . . Consolodating Baseline Data')
-    for episode in df_list:
-        rewards = []
-        terminal = []
-        for t in range(len(episode[1])):
-
-            rewards.append(episode[1]['reward'][t].strip('][').split(','))
-            #epsilons.append(episode[1]['epsilon'][t].strip('][').split(','))
-            #losses.append(episode[1]['loss'][t].strip('][').split(','))
-            #base_terminals += episode[1]['termination'][t]
-        r = []
-        for robot in range(len(rewards[0])):
-            r.append(sum(float(row[robot]) for row in rewards))
-        episode_rewards.append(r)
-        #print(episode[0], r[0])
-
-
-    base_reward = [row[0] for row in episode_rewards]
-    base_AVERAGE = np.average(base_reward)
-    base_last_10_axis = np.arange(0, len(base_reward), 10)
-    base_last_10_reward = [sum(base_reward[i:i + 10])/10
-                      for i in base_last_10_axis[0:len(base_last_10_axis)-1]]
-    base_fail = 0
-    for i in range(len(base_reward)):
-        if base_reward[i] < -6500:
-            base_fail += 1
-    '''
-episode_fail = 0
-episode_struggle = 0
-end_episode_fail = 0
-rolling_fail = 0
-rolling = []
-rolling_x = []
-terminal_failures = 0
-for i in range(len(reward)):
-    if terminals[i] == 4500:
-        terminal_failures += 1
-    if reward[i] < -24000:
-        episode_fail += 1
-        rolling_fail += 1
-        if i > 550:
-            end_episode_fail += 1
-    elif reward[i] < -15000:
-        episode_struggle += 1
-    if i % 10 == 0:
-        rolling.append(rolling_fail/10)
-        rolling_x.append(i)
-        rolling_fail = 0
 
 print('. . . Plotting')
-gate_x = np.arange(49, 850, 50)
+
+success_colors = ['darkturquoise', 'lightgreen', 'khaki', 'violet', 'lightcoral', 'sandybrown']
+fail_colors = ['steelblue', 'yellowgreen', 'darkkhaki', 'darkviolet', 'tomato', 'chocolate']
+avg_colors = ['blue', 'green', 'gold', 'purple', 'red', 'saddlebrown']
+
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.rcParams.update({'font.size': 22})
-#for i in range(gate_x.shape[0]):
-#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
-#plt.title(args.figure_name)
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
-plt.scatter(episode_success_index, episode_success_reward, c = 'darkturquoise', label = 'Reached Goal')
-plt.scatter(episode_failure_index, episode_failure_reward, c = 'lightcoral', marker = 'x', label = 'Failure')
-#plt.plot(reward, c = 'lightsteelblue', label = 'Episode Scores')
-#plt.plot((0, len(reward)), (base_avg, base_avg), c = 'r', label = 'Base Model Average')
-plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Running Average')
-#plt.plot((0, len(reward)), (-8000, -8000), c = 'r')
-#plt.plot((550, 550), (-32000, 0), 'r--')
+for i in range(len(episode_success_reward)):
+    plt.scatter(episode_success_index[i], episode_success_reward[i], c = success_colors[i])#, label = 'Reached Goal')
+    plt.scatter(episode_failure_index[i], episode_failure_reward[i], c = fail_colors[i], marker = 'x')#, label = 'Failure')
+    plt.plot(last_10_axis[i], last_10_rewards[i], c=avg_colors[i], label = 'Robot '+str(i))
 plt.ylim(-40000, 500)
 plt.legend(loc = 1)
+plt.title(args.figure_name)
 plt.savefig(args.figure_path+args.figure_name+".png")
 
-plt.clf()
-plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.plot(rolling_x, rolling, c='r')
-#for i in range(gate_x.shape[0]):
-#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
-plt.title(args.figure_name+'_rolling_failure_tracking')
-plt.ylim(0, 1)
-plt.savefig(args.figure_path+args.figure_name+"_rolling_failure_tracking"+".png")
-
-plt.clf()
-plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.plot(speaker_loss, c='r', label = 'speaker')
-plt.plot(listener_loss, c='b', label = 'listener')
-#for i in range(gate_x.shape[0]):
-#    plt.plot((gate_x[i], gate_x[i]), (500, -14500), c = 'lightgray', linestyle ='dashed')
-plt.title(args.figure_name+'_LOSSES')
-plt.legend()
-plt.savefig(args.figure_path+args.figure_name+"_LOSSES"+".png")
-
-plt.clf()
-plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-plt.plot(exp_intention_rewards, c='g')
-plt.title('Intention Rewards')
-plt.savefig(args.figure_path+args.figure_name+"_intention_rewards.png")
-
-
-if args.test:
-    plt.clf()
-    plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-    plt.title(args.figure_name)
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward')
-    plt.scatter(np.arange(0, len(base_reward), 1), base_reward, c = 'lightsalmon', label = 'Baseline Raw Scores')
-    plt.plot(base_last_10_axis[1:len(base_last_10_axis)], base_last_10_reward, c = 'r', label = 'Baseline Running Average')
-    plt.scatter(np.arange(0, len(reward), 1), reward, c = 'lightsteelblue', label = 'Model Raw Scores')
-    plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b', label = 'Model Running Average')
-    plt.ylim(-32000, 500)
-    plt.legend(loc = 1)
-    plt.savefig(args.figure_path+args.figure_name+"_overlay.png")
-
-    plt.clf()
-    score_vs_baseline = []
-    for i in range(len(reward)):
-        score_vs_baseline.append(reward[i] - base_avg)
-    score_std = np.std(score_vs_baseline)
-    score_average = np.average(score_vs_baseline)
-    last_10_axis = np.arange(0, len(score_vs_baseline), 10)
-    last_10_reward = [sum(score_vs_baseline[i:i + 10])/10
-              for i in last_10_axis[0:len(last_10_axis)-1]]
-    plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-    plt.title(args.figure_name)
-    plt.xlabel('Episodes')
-    plt.ylabel('Score vs. Baseline')
-    plt.plot(score_vs_baseline, c = 'lightsteelblue')
-    plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-    plt.plot([0, len(score_vs_baseline)], [0, 0], c='r')
-    plt.plot([0, len(score_vs_baseline)], [base_score_std, base_score_std], c = 'lightsalmon', linestyle = 'dashed')
-    plt.plot([0, len(score_vs_baseline)], [-base_score_std, -base_score_std], c = 'lightsalmon', linestyle = 'dashed')
-    plt.savefig(args.figure_path+args.figure_name+"_BASE_MODEL_COMPARE_SCORES.png")
-
-
-    plt.clf()
-    pct_vs_baseline = []
-    for i in range(len(reward)):
-        pct_vs_baseline.append((reward[i] - base_avg)*100/-base_avg)
-    pct_std = np.std(pct_vs_baseline)
-    pct_average = np.average(pct_vs_baseline)
-    last_10_axis = np.arange(0, len(pct_vs_baseline), 10)
-    last_10_reward = [sum(pct_vs_baseline[i:i + 10])/10
-              for i in last_10_axis[0:len(last_10_axis)-1]]
-    plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
-    plt.title(args.figure_name)
-    plt.xlabel('Episodes')
-    plt.ylabel('% vs. Baseline')
-    plt.plot(pct_vs_baseline, c = 'lightsteelblue')
-    plt.plot(last_10_axis[1:len(last_10_axis)], last_10_reward, c = 'b')
-    plt.plot([0, len(pct_vs_baseline)], [0, 0], c='r')
-    plt.plot([0, len(pct_vs_baseline)], [base_pct_std, base_pct_std], c = 'lightsalmon', linestyle = 'dashed')
-    plt.plot([0, len(pct_vs_baseline)], [-base_pct_std, -base_pct_std], c = 'lightsalmon', linestyle = 'dashed')
-    plt.savefig(args.figure_path+args.figure_name+"_BASE_MODEL_COMPARE_PERCENTAGE.png")
-
-print('Average Reward for Experiment:', AVERAGE)
-if not args.test and len(last_10_reward)>0:
-    print('Best Model:', (np.argmax(last_10_reward)+1)*10, last_10_reward[np.argmax(last_10_reward)])
-print('Score STD:', np.std(reward))
-if args.test:
-    print('Adjusted Score STD:', score_std)
-    print('PCT STD:', pct_std)
-print('Failure Episodes:', terminal_failures)
-#print('Struggling Episodes:', episode_struggle)
-print('Percentage Failure: %.2f' % (terminal_failures*100/len(reward)))
-#print('Percentage Failure after ep 600: %.2f' % (end_episode_fail*100/(len(reward)-600)))
-if args.test:
-    print('Base Failure Episodes:', base_fail)
-    print('Base Percentage Failure: %.2f' % (base_fail*100/len(base_reward)))
+plt.close()
 '''
-print('\nBASELINE AVERAGE SCORES')
-print('4 Agents: %.2f, %.2f' % (base_model_average, base_model_2_obstacle_average))
-print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average, base_model_8_agents_2_obstacles_average))
-print('\nBASELINE AVERAGE SCORES WITH NEW REWARD STRUCTURE')
-print('4 Agents: %.2f, %.2f' % (base_model_average_reward, base_model_2_obstacle_average_reward))
-print('8 Agents: %.2f, %.2f' % (base_model_8_agents_average_reward, base_model_8_agents_2_obstacles_average_reward))
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
+plt.rcParams.update({'font.size': 22})
+plt.xlabel('Episodes')
+plt.ylabel('Reward')
+for i in range(len(robot_exp_intentions)):
+    plt.plot(robot_exp_intentions[i], c=avg_colors[i], label = 'Robot '+str(i))
+plt.legend(loc = 1)
+plt.title(args.figure_name + ' Intention Reward')
+plt.savefig(args.figure_path+args.figure_name+"_Intention.png")
 '''
-#print('BASELINE----------  0        1        2        3')
-#print('Baseline score avg: %.2f %.2f %.2f %.2f' % (base_model_average, base_model_1_obstacle_average, base_model_2_obstacle_average, base_model_3_obstacle_average))
-#print('Baseline score std:  %.2f    %.2f  %.2f  %.2f' % (base_model_score_std, base_model_1_obstacle_score_std, base_model_2_obstacle_score_std, base_model_3_obstacle_score_std))
-#print('Baseline pct std:    %.2f     %.2f   %.2f   %.2f' % (base_model_pct_std, base_model_1_obstacle_pct_std, base_model_2_obstacle_pct_std, base_model_3_obstacle_pct_std))
