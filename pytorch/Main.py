@@ -108,7 +108,7 @@ if args.independent_learning:
         [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
 else:
     if args.trained_num_robots is not None:
-        model = Agent.Agent(int(args.scaled_robots),
+        model = Agent.Agent(int(args.trained_num_robots),
                             Utility.params['num_obs'],
                             Utility.params['num_actions'] - 1, # -1 to account for gripper
                             num_ops_per_action = 3,
