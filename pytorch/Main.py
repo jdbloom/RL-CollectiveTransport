@@ -86,6 +86,10 @@ Utility.set_obstacles_fields();
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
+if !args.test:
+    if args.comms_scheme is None:
+        Utility.params['alphabet_size'] = 1
+
 normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 if args.independent_learning:
     models = [Agent.Agent(Utility.params['num_robots'],
@@ -378,6 +382,7 @@ while not exp_done:
                                 next_heading_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
                         if len(old_object_positions) == 2:
                             #store transitions of intentions
+
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
                                     models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
