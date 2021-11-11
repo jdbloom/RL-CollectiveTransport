@@ -18,7 +18,7 @@ class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
                  num_ops_per_action, id, learning_scheme, no_buffer,
                  comms_memory, normalization, comms_scheme = "None", alphabet_size=4, horizon = 2,
-                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False):
+                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False, heading='radial'):
         self.id = id
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -36,6 +36,7 @@ class Agent():
         self.use_horizon = use_horizon
         self.horizon = horizon
         self.use_intention = use_intention
+        self.heading = heading
 
         # Dictionaries and binning for loss function calculations
         self.use_entropy = use_entropy
@@ -107,7 +108,11 @@ class Agent():
     def make_agent_state(self, env_obs, heading_intention, agent_id, comms_memory, message_memory):
         #env_obs=self.normalize_obs(env_obs)
         if self.use_intention:
-            env_obs = np.concatenate((env_obs, np.array([heading_intention])))
+            # import ipdb; ipdb.set_trace()
+            if self.heading == 'polar':
+                env_obs = np.concatenate((env_obs, heading_intention))
+            else:
+                env_obs = np.concatenate((env_obs, np.array([heading_intention])))
         if self.comms_scheme == 'None':
             # need to append empty messages for all agents to keep networks the same size
             return np.concatenate((env_obs, np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
@@ -215,7 +220,11 @@ class Agent():
         #define networks for DQN
         self.min_max_action = 0.1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        if self.use_intention: obs_size+=1
+        if self.use_intention:
+            if self.heading == 'radial':
+                obs_size += 1
+            if self.heading == 'polar':
+                obs_size += 2
 
         actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
@@ -230,7 +239,11 @@ class Agent():
     def make_DDQN(self, comms_memory):
         self.min_max_action = 0.1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        if self.use_intention: obs_size+=1
+        if self.use_intention:
+            if self.heading == 'radial':
+                obs_size += 1
+            if self.heading == 'polar':
+                obs_size += 2
 
         actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.num_actions, 'observation_size':obs_size,
                    'num_ops_per_action':self.num_ops_per_action}
@@ -248,7 +261,11 @@ class Agent():
         #define networks for DDPG
         self.min_max_action = 1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        if self.use_intention: obs_size+=1
+        if self.use_intention:
+            if self.heading == 'radial':
+                obs_size += 1
+            if self.heading == 'polar':
+                obs_size += 2
 
         actor_nn_args = {'id':self.id, 'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action,
@@ -279,7 +296,11 @@ class Agent():
         #difine networks for TD3
         self.min_max_action = 1
         obs_size = self.num_observations + self.num_agents*self.alphabet_size
-        if self.use_intention: obs_size+=1
+        if self.use_intention:
+            if self.heading == 'radial':
+                obs_size += 1
+            if self.heading == 'polar':
+                obs_size += 2
 
         actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                          'fc2_dims':300, 'n_actions':self.num_actions}
@@ -343,7 +364,7 @@ class Agent():
             self.target_critic_2.load_state_dict(critic_2)
             self.target_actor.load_state_dict(actor)
 
-        elif  learning_scheme == 'intention_TD3':
+        elif learning_scheme == 'intention_TD3':
             actor_params = self.intention_actor.named_parameters()
             critic_1_params = self.intention_critic_1.named_parameters()
             critic_2_params = self.intention_critic_2.named_parameters()
@@ -1017,7 +1038,7 @@ class Agent():
 
 
     def build_intention(self, horizon):
-        #difine networks for TD3
+        # define networks for TD3
         print("----- Building Intention Model ------")
         min_max_action = 1
         obs_size = horizon*2 + self.num_agents*self.alphabet_size

@@ -36,6 +36,7 @@ parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
 parser.add_argument("--use_intention", default = False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
+parser.add_argument("--heading", default = "radial")
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -86,10 +87,11 @@ Utility.set_obstacles_fields();
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
-if !args.test:
+if not args.test:
     if args.comms_scheme is None:
         Utility.params['alphabet_size'] = 1
 
+# import ipdb; ipdb.set_trace()
 normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 if args.independent_learning:
     models = [Agent.Agent(Utility.params['num_robots'],
@@ -106,7 +108,8 @@ if args.independent_learning:
                           horizon = 2,
                           use_horizon = args.use_horizon,
                           use_entropy = args.use_entropy,
-                          use_intention = args.use_intention)
+                          use_intention = args.use_intention,
+                          heading = args.heading)
              for i in range(Utility.params['num_robots'])]
     if test_mode:
         [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
@@ -126,7 +129,8 @@ else:
                             horizon = 2,
                             use_horizon = args.use_horizon,
                             use_entropy = args.use_entropy,
-                            use_intention = args.use_intention)
+                            use_intention = args.use_intention,
+                            heading = args.heading)
     else:
         model = Agent.Agent(Utility.params['num_robots'],
                             Utility.params['num_obs'],
@@ -142,7 +146,8 @@ else:
                             horizon = 2,
                             use_horizon = args.use_horizon,
                             use_entropy = args.use_entropy,
-                            use_intention = args.use_intention)
+                            use_intention = args.use_intention,
+                            heading = args.heading)
 
     if test_mode:
         model.load_model(model_file_path)
@@ -189,12 +194,14 @@ while not exp_done:
             object_positions = []
             agent_prox_flags = []
             last_object_heading = None
-            episode_intention_rewards = np.zeros(Utility.params['num_robots'])
-            if args.independent_learning:
-                next_heading_intention = np.zeros(Utility.params['num_robots'])
-            else:
-                next_heading_intention = 0
+            
+            if args.heading == 'polar':
+                next_heading_intention = np.zeros((Utility.params['num_robots'], 2))
 
+            else:
+                next_heading_intention = np.zeros(Utility.params['num_robots'])
+
+            episode_intention_rewards = np.zeros(Utility.params['num_robots'])
 
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
@@ -231,7 +238,7 @@ while not exp_done:
                     running_reward.append(0)
                     agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                 else:
-                    agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
+                    agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                 if args.comms_scheme != 'None':
                     message_memory[i].append(msg.msgs)
 
@@ -327,16 +334,23 @@ while not exp_done:
                     if args.use_intention:
                         if len(object_positions) > 2:
                             object_positions.pop(0)
+
                             last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
                             x1 = math.cos(last_object_heading)
                             y1 = math.sin(last_object_heading)
+                            
                             for i in range(Utility.params['num_robots']):
-                                x2 = math.cos(next_heading_intention[i]*math.pi)
-                                y2 = math.sin(next_heading_intention[i]*math.pi)
+                                if args.heading == 'polar':
+                                    x2, y2 = next_heading_intention[i]
+
+                                else:
+                                    x2 = math.cos(next_heading_intention[i] * math.pi)
+                                    y2 = math.sin(next_heading_intention[i] * math.pi)
 
                                 diff = np.dot([x1, y1], [x2, y2])
                                 intention_reward.append(-1 + diff)
-                                episode_intention_rewards[i]+=intention_reward[i]
+                                episode_intention_rewards[i] += intention_reward[i]
+
                         else:
                             intention_reward = [0 for i in range(Utility.params['num_robots'])]
 
@@ -364,6 +378,7 @@ while not exp_done:
                     force_angs = []
                     r = []
                     agent_prox_flags = []
+                    next_object_heading = np.zeros(Utility.params['num_robots'])
 
                     if args.use_intention:
                         for i in range(Utility.params['num_robots']):
@@ -377,17 +392,27 @@ while not exp_done:
                         if len(object_positions) == 2:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
-                                    next_heading_intention[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                                    next_object_heading[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
+
+                                    if args.heading == 'polar':
+                                        x = math.cos(next_object_heading[i] * math.pi)
+                                        y = math.sin(next_object_heading[i] * math.pi)
+                            
+                                        next_heading_intention[i] = [x, y]
+                                    else:
+                                        next_heading_intention[i] = next_object_heading[i]
                             else:
-                                next_heading_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                                ctde_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                                for i in range(Utility.params['num_robots']):
+                                    next_heading_intention[i] = ctde_intention
+
                         if len(old_object_positions) == 2:
                             #store transitions of intentions
-
-                            if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
-                            else:
-                                model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention, intention_reward, np.append(object_positions, old_agent_prox_flags), 0)
+                            for i in range(Utility.params['num_robots']):
+                                if args.independent_learning:
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                else:
+                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
 
 
                     for i in range(Utility.params['num_robots']):
@@ -405,7 +430,7 @@ while not exp_done:
                         if args.independent_learning:
                             new_agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                         else:
-                            new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention, i, args.comms_mem, message_memory[i])
+                            new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                         if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
                             message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
@@ -568,7 +593,8 @@ while not exp_done:
                                     print('Agent', i, 'reward %.1f' % running_reward,
                                           'epsilon:%.2f' % model.epsilon,
                                           'steps:', model.learn_step_counter)
-                                print('Intention rewards %.2f' % episode_intention_rewards[i])
+                                    print('Intention rewards %.2f' % episode_intention_rewards[i])
+
                         if ep_counter % 10 == 0:
                             exp_mean_rewards.append(np.mean(exp_rewards))
                             exp_rewards = []
