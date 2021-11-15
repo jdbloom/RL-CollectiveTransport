@@ -93,6 +93,9 @@ for j in range(len(episode_rewards[0])):
     last_10_rewards.append([np.average(robot_exp_rewards[j][i:i+10]) for i in last_10_axis[j]])
 cumulative_episode_run_times.pop(0)
 
+print('[STATISTICS] Success Rate:', (len(episode_success_reward[0])/ len(episode_rewards)))
+print('[STATISTICS] Failures:', len(episode_failure_reward[0]))
+
 print('. . . Plotting')
 
 success_colors = ['darkturquoise', 'lightgreen', 'khaki', 'violet', 'lightcoral', 'sandybrown']
