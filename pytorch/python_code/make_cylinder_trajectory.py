@@ -89,11 +89,11 @@ for ep in range(len(df_list)):
     if args.non_convex:
         plt.plot((-2, 0, -2), (2, 0, -2), c = 'k', linewidth = 10)
     if gate != 0:
-        plt.plot((np.float(gate[0]), np.float(gate[0])), (-5, (-5 + np.float(gate[1]))), c='k', linewidth = 5)
-        plt.plot((np.float(gate[0]), np.float(gate[0])), (5, (5-np.float(gate[3]))), c='k', linewidth = 5)
+        plt.plot((np.float64(gate[0]), np.float64(gate[0])), (-5, (-5 + np.float64(gate[1]))), c='k', linewidth = 5)
+        plt.plot((np.float64(gate[0]), np.float64(gate[0])), (5, (5-np.float64(gate[3]))), c='k', linewidth = 5)
     if obstacles != 0:
         for i in range(int(len(obstacles)/2)):
-            ax.add_patch(plt.Circle((np.float(obstacles[i*2]), np.float(obstacles[i*2+1])), 0.5, color = 'black'))
+            ax.add_patch(plt.Circle((np.float64(obstacles[i*2]), np.float64(obstacles[i*2+1])), 0.5, color = 'black'))
     ax.add_patch(plt.Circle((cyl_x_pos[0], cyl_y_pos[0]), 0.5, facecolor = 'lightgray', edgecolor='black'))
     ax.add_patch(plt.Circle((cyl_x_pos[-1], cyl_y_pos[-1]), 0.5, facecolor = 'lightgray', edgecolor='black'))
     if episode_2 is not None:

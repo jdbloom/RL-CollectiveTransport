@@ -298,8 +298,8 @@ void CCollectiveRLTransport::CreateEntities() {
         );
      for(size_t i = 0; i < m_unNumEpisodes; ++i){
        if(update_offset_flag == 1){
-         /** delay gate obstacle for 150 episodes to allow algorithm to move to goal first*/
-         if((i)%m_unGateUpdateFrequency == 0){
+         /** Dont update on episode 0*/
+         if((i+1)%m_unGateUpdateFrequency == 0){
            offset = offset - m_fGateUpdate;
            std::cout<<"Updating gap distance to "<<offset*2<<" at episode "<<i<<std::endl;
            if(offset <= (m_fGateMinimum/2.0)){

@@ -519,7 +519,7 @@ class Agent():
         if self.use_intention:
             self.learn_intention()
         if self.learning_scheme == 'None':
-            return
+            return 0,0
         elif self.learning_scheme == 'DQN':
             return self.DQN_learn()
         elif self.learning_scheme == 'DDQN':
