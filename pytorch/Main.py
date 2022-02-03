@@ -194,7 +194,7 @@ while not exp_done:
             object_positions = []
             agent_prox_flags = []
             last_object_heading = None
-            
+
             if args.heading == 'polar':
                 next_heading_intention = np.zeros((Utility.params['num_robots'], 2))
 
@@ -338,7 +338,7 @@ while not exp_done:
                             last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
                             x1 = math.cos(last_object_heading)
                             y1 = math.sin(last_object_heading)
-                            
+
                             for i in range(Utility.params['num_robots']):
                                 if args.heading == 'polar':
                                     x2, y2 = next_heading_intention[i]
@@ -384,7 +384,8 @@ while not exp_done:
                         for i in range(Utility.params['num_robots']):
                             prox_values = env_observations[i][7:]
                             #print('[DEBUG] Prox Values', prox_values)
-                            prox_value = np.sum(prox_values)
+                            prox_value = np.sum(prox_values)                ### Change to actual values instead of binary flag
+                            #agent_prox_flags.append(prox_value)
                             if prox_value/24 > 0.5:
                                 agent_prox_flags.append(1)
                             else:
@@ -397,7 +398,7 @@ while not exp_done:
                                     if args.heading == 'polar':
                                         x = math.cos(next_object_heading[i] * math.pi)
                                         y = math.sin(next_object_heading[i] * math.pi)
-                            
+
                                         next_heading_intention[i] = [x, y]
                                     else:
                                         next_heading_intention[i] = next_object_heading[i]
