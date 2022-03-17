@@ -385,11 +385,11 @@ while not exp_done:
                             prox_values = env_observations[i][7:]
                             #print('[DEBUG] Prox Values', prox_values)
                             prox_value = np.sum(prox_values)                ### Change to actual values instead of binary flag
-                            #agent_prox_flags.append(prox_value/24.0)
-                            if prox_value/24 > 0.5:
-                                agent_prox_flags.append(1)
-                            else:
-                                agent_prox_flags.append(0)
+                            agent_prox_flags.append(prox_value/24.0)
+                            #if prox_value/24 > 0.5:
+                            #    agent_prox_flags.append(1)
+                            #else:
+                            #    agent_prox_flags.append(0)
                         if len(object_positions) == 2:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):

@@ -17,10 +17,10 @@ def fanin_init(size, fanin = None):
 ############################################################################
 class DQN(nn.Module):
     def __init__(self, id, lr, num_actions, observation_size, num_ops_per_action,
-                 fc1_dims = 64, fc2_dims = 128, name = 'DQN_'):
+                 fc1_dims = 64, fc2_dims = 128, name = 'DQN'):
         super().__init__()
 
-        self.name = name+str(id)
+        self.name = name
 
         output_dims = num_ops_per_action**num_actions
 
@@ -37,6 +37,7 @@ class DQN(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
+
         x = F.relu(self.fc1(state))
         x1 = F.relu(self.fc2(x))
         actions = self.fc3(x1)
@@ -96,10 +97,10 @@ class DDQNComms(nn.Module):
 ############################################################################
 class DDQN(nn.Module):
     def __init__(self, *,id = None, lr = None, num_actions = None, observation_size = None,
-                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN_'):
+                 num_ops_per_action = None, fc1_dims = 64, fc2_dims = 128, name = 'DDQN'):
         super().__init__()
 
-        self.name = name+str(id)
+        self.name = name
 
         output_dims = (num_ops_per_action**num_actions)
         #print('DQN network observation_size = ', observation_size, 'and output size = ', output_dims)
@@ -141,7 +142,7 @@ class DDQN(nn.Module):
 
     def load_model(self, file_path):
         print('... loading', self.name, ' ...')
-        self.load_state_dict(T.load(file_path+'_'+self.name))
+        self.load_state_dict(T.load(file_path))
 
 ############################################################################
 # Actor Network for DDPG
