@@ -1,4 +1,4 @@
-from .networks import DDQN, DDQNComms, DQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork
+from .networks import DDQN, DDQNComms, DQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder
 from .replay_buffer import ReplayBuffer
 from .communications import Mailbox
 
@@ -18,7 +18,7 @@ class Agent():
     def __init__(self, num_agents, num_observations, num_actions,
                  num_ops_per_action, id, learning_scheme, no_buffer,
                  comms_memory, normalization, comms_scheme = "None", alphabet_size=4, horizon = 2,
-                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False, heading='radial'):
+                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False, use_recurrent=False, heading='radial', meta_param_size = 0):
         self.id = id
         self.num_agents = num_agents
         self.num_actions = num_actions
@@ -37,7 +37,7 @@ class Agent():
         self.horizon = horizon
         self.use_intention = use_intention
         self.heading = heading
-
+        self.meta_param_size = meta_param_size
         # Dictionaries and binning for loss function calculations
         self.use_entropy = use_entropy
         self.StateDict = {}
@@ -52,7 +52,7 @@ class Agent():
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
-
+        self.use_recurrent = use_recurrent
         self.make_comms_scheme()
         self.make_learning_scheme(comms_memory)
         if self.use_intention:
@@ -260,7 +260,7 @@ class Agent():
     def make_DDPG(self):
         #define networks for DDPG
         self.min_max_action = 1
-        obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size + self.meta_param_size
         if self.use_intention:
             if self.heading == 'radial':
                 obs_size += 1
@@ -282,15 +282,26 @@ class Agent():
         self.critic_optimizer = Adam(self.critic.parameters(), lr = self.lr, weight_decay = 1e-4)
         print(self.critic)
         print(self.target_critic)
+        if self.use_recurrent:
+            #will take in the entire transition (s,a,s_,r)
+            observation_size = 2*obs_size + self.num_actions + 1
+            self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
+            self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
+            print(self.ee)
+            self.ee.to(self.ee.device)
 
         self.update_network_parameters(tau = 1, learning_scheme ='DDPG')
 
-        self.actor.cuda()
-        self.target_actor.cuda()
-        self.critic.cuda()
-        self.target_critic.cuda()
+        self.actor.to(self.actor.device)
+        self.target_actor.to(self.target_actor.device)
+        self.critic.to(self.critic.device)
+        self.target_critic.to(self.target_critic.device)
 
-        self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
+        if self.use_recurrent:
+            self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous', use_seq_buffer=True, seq_len=self.seq_len)
+            self.seq_memory = self.memory.seq_memory
+        else:
+            self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
 
     def make_TD3(self):
         #difine networks for TD3
@@ -403,7 +414,7 @@ class Agent():
         if self.learn_step_counter % self.replace_target_cnt == 0:
             self.q_comms_next.load_state_dict(self.q_comms_eval.state_dict())
 
-    def choose_action(self, observation, failure, test = False):
+    def choose_action(self, observation, failure, test = False, meta_params = None):
         #print('[DEBUG] Failure:', failure)
         if failure:
             #print('DEBUG Retruning Failure State')
@@ -423,7 +434,7 @@ class Agent():
             return self.DDQN_choose_action(observation, test)
 
         elif self.learning_scheme == 'DDPG':
-            return self.DDPG_choose_action(observation, test)
+            return self.DDPG_choose_action(observation, test, meta_params=meta_params)
 
         elif self.learning_scheme == 'TD3':
             return self.TD3_choose_action(observation, test)
@@ -452,8 +463,10 @@ class Agent():
         actions = self.parse_action(action)
         return (actions, action)
 
-    def DDPG_choose_action(self, observation, test = False):
+    def DDPG_choose_action(self, observation, test = False, meta_params=None):
         state = T.tensor([observation], dtype = T.float).to(self.actor.device).unsqueeze(0)
+        if meta_params != None:
+            state = T.cat((state,meta_params), 1).to(T.float32)
         actions = self.actor(state)
         if not test:
             actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
@@ -649,8 +662,17 @@ class Agent():
     def DDPG_learn(self):
         if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
             return 0, 0
+        if self.use_recurrent:
+            states, actions, rewards, states_, dones = self.sample_memory(self.actor, reccurent= True)
+            #Generating meta-parameters
+            meta_param = self.generate_meta_param(states, actions, states_, rewards, dones)
+            meta_param_clone = T.clone(meta_param).detach()  #detached so that gradient does not get calculated.
+            states_ = self.build_ac_input(states_, meta_param_clone)
+            states = self.build_ac_input(states, meta_param)
+            states_clone = T.clone(states).detach()
+        else:
+            states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
 
-        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
         target_actions = self.target_actor(states_)
         q_value_ = self.target_critic([states_, target_actions])
         q_value_[dones] = 0.0
@@ -665,8 +687,8 @@ class Agent():
 
         #Actor Update
         self.actor.zero_grad()
-        new_policy_actions = self.actor(states)
-        actor_loss = -self.critic([states, new_policy_actions])
+        new_policy_actions = self.actor(states_clone)
+        actor_loss = -self.critic([states_clone, new_policy_actions])
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -811,8 +833,11 @@ class Agent():
     def decrement_epsilon(self):
         self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
 
-    def sample_memory(self, network, get_entropy = False, intention = False):
+    def sample_memory(self, network, get_entropy = False, intention = False, reccurent=False):
         if get_entropy:
+            state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
+        elif reccurent:
+            #State_vec and message_vec integration in Seq buffer needed.
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
         else:
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
@@ -1128,3 +1153,25 @@ class Agent():
         self.time_step += 1
         actions = mu_prime.cpu().detach().item()
         return actions
+
+    def build_ee_input(self,s,a,r,s_):
+        observation = T.cat((s,a,s_), -1)
+        if r.dim() == 0:
+            r = r.reshape([1])
+        if r.dim()== 2:
+            r = r.unsqueeze(-1)
+        observation = T.cat((observation,r), -1)
+        if observation.dim() == 1:
+            observation = T.reshape(observation,(1,1,observation.shape[0]))
+        return observation.to(T.float32)
+
+    def generate_meta_param(self,s,a,s_,r,d):
+        observation = self.build_ee_input(s,a,r,s_)
+        meta_param = self.ee(observation)
+        return meta_param
+    
+    def build_ac_input(self, state, mp):
+        #TODO figure out what to replace 4 with
+        state = state[:,4,:]
+        obs = T.cat((state,mp), 1)
+        return obs

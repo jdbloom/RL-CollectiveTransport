@@ -37,6 +37,8 @@ parser.add_argument("--port", default = "55555")
 parser.add_argument("--use_intention", default = False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--heading", default = "radial")
+parser.add_argument("--recurrent", default= False, action= 'store_true')
+parser.add_argument("--meta_param_size", default=0)
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -47,7 +49,7 @@ comms_scheme = args.comms_scheme
 port = args.port
 test_mode = args.test
 train_mode = not test_mode
-
+recurrent = args.recurrent
 
 def viz(message_codes, t):
     plt.clf()
@@ -83,7 +85,7 @@ if not args.no_print:
     print("  num_actions ---", Utility.params['num_actions'])
     print("  num_stats -----", Utility.params['num_stats'])
 
-Utility.set_obstacles_fields();
+Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
@@ -109,7 +111,9 @@ if args.independent_learning:
                           use_horizon = args.use_horizon,
                           use_entropy = args.use_entropy,
                           use_intention = args.use_intention,
-                          heading = args.heading)
+                          heading = args.heading,
+                          use_recurrent = recurrent,
+                          meta_param_size=args.meta_param_size)
              for i in range(Utility.params['num_robots'])]
     if test_mode:
         [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
@@ -130,7 +134,9 @@ else:
                             use_horizon = args.use_horizon,
                             use_entropy = args.use_entropy,
                             use_intention = args.use_intention,
-                            heading = args.heading)
+                            heading = args.heading,
+                            use_recurrent = recurrent,
+                            meta_param_size = args.meta_param_size)
     else:
         model = Agent.Agent(Utility.params['num_robots'],
                             Utility.params['num_obs'],
@@ -147,7 +153,9 @@ else:
                             use_horizon = args.use_horizon,
                             use_entropy = args.use_entropy,
                             use_intention = args.use_intention,
-                            heading = args.heading)
+                            heading = args.heading,
+                            use_recurrent = recurrent,
+                            meta_param_size = args.meta_param_size)
 
     if test_mode:
         model.load_model(model_file_path)

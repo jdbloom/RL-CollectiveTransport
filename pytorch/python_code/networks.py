@@ -197,6 +197,42 @@ class DDPGActorNetwork(nn.Module):
         self.load_state_dict(T.load(path + '_' + self.name))
 
 ############################################################################
+# Recurrent Layer for Environment Encoder
+############################################################################
+class EnvironmentEncoder(nn.Module):
+    def __init__(self, observation_size, hidden_size, meta_param_size, batch_size, horizon, num_layers):
+        super(EnvironmentEncoder, self).__init__()
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        self.observation = observation_size
+        self.hidden_size = hidden_size
+        self.meta_param_size = meta_param_size
+        self.batch_size = batch_size
+        self.horizon = horizon
+        self.num_layers = num_layers
+
+        self.ee = nn.LSTM(observation_size, hidden_size, num_layers = num_layers, batch_first=True)
+        self.meta_layer = nn.Linear(hidden_size, meta_param_size)
+
+        self.to(self.device)
+
+    def forward(self, observation):
+        hidden0 = (T.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device), T.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device))
+        lstm_out , (h_out, _) = self.ee(observation,hidden0)
+        lstm_out = h_out.view(-1,self.hidden_size)
+        meta_parameters = self.meta_layer(lstm_out)
+        meta_parameters = T.relu(meta_parameters)
+        return meta_parameters
+
+    def save_checkpoint(self, path):
+        print('... saving', self.name,'...')
+        T.save(self.state_dict(), path + '_' + self.name)
+
+    def load_checkpoint(self, path):
+        print('... loading', self.name, '...', path)
+        self.load_state_dict(T.load(path + '_' + self. name))
+        
+############################################################################
 # Critic Network for DDPG
 ############################################################################
 class DDPGCriticNetwork(nn.Module):
