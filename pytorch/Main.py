@@ -1,3 +1,4 @@
+from urllib.parse import uses_relative
 import python_code.Agent as Agent
 import python_code.zmq_utility as zmq_utility
 #from python_code.comms_viz import viz
@@ -235,6 +236,7 @@ while not exp_done:
             agent_states = []
             force_mags = []
             force_angs = []
+            mp = None
             if args.independent_learning:
                 running_reward = []
             else:
@@ -245,8 +247,21 @@ while not exp_done:
                 if args.independent_learning:
                     running_reward.append(0)
                     agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                    #<--------------Generate initial Meta-parameters------------->
+                    #agent_state, action, agent_state_, rewards
+                    #TODO figure out what actions use here or put randon action
+                    import ipdb; ipdb.set_trace()
+                    if recurrent:
+                        agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, agent_state, reward)
+                        mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                        mp = mp[-1]
                 else:
                     agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                    if recurrent:
+                        agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, agent_state, reward)
+                        mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                        mp = mp[-1]
+
                 if args.comms_scheme != 'None':
                     message_memory[i].append(msg.msgs)
 
@@ -265,6 +280,7 @@ while not exp_done:
             #
             # Start the Episode Loop
             #
+
             episode_start_time = time.time()
             while not episode_done:
                 if not exp_done:
@@ -286,9 +302,9 @@ while not exp_done:
                         # Choose an action
                         #print("[DEBUG] Robot",i,"Failure:", failures[i])
                         if args.independent_learning:
-                            action, action_num = models[i].choose_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = models[i].choose_action(agent_states[i], failures[i], test_mode, meta_params=mp)
                         else:
-                            action, action_num = model.choose_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = model.choose_action(agent_states[i], failures[i], test_mode, meta_params=mp)
                         actions_to_take.append(action)
                         actions.append(action_num)
                         #print(i, action)
@@ -438,8 +454,16 @@ while not exp_done:
                         force_angs.append(stats[i][1])
                         if args.independent_learning:
                             new_agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                            if recurrent:
+                                agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, new_agent_state, reward)
+                                mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                                mp = mp[-1]
                         else:
                             new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
+                            if recurrent:
+                                agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, new_agent_state, reward)
+                                mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                                mp = mp[-1]
                         if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
                             message_memory[i].append(msg.msgs)
                         new_agent_states.append(new_agent_state)
@@ -467,6 +491,12 @@ while not exp_done:
                                                                                  episode_done,
                                                                                  state_vec = models[i].obj_state,
                                                                                  message_vec = message_codes)
+                                                if models[i].use_recurrent:
+                                                    models[i].store_recurrent_transition(agent_states[i],
+                                                                       (actions[i], actions_to_take[i]),
+                                                                       rewards[i],
+                                                                       new_agent_states[i],
+                                                                       episode_done)
                                             else:
                                                 if model.comms_scheme == 'None':
                                                     message_codes = None
@@ -485,6 +515,12 @@ while not exp_done:
                                                                                  episode_done,
                                                                                  state_vec = model.obj_state,
                                                                                  message_vec = message_codes)
+                                                if models[i].use_recurrent:
+                                                    models[i].store_recurrent_transition(agent_states[i],
+                                                                       (actions[i], actions_to_take[i]),
+                                                                       rewards[i],
+                                                                       new_agent_states[i],
+                                                                       episode_done)
 
                         r.append(rewards[i][0])
                     #print('[DEBUG] Rewards:', r)

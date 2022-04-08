@@ -57,6 +57,8 @@ class Agent():
         self.make_learning_scheme(comms_memory)
         if self.use_intention:
             self.build_intention(self.horizon)
+        if self.use_recurrent:
+            self.seq_len = 5
 
 
     def make_comms_scheme(self):
@@ -112,7 +114,7 @@ class Agent():
             if self.heading == 'polar':
                 env_obs = np.concatenate((env_obs, heading_intention))
             else:
-                env_obs = np.concatenate((env_obs, np.array([heading_intention])))
+                env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
         if self.comms_scheme == 'None':
             # need to append empty messages for all agents to keep networks the same size
             return np.concatenate((env_obs, np.zeros(self.alphabet_size*self.num_agents))), self.dead_channel_code
@@ -821,6 +823,9 @@ class Agent():
         else:
             self.memory.store_transition(state, action, reward, state_, done)
 
+    def store_recurrent_transition(self, state, action, reward, state_, done):
+        self.seq_memory.store_seq_transition(state,action,reward,state_,done)
+
     def store_comms_transition(self, state, action, reward, state_, done, state_vec=None, message_vec=None):
         if self.use_entropy:
             self.comms_memory.store_transition(state, action, reward, state_, done, state_vec, message_vec)
@@ -1154,6 +1159,18 @@ class Agent():
         actions = mu_prime.cpu().detach().item()
         return actions
 
+    def build_initial_ee_input(self,s,a,r,s_, model):
+        state = T.from_numpy(s).to(model.device)
+        reward = T.from_numpy(r).to(model.device)
+        state_ = T.from_numpy(s_).to(model.device)
+        action = T.from_numpy(a).to(model.device)
+        #Padding single inputs, EE takes in batches.
+        stateP = self.pad_input(state,model.seq_len,model.batch_size)
+        actionP = self.pad_input(action,model.seq_len,model.batch_size)
+        state_P = self.pad_input(state_,model.seq_len,model.batch_size)
+        rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,model.seq_len-1,0,model.batch_size-1,0), value=0)
+        return stateP, actionP, state_P, rewardP
+
     def build_ee_input(self,s,a,r,s_):
         observation = T.cat((s,a,s_), -1)
         if r.dim() == 0:
@@ -1165,7 +1182,7 @@ class Agent():
             observation = T.reshape(observation,(1,1,observation.shape[0]))
         return observation.to(T.float32)
 
-    def generate_meta_param(self,s,a,s_,r,d):
+    def generate_meta_param(self,s,a,s_,r):
         observation = self.build_ee_input(s,a,r,s_)
         meta_param = self.ee(observation)
         return meta_param
@@ -1175,3 +1192,8 @@ class Agent():
         state = state[:,4,:]
         obs = T.cat((state,mp), 1)
         return obs
+        
+    def pad_input(s,seqlen,batch):
+        s = s.unsqueeze(0).unsqueeze(0)
+        s = F.pad(s,pad=(0,0,seqlen-1,0,batch-1,0))
+        return s
