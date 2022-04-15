@@ -342,6 +342,14 @@ class Agent():
             # Update Critic Network
             for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
                 target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+
+        elif learning_scheme == "intention_DDPG":
+            for target_param, param in zip(self.intention_target_actor.parameters(), self.intention_actor.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+            # Update Critic Network
+            for target_param, param in zip(self.intention_target_critic.parameters(), self.intention_critic.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+
         elif learning_scheme == 'TD3':
             actor_params = self.actor.named_parameters()
             critic_1_params = self.critic_1.named_parameters()
@@ -867,11 +875,13 @@ class Agent():
     def save_model(self, path):
         if self.learning_scheme == 'DQN' or self.learning_scheme == 'DDQN':
             self.q_eval.save_model(path)
+
         elif self.learning_scheme == 'DDPG':
             self.actor.save_checkpoint(path)
             self.target_actor.save_checkpoint(path)
             self.critic.save_checkpoint(path)
             self.target_critic.save_checkpoint(path)
+
         elif self.learning_scheme == 'TD3':
             self.actor.save_checkpoint(path)
             self.target_actor.save_checkpoint(path)
@@ -879,13 +889,20 @@ class Agent():
             self.target_critic_1.save_checkpoint(path)
             self.critic_2.save_checkpoint(path)
             self.target_critic_2.save_checkpoint(path)
+
         if self.comms_scheme != 'None':
             self.q_comms_eval.save_model(path)
 
         if self.use_intention == "DQN" or self.use_intention == "DDQN":
             self.intention_q_eval.save_model(path)
 
-        if self.use_intention == "TD3":
+        elif self.use_intention == "DDPG":
+            self.intention_actor.save_checkpoint(path)
+            self.intention_target_actor.save_checkpoint(path)
+            self.intention_critic.save_checkpoint(path)
+            self.intention_target_critic.save_checkpoint(path)
+
+        elif self.use_intention == "TD3":
             self.intention_actor.save_checkpoint(path)
             self.intention_target_actor.save_checkpoint(path)
             self.intention_critic_1.save_checkpoint(path)
@@ -904,6 +921,7 @@ class Agent():
             self.target_actor.load_checkpoint(path)
             self.critic.load_checkpoint(path)
             self.target_critic.load_checkpoint(path)
+
         elif self.learning_scheme == 'TD3':
             self.actor.load_checkpoint(path)
             self.target_actor.load_checkpoint(path)
@@ -917,7 +935,13 @@ class Agent():
         if self.use_intention == "DQN" or self.learning_scheme == "DDQN":
             self.intention_q_eval.load_model(path)
 
-        if self.use_intention == "TD3":
+        if self.use_intention == "DDPG":
+            self.intention_actor.load_checkpoint(path)
+            self.intention_target_actor.load_checkpoint(path)
+            self.intention_critic.load_checkpoint(path)
+            self.intention_target_critic.load_checkpoint(path)
+
+        elif self.use_intention == "TD3":
             self.intention_actor.load_checkpoint(path)
             self.intention_target_actor.load_checkpoint(path)
             self.intention_critic_1.load_checkpoint(path)
@@ -1096,6 +1120,39 @@ class Agent():
             else:
                 self.intention_memory = ReplayBuffer(100000, obs_size, 1, use_intention = True)
 
+        elif self.use_intention == "DDPG":
+            self.min_max_action = 1
+            obs_size = horizon*2 + self.num_agents*self.alphabet_size
+            actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':obs_size,
+                             'num_ops_per_action':self.num_ops_per_action,
+                             'min_max_action':self.min_max_action}
+            critic_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':obs_size}
+
+            self.intention_actor = DDPGActorNetwork(**actor_nn_args, name = 'intention_actor')
+            self.intention_target_actor = DDPGActorNetwork(**actor_nn_args, name = 'intention_target_actor')
+
+            self.intention_actor_optimizer = Adam(self.intention_actor.parameters(), lr = self.lr, weight_decay = 1e-4)
+            
+            print(self.intention_actor)
+            print(self.intention_target_actor)
+
+            self.intention_critic = DDPGCriticNetwork(**critic_nn_args, name = 'intention_critic')
+            self.intention_target_critic = DDPGCriticNetwork(**critic_nn_args, name = 'intention_target_critic')
+
+            self.intention_critic_optimizer = Adam(self.intention_critic.parameters(), lr = self.lr, weight_decay = 1e-4)
+            
+            print(self.intention_critic)
+            print(self.intention_target_critic)
+
+            self.update_network_parameters(tau=1, learning_scheme="intention_DDPG")
+
+            self.intention_actor.cuda()
+            self.intention_target_actor.cuda()
+            self.intention_critic.cuda()
+            self.intention_target_critic.cuda()
+
+            self.intention_memory = ReplayBuffer(100000, obs_size, self.num_actions, use_intention = True)
+
         elif self.use_intention == "TD3":
             min_max_action = 1
             obs_size = horizon*2 + self.num_agents*self.alphabet_size
@@ -1188,6 +1245,34 @@ class Agent():
             
             return loss.item(), 0
 
+        elif self.use_intention == "DDPG":
+            states, actions, rewards, states_, dones = self.sample_intention_memory(network = self.intention_actor)
+            
+            target_actions = self.intention_target_actor(states_)
+            q_value_ = self.intention_target_critic([states_, target_actions])
+            q_value_[dones] = 0.0
+            target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+
+            self.intention_critic.zero_grad()
+            q_value = self.intention_critic([states, actions.unsqueeze(1)])
+            value_loss = Loss(q_value, target)
+            value_loss.backward()
+            self.intention_critic_optimizer.step()
+            
+            self.intention_actor.zero_grad()
+            new_policy_actions = self.intention_actor(states)
+            actor_loss = -self.intention_critic([states, new_policy_actions])
+            actor_loss = actor_loss.mean()
+            actor_loss.backward()
+            self.intention_actor_optimizer.step()
+
+            self.update_network_parameters(learning_scheme="intention_DDPG")
+
+            self.intention_learn_step_counter += 1
+
+            return 0, 0
+
+
         elif self.use_intention == "TD3":
             states, actions, rewards, states_, dones = self.sample_intention_memory(network = self.intention_target_actor)
 
@@ -1226,7 +1311,7 @@ class Agent():
 
             if self.intention_learn_step_counter % self.update_actor_iter != 0:
                 return 0, 0
-            #print('Actor Learn Step')
+            
             self.intention_actor.optimizer.zero_grad()
             actor_q1_loss = self.intention_critic_1.forward(states, self.intention_actor.forward(states))
             actor_loss = -T.mean(actor_q1_loss)
@@ -1239,6 +1324,7 @@ class Agent():
 
     def choose_object_intention(self, positions, agent_prox_flags, test = False):
         observation = np.append(np.array(positions), np.array(agent_prox_flags))
+        
         if self.use_intention == "DQN" or self.use_intention == "DDQN":
             if test or np.random.random() > self.intn_epsilon:
                 state = T.tensor([observation], dtype = T.float).to(self.intention_q_eval.device)
@@ -1252,16 +1338,31 @@ class Agent():
 
             return action
 
+        elif self.use_intention == "DDPG":
+            state = T.tensor([observation], dtype = T.float).to(self.intention_actor.device).unsqueeze(0)
+            actions = self.intention_actor(state)
+            
+            if not test:
+                actions += T.normal(0.0, self.noise, size = (1,)).to(self.intention_actor.device)
+
+            actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
+            gripper = np.zeros((1, 1))
+            actions = actions[0].cpu().detach().numpy()
+
+            return actions
+
         elif self.use_intention == "TD3":
             if self.time_step < self.warmup:
-                mu = T.tensor(np.random.normal(scale = self.noise,
-                                            size = (1,))
-                            ).to(self.intention_actor.device)
+                mu = T.tensor(np.random.normal(scale = self.noise, size = (1,))).to(self.intention_actor.device)
+
             else:
                 state = T.tensor(observation, dtype = T.float).to(self.intention_actor.device)
                 mu = self.intention_actor.forward(state).to(self.intention_actor.device)
+
             mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.intention_actor.device)
             mu_prime = T.clamp(mu_prime, -1, 1)
-            self.time_step += 1
             actions = mu_prime.cpu().detach().item()
+            
+            self.time_step += 1
+
             return actions
