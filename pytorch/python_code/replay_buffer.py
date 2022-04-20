@@ -8,6 +8,7 @@ class ReplayBuffer():
         self.action_type = action_type
         self.state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
         self.new_state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
+        self.seq_memory = None
         if not use_intention:
             if self.action_type == 'Discrete':
                 self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
@@ -22,7 +23,7 @@ class ReplayBuffer():
         if state_size is not None and num_agents is not None:
             self.entropy_memory = self.EntropyBuffer(max_size, state_size, num_agents)
         if use_seq_buffer:
-            self.seq_memory = self.SequenceReplayBuffer(num_sequence, state_size, num_actions, seq_len)
+            self.seq_memory = self.SequenceReplayBuffer(num_sequence, num_observations, num_actions, seq_len)
 
 
     def store_transition(self, state, action, reward, state_, done, state_vec=None, message_vec=None):
@@ -122,7 +123,7 @@ class ReplayBuffer():
                 self.store_transitions()
                 self.seq_mem_cntr = 0
             self.seq_state_memory[self.seq_mem_cntr] = s
-            self.seq_action_memory[self.seq_mem_cntr] = a
+            self.seq_action_memory[self.seq_mem_cntr] = a[1]
             self.seq_new_state_memory[self.seq_mem_cntr] = s_
             self.seq_reward_memory[self.seq_mem_cntr] = r
             self.seq_terminal_memory[self.seq_mem_cntr] = d

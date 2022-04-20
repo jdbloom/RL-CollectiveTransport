@@ -53,12 +53,11 @@ class Agent():
         self.binned_acceleration = None
         self.obj_state = None
         self.use_recurrent = use_recurrent
+        self.seq_len = 5
         self.make_comms_scheme()
         self.make_learning_scheme(comms_memory)
         if self.use_intention:
             self.build_intention(self.horizon)
-        if self.use_recurrent:
-            self.seq_len = 5
 
 
     def make_comms_scheme(self):
@@ -110,7 +109,6 @@ class Agent():
     def make_agent_state(self, env_obs, heading_intention, agent_id, comms_memory, message_memory):
         #env_obs=self.normalize_obs(env_obs)
         if self.use_intention:
-            # import ipdb; ipdb.set_trace()
             if self.heading == 'polar':
                 env_obs = np.concatenate((env_obs, heading_intention))
             else:
@@ -286,7 +284,8 @@ class Agent():
         print(self.target_critic)
         if self.use_recurrent:
             #will take in the entire transition (s,a,s_,r)
-            observation_size = 2*obs_size + self.num_actions + 1
+            print("====================================OBSERVATION SIZE CHECK-==========================", obs_size, self.num_actions, self.meta_param_size)
+            observation_size = 2*(obs_size - self.meta_param_size) + (self.num_actions + 1) + 1 #added +1 to num action for gripper action
             self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
             self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
             print(self.ee)
@@ -298,10 +297,10 @@ class Agent():
         self.target_actor.to(self.target_actor.device)
         self.critic.to(self.critic.device)
         self.target_critic.to(self.target_critic.device)
-
         if self.use_recurrent:
-            self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous', use_seq_buffer=True, seq_len=self.seq_len)
-            self.seq_memory = self.memory.seq_memory
+            self.memory = ReplayBuffer(1000, (obs_size-self.meta_param_size), self.num_actions+1, action_type='Continuous', use_seq_buffer=True, seq_len=5)
+            if self.memory.seq_memory != None:
+                self.seq_memory = self.memory.seq_memory
         else:
             self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
 
@@ -466,9 +465,10 @@ class Agent():
         return (actions, action)
 
     def DDPG_choose_action(self, observation, test = False, meta_params=None):
+        # import ipdb; ipdb.set_trace()
         state = T.tensor([observation], dtype = T.float).to(self.actor.device).unsqueeze(0)
         if meta_params != None:
-            state = T.cat((state,meta_params), 1).to(T.float32)
+            state = T.cat((state,meta_params.unsqueeze(0).unsqueeze(0)), 2).to(T.float32)
         actions = self.actor(state)
         if not test:
             actions += T.normal(0.0, self.noise, size = (1, self.num_actions)).to(self.actor.device)
@@ -672,28 +672,49 @@ class Agent():
             states_ = self.build_ac_input(states_, meta_param_clone)
             states = self.build_ac_input(states, meta_param)
             states_clone = T.clone(states).detach()
+
+            target_actions = self.target_actor(states_)
+            q_value_ = self.target_critic([states_, target_actions])
+            q_value_[dones] = 0.0
+            target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+
+            #Critic Update
+            self.critic.zero_grad()
+            q_value = self.critic([states, actions])
+            value_loss = Loss(q_value, target)
+            value_loss.backward()
+            self.critic_optimizer.step()
+
+            #Actor Update
+            self.actor.zero_grad()
+            new_policy_actions = self.actor(states_clone)
+            actor_loss = -self.critic([states_clone, new_policy_actions])
+            actor_loss = actor_loss.mean()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+
         else:
             states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
 
-        target_actions = self.target_actor(states_)
-        q_value_ = self.target_critic([states_, target_actions])
-        q_value_[dones] = 0.0
-        target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+            target_actions = self.target_actor(states_)
+            q_value_ = self.target_critic([states_, target_actions])
+            q_value_[dones] = 0.0
+            target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
 
-        #Critic Update
-        self.critic.zero_grad()
-        q_value = self.critic([states, actions])
-        value_loss = Loss(q_value, target)
-        value_loss.backward()
-        self.critic_optimizer.step()
+            #Critic Update
+            self.critic.zero_grad()
+            q_value = self.critic([states, actions])
+            value_loss = Loss(q_value, target)
+            value_loss.backward()
+            self.critic_optimizer.step()
 
-        #Actor Update
-        self.actor.zero_grad()
-        new_policy_actions = self.actor(states_clone)
-        actor_loss = -self.critic([states_clone, new_policy_actions])
-        actor_loss = actor_loss.mean()
-        actor_loss.backward()
-        self.actor_optimizer.step()
+            #Actor Update
+            self.actor.zero_grad()
+            new_policy_actions = self.actor(states)
+            actor_loss = -self.critic([states, new_policy_actions])
+            actor_loss = actor_loss.mean()
+            actor_loss.backward()
+            self.actor_optimizer.step()
 
         self.update_network_parameters(learning_scheme = 'DDPG')
 
@@ -1159,16 +1180,18 @@ class Agent():
         actions = mu_prime.cpu().detach().item()
         return actions
 
-    def build_initial_ee_input(self,s,a,r,s_, model):
-        state = T.from_numpy(s).to(model.device)
-        reward = T.from_numpy(r).to(model.device)
-        state_ = T.from_numpy(s_).to(model.device)
-        action = T.from_numpy(a).to(model.device)
+    def build_initial_ee_input(self,s,a,s_,r):
+        if len(r) == 0:
+            r.append(0)
+        state = T.from_numpy(s)
+        reward = T.from_numpy(np.array(r))
+        state_ = T.from_numpy(s_)
+        action = T.from_numpy(a)
         #Padding single inputs, EE takes in batches.
-        stateP = self.pad_input(state,model.seq_len,model.batch_size)
-        actionP = self.pad_input(action,model.seq_len,model.batch_size)
-        state_P = self.pad_input(state_,model.seq_len,model.batch_size)
-        rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,model.seq_len-1,0,model.batch_size-1,0), value=0)
+        stateP = self.pad_input(state,self.seq_len,self.batch_size)
+        actionP = self.pad_input(action,self.seq_len,self.batch_size)
+        state_P = self.pad_input(state_,self.seq_len,self.batch_size)
+        rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,self.seq_len-1,0,self.batch_size-1,0), value=0)
         return stateP, actionP, state_P, rewardP
 
     def build_ee_input(self,s,a,r,s_):
@@ -1193,7 +1216,7 @@ class Agent():
         obs = T.cat((state,mp), 1)
         return obs
         
-    def pad_input(s,seqlen,batch):
+    def pad_input(self,s,seqlen,batch):
         s = s.unsqueeze(0).unsqueeze(0)
         s = F.pad(s,pad=(0,0,seqlen-1,0,batch-1,0))
         return s
