@@ -461,6 +461,7 @@ while not exp_done:
                                 mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
                                 mp = mp[-1]
                         else:
+                            # import ipdb; ipdb.set_trace()
                             new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                             if recurrent:
                                 agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, new_agent_state, reward)

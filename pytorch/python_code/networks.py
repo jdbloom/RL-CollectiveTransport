@@ -259,7 +259,7 @@ class DDPGCriticNetwork(nn.Module):
 
     def forward(self, X):
         state, action = X
-        action_value = self.fc1(T.cat([state, action], 1))
+        action_value = self.fc1(T.cat([state, action[:,:2]], 1))
         action_value = self.relu(action_value)
         action_value = self.fc2(action_value)
         action_value = self.relu(action_value)

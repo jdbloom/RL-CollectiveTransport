@@ -284,7 +284,6 @@ class Agent():
         print(self.target_critic)
         if self.use_recurrent:
             #will take in the entire transition (s,a,s_,r)
-            print("====================================OBSERVATION SIZE CHECK-==========================", obs_size, self.num_actions, self.meta_param_size)
             observation_size = 2*(obs_size - self.meta_param_size) + (self.num_actions + 1) + 1 #added +1 to num action for gripper action
             self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
             self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
@@ -662,25 +661,25 @@ class Agent():
         self.decrement_epsilon()
 
     def DDPG_learn(self):
-        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return 0, 0
         if self.use_recurrent:
-            states, actions, rewards, states_, dones = self.sample_memory(self.actor, reccurent= True)
+            if self.seq_memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
+                return 0, 0
+            states, actions, rewards, states_, dones, _, _ = self.sample_memory(self.actor, reccurent= True)
             #Generating meta-parameters
-            meta_param = self.generate_meta_param(states, actions, states_, rewards, dones)
+            meta_param = self.generate_meta_param(states, actions, states_, rewards)
             meta_param_clone = T.clone(meta_param).detach()  #detached so that gradient does not get calculated.
             states_ = self.build_ac_input(states_, meta_param_clone)
             states = self.build_ac_input(states, meta_param)
             states_clone = T.clone(states).detach()
-
             target_actions = self.target_actor(states_)
             q_value_ = self.target_critic([states_, target_actions])
-            q_value_[dones] = 0.0
-            target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
+            # q_value_[dones] = 0.0
+            # import ipdb; ipdb.set_trace()
+            target = T.unsqueeze(rewards[:,-1], 1) + self.gamma*q_value_
 
             #Critic Update
             self.critic.zero_grad()
-            q_value = self.critic([states, actions])
+            q_value = self.critic([states, actions[:,-1,:]])
             value_loss = Loss(q_value, target)
             value_loss.backward()
             self.critic_optimizer.step()
@@ -694,6 +693,8 @@ class Agent():
             self.actor_optimizer.step()
 
         else:
+            if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
+                return 0, 0
             states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.actor)
 
             target_actions = self.target_actor(states_)
@@ -864,14 +865,14 @@ class Agent():
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
         elif reccurent:
             #State_vec and message_vec integration in Seq buffer needed.
-            state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents, get_entropy)
+            state, action, reward, new_state, done, state_vec, message_vec = self.seq_memory.sample_memory(self.batch_size)
         else:
             state, action, reward, new_state, done, state_vec, message_vec = self.memory.sample_buffer(self.batch_size, self.use_horizon, self.num_agents)
 
-        states = T.tensor(state).to(network.device)
-        actions = T.tensor(action).to(network.device)
-        rewards = T.tensor(reward).to(network.device)
-        states_ = T.tensor(new_state).to(network.device)
+        states = T.tensor(state, dtype=T.float32).to(network.device)
+        actions = T.tensor(action, dtype=T.float32).to(network.device)
+        rewards = T.tensor(reward, dtype=T.float32).to(network.device)
+        states_ = T.tensor(new_state, dtype=T.float32).to(network.device)
         dones = T.tensor(done).to(network.device)
         return states, actions, rewards, states_, dones, state_vec, message_vec
 
@@ -1212,7 +1213,7 @@ class Agent():
     
     def build_ac_input(self, state, mp):
         #TODO figure out what to replace 4 with
-        state = state[:,4,:]
+        state = state[:,-1,:]
         obs = T.cat((state,mp), 1)
         return obs
         

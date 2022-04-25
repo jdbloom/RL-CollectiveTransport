@@ -99,7 +99,7 @@ class ReplayBuffer():
             self.num_observations = num_observations
             self.num_actions = num_actions
             self.seq_len = seq_len
-            self.mem_cntr = 0
+            self.mem_ctr = 0
             self.seq_mem_cntr = 0
 
             #main buffer used for sampling
@@ -130,17 +130,17 @@ class ReplayBuffer():
             self.seq_mem_cntr += 1
 
         def store_transitions(self):
-            mem_index = self.mem_cntr % self.mem_size
+            mem_index = self.mem_ctr % self.mem_size
             for i in range(self.seq_len):
                 self.state_memory[mem_index+i] = self.seq_state_memory[i]
                 self.action_memory[mem_index+i] = self.seq_action_memory[i]
                 self.new_state_memory[mem_index+i] = self.seq_new_state_memory[i]
                 self.reward_memory[mem_index+i] = self.seq_reward_memory[i]
                 self.terminal_memory[mem_index+i] = self.seq_terminal_memory[i]
-            self.mem_cntr += self.seq_len
+            self.mem_ctr += self.seq_len
 
-        def sample_memory(self, batch_size, replace=False):
-            max_mem = min(self.mem_cntr, self.mem_size)
+        def sample_memory(self, batch_size, replace=True):
+            max_mem = min(self.mem_ctr, self.mem_size)
             #selecting starting indices of the sequence in buffer
             indices = [x*self.seq_len for x in range((max_mem//self.seq_len)-1)]
             samples_indices = np.random.choice(indices, batch_size, replace = replace)
