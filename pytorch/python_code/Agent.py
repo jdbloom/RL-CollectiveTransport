@@ -266,7 +266,6 @@ class Agent():
                 obs_size += 1
             if self.heading == 'polar':
                 obs_size += 2
-
         actor_nn_args = {'id':self.id, 'num_actions':self.num_actions, 'observation_size':obs_size,
                          'num_ops_per_action':self.num_ops_per_action,
                          'min_max_action':self.min_max_action}
@@ -306,7 +305,7 @@ class Agent():
     def make_TD3(self):
         #difine networks for TD3
         self.min_max_action = 1
-        obs_size = self.num_observations + self.num_agents*self.alphabet_size
+        obs_size = self.num_observations + self.num_agents*self.alphabet_size + self.meta_param_size
         if self.use_intention:
             if self.heading == 'radial':
                 obs_size += 1
@@ -330,11 +329,22 @@ class Agent():
         self.target_critic_2 = TD3CriticNetwork(**critic_nn_args, name = 'target_critic_2')
         print(self.critic_2)
         print(self.target_critic_2)
+        if self.use_recurrent:
+            #will take in the entire transition (s,a,s_,r)
+            observation_size = 2*(obs_size - self.meta_param_size) + (self.num_actions + 1) + 1 #added +1 to num action for gripper action
+            self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
+            self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
+            print(self.ee)
+            self.ee.to(self.ee.device)
 
         self.update_network_parameters(tau = 1, learning_scheme ='TD3')
 
-        self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
-
+        if self.use_recurrent:
+            self.memory = ReplayBuffer(1000, (obs_size-self.meta_param_size), self.num_actions+1, action_type='Continuous', use_seq_buffer=True, seq_len=5)
+            if self.memory.seq_memory != None:
+                self.seq_memory = self.memory.seq_memory
+        else:
+            self.memory = ReplayBuffer(100000, obs_size, self.num_actions, 'Continuous')
     def update_network_parameters(self, tau = None, learning_scheme = None):
         # If tau = 1 -> hard update (should only be done during init)
         if tau is None:
@@ -437,7 +447,7 @@ class Agent():
             return self.DDPG_choose_action(observation, test, meta_params=meta_params)
 
         elif self.learning_scheme == 'TD3':
-            return self.TD3_choose_action(observation, test)
+            return self.TD3_choose_action(observation, test, meta_params=meta_params)
 
     def DQN_choose_action(self, observation, test = False):
         if test or np.random.random() > self.epsilon:
@@ -476,13 +486,15 @@ class Agent():
         actions = np.append(actions[0].cpu().detach().numpy(), gripper)
         return (actions, None)
 
-    def TD3_choose_action(self, observation, test = False):
+    def TD3_choose_action(self, observation, test = False, meta_params=None):
         if self.time_step < self.warmup:
             mu = T.tensor(np.random.normal(scale = self.noise,
                                            size = (self.num_actions,))
                           ).to(self.actor.device)
         else:
             state = T.tensor(observation, dtype = T.float).to(self.actor.device)
+            if meta_params != None:
+                state = T.cat((state,meta_params)).to(T.float32)
             mu = self.actor.forward(state).to(self.actor.device)
         mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.actor.device)
         mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
@@ -724,52 +736,108 @@ class Agent():
         return 0, 0
 
     def TD3_learn(self):
-        if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
-            return 0, 0
+        if self.use_recurrent:
+            if self.seq_memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
+                return 0, 0
+            states, actions, rewards, states_, dones, _, _ = self.sample_memory(self.actor, reccurent= True)
+            #Generating meta-parameters
+            meta_param = self.generate_meta_param(states, actions, states_, rewards)
+            meta_param_clone = T.clone(meta_param).detach()  #detached so that gradient does not get calculated.
+            states_ = self.build_ac_input(states_, meta_param_clone)
+            states = self.build_ac_input(states, meta_param)
+            states_clone = T.clone(states).detach()
 
-        states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.target_actor)
+            target_actions = self.target_actor.forward(states_)
+            target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
+            target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
+            
+            q1_ = self.target_critic_1.forward(states_, target_actions)
+            q2_ = self.target_critic_2.forward(states_, target_actions)
+            q1 = self.critic_1.forward(states, actions[:,-1,:])
+            q2 = self.critic_2.forward(states, actions[:,-1,:])
 
-        target_actions = self.target_actor.forward(states_)
-        target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
-        target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
+            # q1_[dones] = 0.0
+            # q2_[dones] = 0.0
 
-        q1_ = self.target_critic_1.forward(states_, target_actions)
-        q2_ = self.target_critic_2.forward(states_, target_actions)
+            q1_ = q1_.view(-1)
+            q2_ = q2_.view(-1)
 
-        q1 = self.critic_1.forward(states, actions)
-        q2 = self.critic_2.forward(states, actions)
+            critic_value_ = T.min(q1_, q2_)
+            # q_value_[dones] = 0.0ffff
+            # import ipdb; ipdb.set_trace()
 
-        q1_[dones] = 0.0
-        q2_[dones] = 0.0
+            target = rewards[:,-1] + self.gamma*critic_value_
+            target = T.unsqueeze(target,1)
 
-        q1_ = q1_.view(-1)
-        q2_ = q2_.view(-1)
+            #Critic Update
+            self.critic_1.optimizer.zero_grad()
+            self.critic_2.optimizer.zero_grad()
 
-        critic_value_ = T.min(q1_, q2_)
+            q1_loss = F.mse_loss(target, q1)
+            q2_loss = F.mse_loss(target, q2)
+            critic_loss = q1_loss + q2_loss
+            critic_loss.backward()
+            self.critic_1.optimizer.step()
+            self.critic_2.optimizer.step()
 
-        target = rewards + self.gamma*critic_value_
-        target = target.view(self.batch_size, 1)
+            self.learn_step_counter += 1
 
-        self.critic_1.optimizer.zero_grad()
-        self.critic_2.optimizer.zero_grad()
+            if self.learn_step_counter % self.update_actor_iter != 0:
+                return 0, 0
 
-        q1_loss = F.mse_loss(target, q1)
-        q2_loss = F.mse_loss(target, q2)
-        critic_loss = q1_loss + q2_loss
-        critic_loss.backward()
-        self.critic_1.optimizer.step()
-        self.critic_2.optimizer.step()
+            #Actor Update
+            self.actor.optimizer.zero_grad()
+            actor_q1_loss = self.critic_1.forward(states_clone, self.actor.forward(states_clone))
+            actor_loss = -T.mean(actor_q1_loss)
+            actor_loss.backward()
+            self.actor.optimizer.step()
+        else:
+            if self.memory.mem_ctr < (self.num_agents*self.batch_size + self.batch_size):
+                return 0, 0
 
-        self.learn_step_counter += 1
+            states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.target_actor)
 
-        if self.learn_step_counter % self.update_actor_iter != 0:
-            return 0, 0
-        #print('Actor Learn Step')
-        self.actor.optimizer.zero_grad()
-        actor_q1_loss = self.critic_1.forward(states, self.actor.forward(states))
-        actor_loss = -T.mean(actor_q1_loss)
-        actor_loss.backward()
-        self.actor.optimizer.step()
+            target_actions = self.target_actor.forward(states_)
+            target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
+            target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
+
+            q1_ = self.target_critic_1.forward(states_, target_actions)
+            q2_ = self.target_critic_2.forward(states_, target_actions)
+
+            q1 = self.critic_1.forward(states, actions)
+            q2 = self.critic_2.forward(states, actions)
+
+            q1_[dones] = 0.0
+            q2_[dones] = 0.0
+
+            q1_ = q1_.view(-1)
+            q2_ = q2_.view(-1)
+
+            critic_value_ = T.min(q1_, q2_)
+
+            target = rewards + self.gamma*critic_value_
+             
+
+            self.critic_1.optimizer.zero_grad()
+            self.critic_2.optimizer.zero_grad()
+
+            q1_loss = F.mse_loss(target, q1)
+            q2_loss = F.mse_loss(target, q2)
+            critic_loss = q1_loss + q2_loss
+            critic_loss.backward()
+            self.critic_1.optimizer.step()
+            self.critic_2.optimizer.step()
+
+            self.learn_step_counter += 1
+
+            if self.learn_step_counter % self.update_actor_iter != 0:
+                return 0, 0
+            #print('Actor Learn Step')
+            self.actor.optimizer.zero_grad()
+            actor_q1_loss = self.critic_1.forward(states, self.actor.forward(states))
+            actor_loss = -T.mean(actor_q1_loss)
+            actor_loss.backward()
+            self.actor.optimizer.step()
 
         self.update_network_parameters(learning_scheme = 'TD3')
 

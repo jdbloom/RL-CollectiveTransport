@@ -259,7 +259,7 @@ class DDPGCriticNetwork(nn.Module):
 
     def forward(self, X):
         state, action = X
-        action_value = self.fc1(T.cat([state, action[:,:2]], 1))
+        action_value = self.fc1(T.cat([state, action[:,:2]], 1)) #Remove [:,:2] from actions if grippers action needed as input
         action_value = self.relu(action_value)
         action_value = self.fc2(action_value)
         action_value = self.relu(action_value)
@@ -336,7 +336,7 @@ class TD3CriticNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state, action):
-        q1_action_value = F.relu(self.fc1(T.cat([state, action], dim = 1)))
+        q1_action_value = F.relu(self.fc1(T.cat([state, action[:,:2]], dim = 1))) #Remove [:,:2] from actions if grippers action needed as input
         q1_action_value = F.relu(self.fc2(q1_action_value))
         q1 = self.q1(q1_action_value)
 
