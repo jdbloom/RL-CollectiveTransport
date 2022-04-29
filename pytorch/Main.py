@@ -35,7 +35,7 @@ parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
-parser.add_argument("--use_intention", default = False, action = "store_true")
+parser.add_argument("--use_intention")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--heading", default = "radial")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
@@ -347,6 +347,7 @@ while not exp_done:
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
                     obj_stats = Utility.parse_obj_stats(msgs[5])
+                    
                     if Utility.params['num_obstacles'] > 0:
                         obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
                     elif Utility.params['use_gate'] == 1:
@@ -356,7 +357,7 @@ while not exp_done:
                     object_positions.append([obj_stats[0], obj_stats[1]])
 
                     intention_reward = []
-
+                    
                     if args.use_intention:
                         if len(object_positions) > 2:
                             object_positions.pop(0)
@@ -437,9 +438,9 @@ while not exp_done:
                             #store transitions of intentions
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0, state_vec=models[i].obj_state, message_vec=message_codes)
                                 else:
-                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0, state_vec=model.obj_state, message_vec=message_codes)
 
 
                     for i in range(Utility.params['num_robots']):
