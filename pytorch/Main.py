@@ -253,7 +253,7 @@ while not exp_done:
                         # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = models[i].build_initial_ee_input(agent_state, action, agent_state, reward)
                         # mp = models[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
                         # mp = mp[-1]
-                        mp = T.Tensor(2)
+                        mp = T.Tensor(args.meta_param_size)
                         
                 else:
                     agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
@@ -261,7 +261,7 @@ while not exp_done:
                         # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, agent_state, reward)
                         # mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
                         # mp = mp[-1]
-                        mp = T.Tensor(2)
+                        mp = T.Tensor(args.meta_param_size)
 
                 if args.comms_scheme != 'None':
                     message_memory[i].append(msg.msgs)

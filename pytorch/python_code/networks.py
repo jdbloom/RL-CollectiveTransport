@@ -180,6 +180,7 @@ class DDPGActorNetwork(nn.Module):
         self.mu.weight.data.uniform_(-init_w, init_w)
 
     def forward(self, x):
+        # import ipdb; ipdb.set_trace()
         prob = self.fc1(x)
         prob = self.relu(prob)
         prob = self.fc2(prob)

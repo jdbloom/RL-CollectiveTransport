@@ -290,7 +290,7 @@ class Agent():
         if self.use_recurrent:
             #will take in the entire transition (s,a,s_,r)
             observation_size = 2*(obs_size - self.meta_param_size) + (self.num_actions + 1) + 1 #added +1 to num action for gripper action
-            self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
+            self.ee = EnvironmentEncoder(observation_size, self.meta_param_size, self.meta_param_size, self.batch_size, False, 1)
             self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
             print(self.ee)
             self.ee.to(self.ee.device)
@@ -338,7 +338,7 @@ class Agent():
         if self.use_recurrent:
             #will take in the entire transition (s,a,s_,r)
             observation_size = 2*(obs_size - self.meta_param_size) + (self.num_actions + 1) + 1 #added +1 to num action for gripper action
-            self.ee = EnvironmentEncoder(observation_size, 2, 2, self.batch_size, False, 1)
+            self.ee = EnvironmentEncoder(observation_size, self.meta_param_size, self.meta_param_size, self.batch_size, False, 1)
             self.ee_optimizer = Adam(self.ee.parameters(), lr=0.01, weight_decay= 1e-4)
             print(self.ee)
             self.ee.to(self.ee.device)
