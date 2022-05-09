@@ -148,7 +148,7 @@ class DDQN(nn.Module):
 # Actor Network for DDPG
 ############################################################################
 class DDPGActorNetwork(nn.Module):
-    def __init__(self, id, num_actions, observation_size, num_ops_per_action, name, min_max_action = 1):
+    def __init__(self, id, num_actions, observation_size, lr, name, min_max_action = 1):
         super().__init__()
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -170,6 +170,8 @@ class DDPGActorNetwork(nn.Module):
         self.tanh = nn.Tanh()
 
         self.init_weights(3e-3) #find where this comes from and maybe find the purpose of this line???
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.name = name+'_'+str(id)+'_DDPG'
 
@@ -201,7 +203,7 @@ class DDPGActorNetwork(nn.Module):
 # Recurrent Layer for Environment Encoder
 ############################################################################
 class EnvironmentEncoder(nn.Module):
-    def __init__(self, observation_size, hidden_size, meta_param_size, batch_size, horizon, num_layers):
+    def __init__(self, observation_size, hidden_size, meta_param_size, batch_size, num_layers, lr):
         super(EnvironmentEncoder, self).__init__()
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
@@ -209,11 +211,12 @@ class EnvironmentEncoder(nn.Module):
         self.hidden_size = hidden_size
         self.meta_param_size = meta_param_size
         self.batch_size = batch_size
-        self.horizon = horizon
         self.num_layers = num_layers
 
         self.ee = nn.LSTM(observation_size, hidden_size, num_layers = num_layers, batch_first=True)
         self.meta_layer = nn.Linear(hidden_size, meta_param_size)
+
+        self.ee_optimizer = optim.Adam(self.ee.parameters(), lr=lr, weight_decay= 1e-4)
 
         self.to(self.device)
 
@@ -237,7 +240,7 @@ class EnvironmentEncoder(nn.Module):
 # Critic Network for DDPG
 ############################################################################
 class DDPGCriticNetwork(nn.Module):
-    def __init__(self, id, num_actions, observation_size, name):
+    def __init__(self, id, num_actions, observation_size, lr, name):
         super().__init__()
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -250,6 +253,8 @@ class DDPGCriticNetwork(nn.Module):
 
         self.relu = nn.ReLU()
         self.init_weights(3e-3)
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.name = name+'_'+str(id)+'_DDPG'
 
