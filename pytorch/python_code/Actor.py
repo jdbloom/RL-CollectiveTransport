@@ -120,7 +120,6 @@ class Actor(Hyperparameters):
         return Networks
         
 
-
     def update_network_parameters(self, tau = None):
         if tau is None:
             tau = self.tau
@@ -136,10 +135,16 @@ class Actor(Hyperparameters):
         elif self.networks['learning_scheme'] == 'TD3':
             self.networks = self.NetworkBuilder.update_TD3_network_parameters(tau, self.networks)
 
+    def replace_target_network(self):
+        if self.learn_step_counter % self.replace_target_ctr==0:
+            self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
+
 if __name__=='__main__':
     agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=False, recurrent_intention = False)
     print('[TESTING] DQN')
     agent.build_networks('DQN')
+    agent.learn_step_counter = agent.replace_target_ctr
+    agent.replace_target_network()
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
 

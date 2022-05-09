@@ -21,7 +21,7 @@ class Hyperparameters:
         self.intn_eps_dec = 1e-5
 
         self.batch_size = 100
-        self.replace_target_cnt = 1000
+        self.replace_target_ctr = 1000
         self.failed = False
         self.failure_action = [0, 0, 1]
         
