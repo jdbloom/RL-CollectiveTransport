@@ -70,12 +70,16 @@ class Actor(Hyperparameters):
     def build_networks(self, learning_scheme):
         if learning_scheme == 'DQN':
             self.networks = self.build_DQN()
+            self.networks['learning_scheme'] = 'DQN'
         elif learning_scheme == 'DDQN':
             self.networks = self.build_DDQN()
+            self.networks['learning_scheme'] = 'DDQN'
         elif learning_scheme == 'DDPG':
             self.networks = self.build_DDPG()
+            self.networks['learning_scheme'] = 'DDPG'
         elif learning_scheme == 'TD3':
             self.networks = self.build_TD3()
+            self.networks['learning_scheme'] = 'TD3'
         else:
             raise Exception('[ERROR] Learning scheme is not recognised: '+learning_scheme)
 
@@ -84,13 +88,17 @@ class Actor(Hyperparameters):
         if learning_scheme == 'DDPG':
             if self.recurrent_intention:
                 self.intention_networks = self.build_RDDPG_intention()
+                self.intention_networks['learning_scheme'] = 'RDDPG'
             else:
                 self.intention_networks = self.build_DDPG_intention()
+                self.intention_networks['learning_scheme'] = 'DDPG'
         elif learning_scheme == 'TD3':
             if self.recurrent_intention:
                 self.intention_networks = self.build_RTD3_intention()
+                self.intention_networks['learning_scheme'] = 'RTD3'
             else:
                 self.intention_networks = self.build_TD3_intention()
+                self.intention_networks['learning_scheme'] = 'TD3'
         else:
             raise Exception('[Error] Intention learning scheme is not recognised: '+learning_scheme)
 
@@ -113,9 +121,20 @@ class Actor(Hyperparameters):
         
 
 
-    #def update_network_parameters(self, tau = None, learning_scheme = None):
-
-
+    def update_network_parameters(self, tau = None):
+        if tau is None:
+            tau = self.tau
+        # Update Intention Networks 
+        if self.intention:
+            if self.intention_networks['learning_scheme'] == 'DDPG' or self.intention_networks['learning_scheme'] == 'RDDPG':
+                self.intention_networks = self.NetworkBuilder.update_DDPG_network_parameters(tau, self.intention_networks)
+            elif self.intention_networks['learning_scheme'] == 'TD3' or self.intention_networks['learning_scheme'] == 'RTD3':
+                self.intention_networks = self.NetworkBuilder.update_TD3_network_parameters(tau, self.intention_networks)
+        # Update Action Selection Networks
+        if self.networks['learning_scheme'] == 'DDPG':
+            self.networks = self.NetworkBuilder.update_DDPG_network_parameters(tau, self.networks)
+        elif self.networks['learning_scheme'] == 'TD3':
+            self.networks = self.NetworkBuilder.update_TD3_network_parameters(tau, self.networks)
 
 if __name__=='__main__':
     agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=False, recurrent_intention = False)
@@ -129,26 +148,47 @@ if __name__=='__main__':
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
     
-    print('[TESTING] DDPG')
+    print('[TESTING] DDPG and param update')
     agent.build_networks('DDPG')
+    print('ACTOR')
+    for name, param in agent.networks['actor'].named_parameters():
+        if param.requires_grad:
+            print(name, param.data)
+    print('TARGET ACTOR')
+    for name, param in agent.networks['target_actor'].named_parameters():
+        if param.requires_grad:
+            print (name, param.data)
+    agent.update_network_parameters(tau = 1)
+    print('TARGET ACTOR AFTER UPDATE')
+    for name, param in agent.networks['target_actor'].named_parameters():
+        if param.requires_grad:
+            print(name, param.data)
     print(agent.networks['actor'])
     print(agent.networks['critic'])
     
+
     print('[TESTING] TD3')
     agent.build_networks('TD3')
+    agent.update_network_parameters()
     print(agent.networks['actor'])
     print(agent.networks['critic_1'])
     print(agent.networks['critic_2'])
+    
 
     print('[TESTING] Intention DDPG')
     agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=True, recurrent_intention = False)
+    agent.build_networks('DDPG')
     agent.build_intention_network('DDPG')
+    agent.update_network_parameters()
     print(agent.intention_networks['actor'])
     print(agent.intention_networks['critic'])
+    
 
     print('[TESTING] Recurrent Intention DDPG')
     agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=True, recurrent_intention = True)
+    agent.build_networks('DDPG')
     agent.build_intention_network('DDPG')
+    agent.update_network_parameters()
     print(agent.intention_networks['actor'])
     print(agent.intention_networks['critic'])
     print(agent.intention_networks['ee'])

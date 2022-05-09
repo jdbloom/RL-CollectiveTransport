@@ -63,3 +63,44 @@ class NetworkAids:
     
     def make_EE_networks(self, nn_args):
         return EnvironmentEncoder(**nn_args)
+
+    def update_DDPG_network_parameters(self, tau, networks):
+        # Update Actor Network
+        for target_param, param in zip(networks['target_actor'].parameters(), networks['actor'].parameters()):
+            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+        # Update Critic Network
+        for target_param, param in zip(networks['target_critic'].parameters(), networks['critic'].parameters()):
+            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+        
+        return networks
+
+    def update_TD3_network_parameters(self, tau, networks):
+        actor_params = networks['actor'].named_parameters()
+        critic_1_params = networks['critic_1'].named_parameters()
+        critic_2_params = networks['critic_2'].named_parameters()
+        target_actor_params = networks['target_actor'].named_parameters()
+        target_critic_1_params = networks['target_critic_1'].named_parameters()
+        target_critic_2_params = networks['target_critic_2'].named_parameters()
+
+        critic_1 = dict(critic_1_params)
+        critic_2 = dict(critic_2_params)
+        actor = dict(actor_params)
+        target_actor = dict(target_actor_params)
+        target_critic_1 = dict(target_critic_1_params)
+        target_critic_2 = dict(target_critic_2_params)
+
+        for name in critic_1:
+            critic_1[name] = tau*critic_1[name].clone() + (1-tau)*target_critic_1[name].clone()
+
+        for name in critic_2:
+            critic_2[name] = tau*critic_2[name].clone() + (1-tau)*target_critic_2[name].clone()
+
+        for name in actor:
+            actor[name] = tau*actor[name].clone() + (1-tau)*target_actor[name].clone()
+
+        networks['target_critic_1'].load_state_dict(critic_1)
+        networks['target_critic_2'].load_state_dict(critic_2)
+        networks['target_actor'].load_state_dict(actor)
+
+        return networks
+
