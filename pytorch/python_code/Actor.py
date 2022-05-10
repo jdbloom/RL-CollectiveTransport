@@ -1,3 +1,4 @@
+from learning_schemes import *
 from LearningAids import Hyperparameters, NetworkAids 
 from replay_buffer import ReplayBuffer
 
@@ -5,6 +6,8 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as Adam
+
+import numpy as np
 
 
 
@@ -139,22 +142,87 @@ class Actor(Hyperparameters):
         if self.learn_step_counter % self.replace_target_ctr==0:
             self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
 
+    def choose_action(self, observation, test=False):
+        if self.networks['learning_scheme'] == 'DQN':
+            return self.DQN_choose_action(observation, test)
+        elif self.networks['learning_scheme'] == 'DDQN':
+            return self.DDQN_choose_action(observation, test)
+        elif self.networks['learning_scheme'] =='DDPG':
+            return self.DDPG_choose_action(observation, test)
+        elif self.networks['learning_scheme'] == 'TD3':
+            return self.TD3_choose_action(observation, test)
+        else:
+            raise Exception('[ERROR]: Learning scheme not recognised for action selection'+self.networks['learning_scheme'])
+    
+    def DQN_choose_action(self, observation, test = False):
+        if test or np.random.random()>self.epsilon:
+            statte = T.tensor(observation, dtype = T.float).to(self.networks['q_eval'].device)
+            action_values = self.networks['q_eval'].forward(state)
+            action = T.argmax(actoin_values[0]).item()
+        else:
+            action = np.random.choice(self.action_space)
+        
+        return action
+        
+    def DDQN_choose_action(self, observation, test = False):
+        if test or np.random.random()>self.epsilon:
+            statte = T.tensor(observation, dtype = T.float).to(self.networks['q_eval'].device)
+            action_values = self.networks['q_eval'].forward(state)
+            action = T.argmax(actoin_values[0]).item()
+        else:
+            action = np.random.choice(self.action_space)
+        
+        return action
+    
+    def DDPG_choose_action(self, observation, test = False):
+        state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
+        print(state, self.networks)
+        actions = self.networks['actor'].forward(state).unsqueeze(0)
+        if not test:
+            actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
+        actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
+        return actions[0].cpu().detach().numpy()
+    
+    def TD3_choose_action(self, observation, test = False):
+        if self.time_step < self.warmup:
+            mu = T.tensor(np.random.normal(scale = self.noise,
+                                           size = (self.n_actions,))
+                          ).to(self.networks['actor'].device)
+        else:
+            state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
+            mu = self.networks['actor'].forward(state).to(self.networks['actor'].device)
+        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.networks['actor'].device)
+        mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
+        self.time_step += 1
+        return mu_prime.cpu().detach().numpy()
+
 if __name__=='__main__':
     agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=False, recurrent_intention = False)
+    observation = np.zeros(32)
+
+    
     print('[TESTING] DQN')
     agent.build_networks('DQN')
     agent.learn_step_counter = agent.replace_target_ctr
     agent.replace_target_network()
+    print('[ACTION]', agent.choose_action(observation))
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
 
     print('[TESTING] DDQN')
     agent.build_networks('DDQN')
+    agent.replace_target_network()
+    print('[ACTION]', agent.choose_action(observation))
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
     
+    observation = np.zeros(34)
     print('[TESTING] DDPG and param update')
     agent.build_networks('DDPG')
+    agent.update_network_parameters()
+    print('[ACTION]', agent.choose_action(observation))
+
+    '''
     print('ACTOR')
     for name, param in agent.networks['actor'].named_parameters():
         if param.requires_grad:
@@ -170,11 +238,12 @@ if __name__=='__main__':
             print(name, param.data)
     print(agent.networks['actor'])
     print(agent.networks['critic'])
-    
+    '''
 
     print('[TESTING] TD3')
     agent.build_networks('TD3')
     agent.update_network_parameters()
+    print('[ACTION]', agent.choose_action(observation))
     print(agent.networks['actor'])
     print(agent.networks['critic_1'])
     print(agent.networks['critic_2'])

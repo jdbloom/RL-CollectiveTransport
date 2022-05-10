@@ -175,6 +175,8 @@ class DDPGActorNetwork(nn.Module):
 
         self.name = name+'_'+str(id)+'_DDPG'
 
+        self.to(self.device)
+
 
     def init_weights(self, init_w):
         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
@@ -182,7 +184,6 @@ class DDPGActorNetwork(nn.Module):
         self.mu.weight.data.uniform_(-init_w, init_w)
 
     def forward(self, x):
-        # import ipdb; ipdb.set_trace()
         prob = self.fc1(x)
         prob = self.relu(prob)
         prob = self.fc2(prob)

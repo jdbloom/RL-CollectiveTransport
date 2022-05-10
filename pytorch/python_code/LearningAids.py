@@ -44,22 +44,22 @@ class NetworkAids:
         return {'q_eval':DDQN(**nn_args), 'q_next':DDQN(**nn_args)}
     
     def make_DDPG_networks(self, actor_nn_args, critic_nn_args):
-        DDPG_netowkrs = {
+        DDPG_networks = {
                         'actor': DDPGActorNetwork(**actor_nn_args, name = 'actor'),
                         'target_actor': DDPGActorNetwork(**actor_nn_args, name = 'target_actor'),
                         'critic': DDPGCriticNetwork(**critic_nn_args, name = 'critic_1'),
                         'target_critic': DDPGCriticNetwork(**critic_nn_args, name = 'target_critic_1')}
-        return DDPG_netowkrs
+        return DDPG_networks
 
     def make_TD3_networks(self, actor_nn_args, critic_nn_args):
-        TD3_netowkrs = {
+        TD3_networks = {
                         'actor': TD3ActorNetwork(**actor_nn_args, name = 'actor'),
                         'target_actor': TD3ActorNetwork(**actor_nn_args, name = 'target_actor'),
                         'critic_1': TD3CriticNetwork(**critic_nn_args, name = 'critic_1'),
                         'target_critic_1': TD3CriticNetwork(**critic_nn_args, name = 'target_critic_1'),
                         'critic_2': TD3CriticNetwork(**critic_nn_args, name = 'critic_2'),
                         'target_critic_2': TD3CriticNetwork(**critic_nn_args, name = 'target_critic_2')}
-        return TD3_netowkrs
+        return TD3_networks
     
     def make_EE_networks(self, nn_args):
         return EnvironmentEncoder(**nn_args)
@@ -103,4 +103,6 @@ class NetworkAids:
         networks['target_actor'].load_state_dict(actor)
 
         return networks
+
+
 
