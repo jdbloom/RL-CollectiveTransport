@@ -1,4 +1,4 @@
-from networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder
+from .networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder
 
 import torch as T
 import torch.nn as nn

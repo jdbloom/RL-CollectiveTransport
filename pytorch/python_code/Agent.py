@@ -16,36 +16,27 @@ from torch.optim import Adam
 Loss = nn.MSELoss()
 
 class Agent(Actor):
-    def __init__(self, num_agents, num_observations, num_actions,
-                 num_ops_per_action, id, learning_scheme, no_buffer,
-                 comms_memory, normalization, comms_scheme = "None", alphabet_size=4, horizon = 2,
-                 min_max_action = 1, use_horizon = False, use_entropy=False, use_intention=False, 
-                 use_recurrent=False, heading='radial', meta_param_size = 0):
+    def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
+                 n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
+                 use_recurrent=False, meta_param_size = 0):
 
 
-        args = {'id':id, 'n_obs':num_observations, 'n_actions':num_actions, 'options_per_action':num_ops_per_action, 'n_agents':num_agents,
-                'n_chars':alphabet_size, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
-                'intention_look_back':horizon}
+        args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
+                'n_chars':n_chars, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
+                'intention_look_back':intention_look_back}
 
         super().__init__(**args)
 
-        self.comms_scheme = comms_scheme
-        self.use_horizon = use_horizon
+        self.learning_scheme = learning_scheme
+        self.intention_look_back = intention_look_back
+        self.use_intention = use_intention
+        self.meta_param_size = meta_param_size
+        self.use_recurrent = use_recurrent
+        self.seq_len = 5
+
         self.object_stats = []
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
         self.max_obj_stats = np.zeros(4)
-        self.normalization = normalization
-        self.use_horizon = use_horizon
-        self.horizon = horizon
-        self.use_intention = use_intention
-        self.heading = heading
-        self.meta_param_size = meta_param_size
-        # Dictionaries and binning for loss function calculations
-        self.use_entropy = use_entropy
-        self.StateDict = {}
-        self.StateDict["count"] = 0
-        self.MsgDict = {}
-        self.MsgDict["count"] = 0
         self.decimals = 2
         min_max = 1.25
         bins = 8
@@ -54,46 +45,19 @@ class Agent(Actor):
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
-        self.use_recurrent = use_recurrent
-        self.seq_len = 5
+        
         
         self.build_networks(learning_scheme)
 
         if self.use_intention:
-            self.build_intention(self.horizon)
+            self.build_intention(self.intention_look_back)
 
-    def make_agent_state(self, env_obs, heading_intention, agent_id, comms_memory, message_memory):
-        #env_obs=self.normalize_obs(env_obs)
+    def make_agent_state(self, env_obs, heading_intention):
         if self.use_intention:
-            if self.heading == 'polar':
-                env_obs = np.concatenate((env_obs, heading_intention))
-            else:
-                env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
-        if self.comms_scheme == 'None':
-            # need to append empty messages for all agents to keep networks the same size
-            return np.concatenate((env_obs, np.zeros(self.n_chars*self.n_agents))), self.dead_channel_code
-        msg = self.get_agent_incoming_communications(agent_id)
-        if not comms_memory:
-            messages = np.concatenate(msg.msgs)
-            agent_state = np.concatenate((env_obs, messages))
-        else:
-            agent_state = env_obs
-            for i in range(len(message_memory)):
-                agent_state = np.concatenate((agent_state, message_memory[i]))
-            if len(agent_state) < (self.n_obs + self.n_agents * self.n_chars):
-                zeros_to_add = (self.n_obs + self.n_agents * self.n_chars) - len(agent_state)
-                agent_state = np.concatenate((agent_state, np.zeros(zeros_to_add)))
-        return agent_state, msg
-
-    def normalize_obs(self, env_obs):
-        env_obs[0] = env_obs[0]/self.normalization['distance']
-        env_obs[1] = (env_obs[1]+180)/self.normalization['angle']
-        env_obs[2] = (env_obs[2]+10)/self.normalization['wheel_speeds']
-        env_obs[3] = (env_obs[3]+10)/self.normalization['wheel_speeds']
-        env_obs[4] = env_obs[4]
-        env_obs[5] = env_obs[2] = (env_obs[5]+180)/self.normalization['angle']
-        env_obs[6] = env_obs[6]/self.normalization['distance']
+            env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
         return env_obs
+
+   
 
     def angle_difference(self, a1, a2):
         diff = a1 - a2
@@ -149,13 +113,13 @@ class Agent(Actor):
     def reset_obj_stats(self):
         self.object_stats = []
 
-    def build_intention(self, horizon):
+    def build_intention(self, intention_look_back):
         # define networks for TD3
         print("----- Building Intention Model ------")
 
         if self.use_intention == "DQN":
             min_max_action = 0.1
-            obs_size = horizon*2 + self.n_agents*self.n_chars
+            obs_size = intention_look_back*2 + self.n_agents*self.n_chars
             actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':1, 'observation_size':obs_size,
                                'num_ops_per_action':self.options_per_action}
 
@@ -169,7 +133,7 @@ class Agent(Actor):
 
         elif self.use_intention == "DDQN":
             min_max_action = 0.1
-            obs_size = horizon*2 + self.n_agents*self.n_chars
+            obs_size = intention_look_back*2 + self.n_agents*self.n_chars
             actions_nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':1, 'observation_size':obs_size,
                                'num_ops_per_action':self.options_per_action}
 
@@ -186,7 +150,7 @@ class Agent(Actor):
 
         elif self.use_intention == "DDPG":
             self.min_max_action = 1
-            obs_size = horizon*2 + self.n_agents*self.n_chars
+            obs_size = intention_look_back*2 + self.n_agents*self.n_chars
             actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':obs_size,
                              'num_ops_per_action':self.options_per_action,
                              'min_max_action':self.min_max_action}
@@ -219,7 +183,7 @@ class Agent(Actor):
 
         elif self.use_intention == "TD3":
             min_max_action = 1
-            obs_size = horizon*2 + self.n_agents*self.n_chars
+            obs_size = intention_look_back*2 + self.n_agents*self.n_chars
             actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims':obs_size, 'fc1_dims':400,
                             'fc2_dims':300, 'n_actions':1}
             critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':obs_size, 'fc1_dims':400,
@@ -385,6 +349,20 @@ class Agent(Actor):
             self.update_network_parameters(learning_scheme = 'intention_TD3')
 
             return 0, 0
+
+    def choose_agent_action(self, observation, failures, test=False):
+        if self.learning_scheme == 'None':
+            # Not sure what to do here for no learning
+            return [0, 0, 0], 0
+
+        if failures:
+            self.failed = True
+            return self.failure_action, self.failure_action_code
+
+        self.failed = False
+        ########################### NEED TO APPEND A 0 TO THE END OF THE ACTION
+        return np.concatenate(self.choose_action(observation, test), 0)
+        
 
     def choose_object_intention(self, positions, agent_prox_flags, test = False):
         observation = np.append(np.array(positions), np.array(agent_prox_flags))

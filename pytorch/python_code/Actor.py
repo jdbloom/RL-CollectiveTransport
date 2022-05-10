@@ -1,5 +1,5 @@
-from LearningAids import NetworkAids 
-from replay_buffer import ReplayBuffer
+from .LearningAids import NetworkAids 
+from .replay_buffer import ReplayBuffer
 
 import torch as T
 import torch.nn as nn
@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch.optim as Adam
 
 import numpy as np
+import math
 
 
 
@@ -35,7 +36,7 @@ class Actor(NetworkAids):
         self.recurrent_intention = recurrent_intention
         self.intention_look_back = intention_look_back
 
-        self.network_input_size = self.n_obs + self.n_agents*self.n_chars
+        self.network_input_size = self.n_obs + 1#self.n_agents*self.n_chars
         if self.intention and not self.recurrent_intention:
             self.network_input_size += 1
         self.intention_network_input = self.intention_look_back*2+self.n_agents*self.n_chars
@@ -158,10 +159,10 @@ class Actor(NetworkAids):
         7 - (1, 0)
         8 - (1, 1)
         '''
-        if action_num < 0 or action_num >=self.num_ops_per_action**self.num_actions:
+        if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
             raise Exception('Action Number Out of Range:'+str(action_num))
-        l_wheel = round((math.floor(action_num/self.num_ops_per_action) - 1)/10.0, 1)
-        r_wheel = round((action_num%self.num_ops_per_action - 1)/10.0, 1)
+        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
+        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
         # Trailing zero is hardcoded control for gripper
         return np.array([l_wheel, r_wheel, 0])
 
@@ -171,17 +172,17 @@ class Actor(NetworkAids):
                 actions = self.DQN_DDQN_choose_action(observation, self.networks)
             else:
                 actions = np.random.choice(self.action_space)
-            return actions
+            return self.parse_action(actions), actions
 
         elif self.networks['learning_scheme'] =='DDPG':
             actions = self.DDPG_choose_action(observation, self.networks)
             if not test:
                 actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
             actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
-            return actions[0].cpu().detach().numpy()
+            return actions[0].cpu().detach().numpy(), None
 
         elif self.networks['learning_scheme'] == 'TD3':
-            return self.TD3_choose_action(observation, self.networks, self.n_actions)
+            return self.TD3_choose_action(observation, self.networks, self.n_actions), None
 
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection'+self.networks['learning_scheme'])

@@ -24,13 +24,20 @@ containing_folder = os.path.dirname(os.path.realpath(__file__))
 parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--learning_scheme")
+parser.add_argument("--comms_scheme", default = "Neighbors")
+parser.add_argument("--comms_mem", default = False, action = "store_true")
+parser.add_argument("--no_buffer", default = False, action = "store_true")
+parser.add_argument("--use_horizon", default = False, action = "store_true")
+parser.add_argument("--use_entropy", default = False, action = "store_true")
+parser.add_argument("--plot_comms", default = False, action = "store_true")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
-parser.add_argument("--intention", default=False, action = "store_true")
+parser.add_argument("--use_intention")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
+parser.add_argument("--heading", default = "radial")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
 parser.add_argument("--meta_param_size", default=0, type=int)
 args = parser.parse_args()
@@ -39,10 +46,24 @@ recording_path = os.path.join(containing_folder, args.recording_path)
 if args.model_path is not None:
     model_file_path = os.path.join(containing_folder, args.model_path)
 learning_scheme = args.learning_scheme
+comms_scheme = args.comms_scheme
 port = args.port
 test_mode = args.test
 train_mode = not test_mode
 recurrent = args.recurrent
+
+def viz(message_codes, t):
+    plt.clf()
+    num_robots = len(message_codes)
+    x = np.arange(0, num_robots, 1)
+    plt.scatter(x, message_codes)
+    plt.xlabel('Robot')
+    plt.xticks(x)
+    plt.ylabel('Message')
+    plt.ylim(-1, Utility.params['alphabet_size']+1)
+    plt.title('Robot Messages, Time: '+str(t))
+    plt.pause(0.0001)
+
 
 #
 # Initialize zmq
@@ -69,33 +90,75 @@ Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
-agent_args = {'n_agents':Utility.params['num_robots'],
-              'n_obs':Utility.params['num_obs'], 
-              'n_actions': Utility.params['num_actions']-1,
-              'learning_scheme': args.learning_scheme,
-              'options_per_action':3,
-              'n_chars':Utility.params['alphabet_size'],
-              'meta_param_size':args.meta_param_size, 
-              'use_intention':args.intention, 
-              'use_recurrent':args.recurrent, 
-              'intention_look_back':2}
+if not args.test:
+    if args.comms_scheme is None:
+        Utility.params['alphabet_size'] = 1
 
-
-
+normalization = {'angle':360, 'distance':Utility.params['distance_to_goal_normalization_factor'], 'wheel_speeds':20}
 if args.independent_learning:
-    models = [Agent.Agent(id=i, **agent_args) for i in range(Utility.params['num_robots'])]
+    models = [Agent.Agent(Utility.params['num_robots'],
+                          Utility.params['num_obs'],
+                          Utility.params['num_actions'] - 1, # -1 to account for gripper
+                          num_ops_per_action = 3,
+                          id = i,
+                          learning_scheme = learning_scheme,
+                          no_buffer = args.no_buffer,
+                          comms_memory = args.comms_mem,
+                          normalization = normalization,
+                          comms_scheme = comms_scheme,
+                          alphabet_size = Utility.params['alphabet_size'],
+                          horizon = 2,
+                          use_horizon = args.use_horizon,
+                          use_entropy = args.use_entropy,
+                          use_intention = args.use_intention,
+                          heading = args.heading,
+                          use_recurrent = recurrent,
+                          meta_param_size=args.meta_param_size)
+             for i in range(Utility.params['num_robots'])]
     if test_mode:
         [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
 else:
     if args.trained_num_robots is not None:
-        agent_args['n_agents'] = int(args.trained_num_robots)
-        model = Agent.Agent(id = 0, **agent_args)
+        model = Agent.Agent(int(args.trained_num_robots),
+                            Utility.params['num_obs'],
+                            Utility.params['num_actions'] - 1, # -1 to account for gripper
+                            num_ops_per_action = 3,
+                            id = 0,
+                            learning_scheme = learning_scheme,
+                            no_buffer = args.no_buffer,
+                            comms_memory = args.comms_mem,
+                            normalization = normalization,
+                            comms_scheme = comms_scheme,
+                            alphabet_size = Utility.params['alphabet_size'],
+                            horizon = 2,
+                            use_horizon = args.use_horizon,
+                            use_entropy = args.use_entropy,
+                            use_intention = args.use_intention,
+                            heading = args.heading,
+                            use_recurrent = recurrent,
+                            meta_param_size = args.meta_param_size)
     else:
-        model = Agent.Agent(id = 0, **agent_args)
+        model = Agent.Agent(Utility.params['num_robots'],
+                            Utility.params['num_obs'],
+                            Utility.params['num_actions'] - 1, # -1 to account for gripper
+                            num_ops_per_action = 3,
+                            id = 0,
+                            learning_scheme = learning_scheme,
+                            no_buffer = args.no_buffer,
+                            comms_memory = args.comms_mem,
+                            normalization = normalization,
+                            comms_scheme = comms_scheme,
+                            alphabet_size = Utility.params['alphabet_size'],
+                            horizon = 2,
+                            use_horizon = args.use_horizon,
+                            use_entropy = args.use_entropy,
+                            use_intention = args.use_intention,
+                            heading = args.heading,
+                            use_recurrent = recurrent,
+                            meta_param_size = args.meta_param_size)
+
     if test_mode:
         model.load_model(model_file_path)
-
-
 
 
 # Send acknowledgment
@@ -110,9 +173,12 @@ exp_rewards = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []
+messaging_frequency = 1
 experiment_start_time = time.time()
 Testing_Failures = 0
 Testing_Successes = 0
+speaker_loss = 0
+listener_loss = 0
 var_grad = 0
 gate = 0
 gate_stats = 0
@@ -137,7 +203,11 @@ while not exp_done:
             agent_prox_flags = []
             last_object_heading = None
 
-            next_heading_intention = np.zeros(Utility.params['num_robots'])
+            if args.heading == 'polar':
+                next_heading_intention = np.zeros((Utility.params['num_robots'], 2))
+
+            else:
+                next_heading_intention = np.zeros(Utility.params['num_robots'])
 
             episode_intention_rewards = np.zeros(Utility.params['num_robots'])
 
@@ -161,6 +231,7 @@ while not exp_done:
             else:
                 model.store_object_stats(obj_stats, time_steps>2)
 
+            message_memory = [[] for i in range(Utility.params['num_robots'])]
             agent_states = []
             force_mags = []
             force_angs = []
@@ -174,7 +245,7 @@ while not exp_done:
                 # append env observations and messages in inbox to make agent state
                 if args.independent_learning:
                     running_reward.append(0)
-                    agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
+                    agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                     #<--------------Generate initial Meta-parameters------------->
                     #agent_state, action, agent_state_, rewards
                     #TODO figure out what actions use here or put randon action
@@ -185,17 +256,19 @@ while not exp_done:
                         mp = T.Tensor(args.meta_param_size)
                         
                 else:
-                    agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
+                    agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
                     if recurrent:
                         # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, agent_state, reward)
                         # mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
                         # mp = mp[-1]
                         mp = T.Tensor(args.meta_param_size)
 
+                if args.comms_scheme != 'None':
+                    message_memory[i].append(msg.msgs)
+
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
-
             # reward is the same across all agents. If it were per agent then this would need to move into the loop above
             if args.independent_learning:
                 for i in range(Utility.params['num_robots']):
@@ -216,17 +289,26 @@ while not exp_done:
                     actions = []
                     actions_to_take = []
                     time_steps += 1
+                    if (time_steps-1)%messaging_frequency == 0:
+                        messages = []
+                        message_codes = []
+                    # Get Actions
+                    #print('-----------------')
+
+                    if len(message_memory[0]) == Utility.params['num_robots']:
+                        for j in range(Utility.params['num_robots']):
+                            message_memory[j].pop(0)
 
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
+                        #print("[DEBUG] Robot",i,"Failure:", failures[i])
+                        # import ipdb; ipdb.set_trace()
                         if args.independent_learning:
-                            action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = models[i].choose_action(agent_states[i], failures[i], test_mode, meta_params=mp)
                         else:
-                            action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = model.choose_action(agent_states[i], failures[i], test_mode, meta_params=mp)
                         actions_to_take.append(action)
                         actions.append(action_num)
-                    import ipdb; ipdb.set_trace()
-'''
                         #print(i, action)
                         # Choose a message
                         if args.independent_learning:
@@ -597,4 +679,3 @@ print("Closing Server")
 #socket.unbind("tcp://:" + port)
 #socket.close()
 print("Experiment Done\n")
-'''
