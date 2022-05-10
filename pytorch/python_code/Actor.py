@@ -141,64 +141,62 @@ class Actor(Hyperparameters):
     def replace_target_network(self):
         if self.learn_step_counter % self.replace_target_ctr==0:
             self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
+ 
+    def parse_action(self, action_num):
+        '''
+        This function will parse the number action to
+        a set of wheel actions:
+
+        0 - (- 1,-1)
+        1 - (-1, 0)
+        2 - (-1, 1)
+        3 - (0, -1)
+        4 - (0, 0)
+        5 - (0, 1)
+        6 - (1, -1)
+        7 - (1, 0)
+        8 - (1, 1)
+        '''
+        if action_num < 0 or action_num >=self.num_ops_per_action**self.num_actions:
+            raise Exception('Action Number Out of Range:'+str(action_num))
+        l_wheel = round((math.floor(action_num/self.num_ops_per_action) - 1)/10.0, 1)
+        r_wheel = round((action_num%self.num_ops_per_action - 1)/10.0, 1)
+        # Trailing zero is hardcoded control for gripper
+        return np.array([l_wheel, r_wheel, 0])
 
     def choose_action(self, observation, test=False):
-        if self.networks['learning_scheme'] == 'DQN':
-            return self.DQN_choose_action(observation, test)
-        elif self.networks['learning_scheme'] == 'DDQN':
-            return self.DDQN_choose_action(observation, test)
+        if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
+            if test or np.random.random()>self.epsilon:
+                actions = self.NetworkBuilder.DQN_DDQN_choose_action(observation, self.networks)
+            else:
+                actions = np.random.choice(self.action_space)
+            return actions
+
         elif self.networks['learning_scheme'] =='DDPG':
-            return self.DDPG_choose_action(observation, test)
+            actions = self.NetworkBuilder.DDPG_choose_action(observation, self.networks)
+            if not test:
+                actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
+            actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
+            return actions[0].cpu().detach().numpy()
+
         elif self.networks['learning_scheme'] == 'TD3':
-            return self.TD3_choose_action(observation, test)
+            return self.NetworkBuilder.TD3_choose_action(observation, self.networks, self.n_actions)
+
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection'+self.networks['learning_scheme'])
-    
-    def DQN_choose_action(self, observation, test = False):
-        if test or np.random.random()>self.epsilon:
-            statte = T.tensor(observation, dtype = T.float).to(self.networks['q_eval'].device)
-            action_values = self.networks['q_eval'].forward(state)
-            action = T.argmax(actoin_values[0]).item()
-        else:
-            action = np.random.choice(self.action_space)
-        
-        return action
-        
-    def DDQN_choose_action(self, observation, test = False):
-        if test or np.random.random()>self.epsilon:
-            statte = T.tensor(observation, dtype = T.float).to(self.networks['q_eval'].device)
-            action_values = self.networks['q_eval'].forward(state)
-            action = T.argmax(actoin_values[0]).item()
-        else:
-            action = np.random.choice(self.action_space)
-        
-        return action
-    
-    def DDPG_choose_action(self, observation, test = False):
-        state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
-        print(state, self.networks)
-        actions = self.networks['actor'].forward(state).unsqueeze(0)
-        if not test:
-            actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
-        actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
-        return actions[0].cpu().detach().numpy()
-    
-    def TD3_choose_action(self, observation, test = False):
-        if self.time_step < self.warmup:
-            mu = T.tensor(np.random.normal(scale = self.noise,
-                                           size = (self.n_actions,))
-                          ).to(self.networks['actor'].device)
-        else:
-            state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
-            mu = self.networks['actor'].forward(state).to(self.networks['actor'].device)
-        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(self.networks['actor'].device)
-        mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
-        self.time_step += 1
-        return mu_prime.cpu().detach().numpy()
-
+    '''
+    def learn(self):
+        if self.intention:
+            self.learn_intention()
+        if self.networks['learning_scheme'] == 'DQN':
+            self.learn_DQN
+    '''
 if __name__=='__main__':
-    agent = Actor(1, 32, 2, 3, 1, 2, 2, intention=False, recurrent_intention = False)
-    observation = np.zeros(32)
+    agent_args = {'id':1, 'n_obs':32, 'n_actions':2, 'options_per_action':3, 'n_agents':1, 'n_chars':2, 'meta_param_size':2, 
+                 'intention':False, 'recurrent_intention':False, 'intention_look_back':2}
+    agent = Actor(**agent_args)
+    agent.epsilon = agent.eps_min
+    observation = np.zeros(agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
 
     
     print('[TESTING] DQN')
@@ -216,7 +214,6 @@ if __name__=='__main__':
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
     
-    observation = np.zeros(34)
     print('[TESTING] DDPG and param update')
     agent.build_networks('DDPG')
     agent.update_network_parameters()

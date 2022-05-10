@@ -4,6 +4,10 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as Adam
+
+import numpy as np
+
+
 class Hyperparameters:
     def __init__(self):
         self.gamma = 0.99997
@@ -34,9 +38,9 @@ class Hyperparameters:
 
         self.min_max_action = 1
 
-class NetworkAids:
+class NetworkAids(Hyperparameters):
     def __init__(self):
-        pass
+        super().__init__()
     def make_DQN_networks(self, nn_args):
         return {'q_eval':DQN(**nn_args), 'q_next':DQN(**nn_args)}
     
@@ -103,6 +107,33 @@ class NetworkAids:
         networks['target_actor'].load_state_dict(actor)
 
         return networks
+
+    def DQN_DDQN_choose_action(self, observation, networks):
+        state = T.tensor(observation, dtype = T.float).to(networks['q_eval'].device)
+        action_values = networks['q_eval'].forward(state)
+        return T.argmax(action_values[0]).item()
+    
+    def DDPG_choose_action(self, observation, networks):
+        state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
+        return networks['actor'].forward(state).unsqueeze(0)
+        
+    
+    def TD3_choose_action(self, observation, networks, n_actions):
+        if self.time_step < self.warmup:
+            mu = T.tensor(np.random.normal(scale = self.noise,
+                                           size = (n_actions,))
+                          ).to(networks['actor'].device)
+        else:
+            state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
+            mu = networks['actor'].forward(state).to(networks['actor'].device)
+        mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(networks['actor'].device)
+        mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
+        self.time_step += 1
+        return mu_prime.cpu().detach().numpy()
+
+    
+    #def learn_DQN(self, networks):
+
 
 
 
