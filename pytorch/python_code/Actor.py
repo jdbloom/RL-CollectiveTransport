@@ -1,4 +1,3 @@
-from learning_schemes import *
 from LearningAids import NetworkAids 
 from replay_buffer import ReplayBuffer
 
@@ -42,6 +41,27 @@ class Actor(NetworkAids):
         self.intention_network_input = self.intention_look_back*2+self.n_agents*self.n_chars
         self.recurrent_intention_input = self.n_obs + self.n_agents*self.n_chars+self.meta_param_size
 
+    def build_networks(self, learning_scheme):
+        if learning_scheme == 'DQN':
+            self.networks = self.build_DQN()
+            self.networks['learning_scheme'] = 'DQN'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
+        elif learning_scheme == 'DDQN':
+            self.networks = self.build_DDQN()
+            self.networks['learning_scheme'] = 'DDQN'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
+        elif learning_scheme == 'DDPG':
+            self.networks = self.build_DDPG()
+            self.networks['learning_scheme'] = 'DDPG'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
+        elif learning_scheme == 'TD3':
+            self.networks = self.build_TD3()
+            self.networks['learning_scheme'] = 'TD3'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
+        else:
+            raise Exception('[ERROR] Learning scheme is not recognised: '+learning_scheme)
+
+
     def build_DQN(self):
         nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                    'num_ops_per_action':self.options_per_action}
@@ -67,27 +87,6 @@ class Actor(NetworkAids):
                           'fc2_dims':300, 'n_actions':self.n_actions}
 
         return self.make_TD3_networks(actor_nn_args, critic_nn_args)
-
-    def build_networks(self, learning_scheme):
-        if learning_scheme == 'DQN':
-            self.networks = self.build_DQN()
-            self.networks['learning_scheme'] = 'DQN'
-            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
-        elif learning_scheme == 'DDQN':
-            self.networks = self.build_DDQN()
-            self.networks['learning_scheme'] = 'DDQN'
-            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
-        elif learning_scheme == 'DDPG':
-            self.networks = self.build_DDPG()
-            self.networks['learning_scheme'] = 'DDPG'
-            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
-        elif learning_scheme == 'TD3':
-            self.networks = self.build_TD3()
-            self.networks['learning_scheme'] = 'TD3'
-            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
-        else:
-            raise Exception('[ERROR] Learning scheme is not recognised: '+learning_scheme)
-
 
     def build_intention_network(self, learning_scheme):
         if learning_scheme == 'DDPG':
@@ -211,6 +210,44 @@ class Actor(NetworkAids):
         elif self.networks['learning_scheme'] == 'TD3':
             self.update_network_parameters()
             return self.learn_TD3(self.networks)
+
+    def save_model(self, path):
+        if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
+            self.networks['q_eval'].save_model(path)
+
+        elif self.networks['learning_scheme'] == 'DDPG':
+            self.networks['actor'].save_checkpoint(path)
+            self.networks['target_actor'].save_checkpoint(path)
+            self.networks['critic'].save_checkpoint(path)
+            self.networks['target_critic'].save_checkpoint(path)
+
+        elif self.networks['learning_scheme'] == 'TD3':
+            self.networks['actor'].save_checkpoint(path)
+            self.networks['target_actor'].save_checkpoint(path)
+            self.networks['critic_1'].save_checkpoint(path)
+            self.networks['target_critic_1'].save_checkpoint(path)
+            self.networks['critic_2'].save_checkpoint(path)
+            self.networks['target_critic_2'].save_checkpoint(path)
+
+    def load_model(self, path):
+        if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
+            self.networks['q_eval'].load_model(path)
+            #print('-------------------- Weights ------------------')
+            #for param in self.q_eval.parameters():
+            #    print(param.data)
+        elif self.networks['learning_scheme'] == 'DDPG':
+            self.networks['actor'].load_checkpoint(path)
+            self.networks['target_actor'].load_checkpoint(path)
+            self.networks['critic'].load_checkpoint(path)
+            self.networks['target_critic'].load_checkpoint(path)
+
+        elif self.networks['learning_scheme'] == 'TD3':
+            self.networks['actor'].load_checkpoint(path)
+            self.networks['target_actor'].load_checkpoint(path)
+            self.networks['critic_1'].load_checkpoint(path)
+            self.networks['target_critic_1'].load_checkpoint(path)
+            self.networks['critic_2'].load_checkpoint(path)
+            self.networks['target_critic_2'].load_checkpoint(path)
             
     
 if __name__=='__main__':
