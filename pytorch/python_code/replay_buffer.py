@@ -33,7 +33,7 @@ class ReplayBuffer():
             if self.action_type == 'Discrete':
                 self.action_memory[mem_index] = action[0]
             elif self.action_type == 'Continuous':
-                self.action_memory[mem_index] = action[1][0:2]
+                self.action_memory[mem_index] = action[0]#[1][0:2]
         else:
             self.action_memory[mem_index] = action
         self.reward_memory[mem_index] = reward
@@ -69,7 +69,7 @@ class ReplayBuffer():
                 states_vec, messages_vec = self.entropy_memory.sample_buffer(batch_start, use_horizon, batch_end)
         if get_entropy:
             return states, actions, rewards, next_states, dones, states_vec, messages_vec
-        return states, actions, rewards, next_states, dones, None, None
+        return states, actions, rewards, next_states, dones
 
     class EntropyBuffer():
         def __init__(self, max_size, state_size, num_agents):

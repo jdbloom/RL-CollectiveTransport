@@ -258,6 +258,7 @@ class DDPGCriticNetwork(nn.Module):
         self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
 
         self.name = name+'_'+str(id)+'_DDPG'
+        self.to(self.device)
 
     def init_weights(self, init_w):
         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())

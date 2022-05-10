@@ -1,5 +1,5 @@
 from learning_schemes import *
-from LearningAids import Hyperparameters, NetworkAids 
+from LearningAids import NetworkAids 
 from replay_buffer import ReplayBuffer
 
 import torch as T
@@ -11,7 +11,7 @@ import numpy as np
 
 
 
-class Actor(Hyperparameters):
+class Actor(NetworkAids):
     '''
     This class will be the foundation class for Agent and will hold all specific functions
     '''
@@ -19,8 +19,6 @@ class Actor(Hyperparameters):
                  intention = False, recurrent_intention = False, intention_look_back = 2):
 
         super().__init__()
-
-        self.NetworkBuilder = NetworkAids()
 
         self.id = id
         self.n_obs = n_obs
@@ -47,19 +45,19 @@ class Actor(Hyperparameters):
     def build_DQN(self):
         nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                    'num_ops_per_action':self.options_per_action}
-        return self.NetworkBuilder.make_DQN_networks(nn_args)
+        return self.make_DQN_networks(nn_args)
     
     def build_DDQN(self):
         nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                    'num_ops_per_action':self.options_per_action}
-        return self.NetworkBuilder.make_DDQN_networks(nn_args)
+        return self.make_DDQN_networks(nn_args)
     
     def build_DDPG(self):
         actor_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
         critic_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'lr': self.lr, 'observation_size':self.network_input_size}
 
-        return self.NetworkBuilder.make_DDPG_networks(actor_nn_args, critic_nn_args)
+        return self.make_DDPG_networks(actor_nn_args, critic_nn_args)
 
 
     def build_TD3(self):
@@ -68,21 +66,25 @@ class Actor(Hyperparameters):
         critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':self.network_input_size, 'fc1_dims':400,
                           'fc2_dims':300, 'n_actions':self.n_actions}
 
-        return self.NetworkBuilder.make_TD3_networks(actor_nn_args, critic_nn_args)
+        return self.make_TD3_networks(actor_nn_args, critic_nn_args)
 
     def build_networks(self, learning_scheme):
         if learning_scheme == 'DQN':
             self.networks = self.build_DQN()
             self.networks['learning_scheme'] = 'DQN'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
         elif learning_scheme == 'DDQN':
             self.networks = self.build_DDQN()
             self.networks['learning_scheme'] = 'DDQN'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
         elif learning_scheme == 'DDPG':
             self.networks = self.build_DDPG()
             self.networks['learning_scheme'] = 'DDPG'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
         elif learning_scheme == 'TD3':
             self.networks = self.build_TD3()
             self.networks['learning_scheme'] = 'TD3'
+            self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
         else:
             raise Exception('[ERROR] Learning scheme is not recognised: '+learning_scheme)
 
@@ -110,15 +112,15 @@ class Actor(Hyperparameters):
                          'lr': self.lr, 'min_max_action':self.min_max_action}
         critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.intention_network_input}
 
-        return self.NetworkBuilder.make_DDPG_networks(actor_nn_args, critic_nn_args)
+        return self.make_DDPG_networks(actor_nn_args, critic_nn_args)
     
     def build_RDDPG_intention(self):
         actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.intention_network_input,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
         critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.intention_network_input}
         ee_nn_args = {'observation_size': self.network_input_size, 'hidden_size':self.meta_param_size, 'meta_param_size': self.meta_param_size, 'batch_size': self.batch_size, 'num_layers':1, 'lr': self.ee_lr}
-        Networks = self.NetworkBuilder.make_DDPG_networks(actor_nn_args, critic_nn_args)
-        Networks['ee'] = self.NetworkBuilder.make_EE_networks(ee_nn_args)
+        Networks = self.make_DDPG_networks(actor_nn_args, critic_nn_args)
+        Networks['ee'] = self.make_EE_networks(ee_nn_args)
 
         return Networks
         
@@ -129,14 +131,14 @@ class Actor(Hyperparameters):
         # Update Intention Networks 
         if self.intention:
             if self.intention_networks['learning_scheme'] == 'DDPG' or self.intention_networks['learning_scheme'] == 'RDDPG':
-                self.intention_networks = self.NetworkBuilder.update_DDPG_network_parameters(tau, self.intention_networks)
+                self.intention_networks = self.update_DDPG_network_parameters(tau, self.intention_networks)
             elif self.intention_networks['learning_scheme'] == 'TD3' or self.intention_networks['learning_scheme'] == 'RTD3':
-                self.intention_networks = self.NetworkBuilder.update_TD3_network_parameters(tau, self.intention_networks)
+                self.intention_networks = self.update_TD3_network_parameters(tau, self.intention_networks)
         # Update Action Selection Networks
         if self.networks['learning_scheme'] == 'DDPG':
-            self.networks = self.NetworkBuilder.update_DDPG_network_parameters(tau, self.networks)
+            self.networks = self.update_DDPG_network_parameters(tau, self.networks)
         elif self.networks['learning_scheme'] == 'TD3':
-            self.networks = self.NetworkBuilder.update_TD3_network_parameters(tau, self.networks)
+            self.networks = self.update_TD3_network_parameters(tau, self.networks)
 
     def replace_target_network(self):
         if self.learn_step_counter % self.replace_target_ctr==0:
@@ -167,35 +169,55 @@ class Actor(Hyperparameters):
     def choose_action(self, observation, test=False):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
             if test or np.random.random()>self.epsilon:
-                actions = self.NetworkBuilder.DQN_DDQN_choose_action(observation, self.networks)
+                actions = self.DQN_DDQN_choose_action(observation, self.networks)
             else:
                 actions = np.random.choice(self.action_space)
             return actions
 
         elif self.networks['learning_scheme'] =='DDPG':
-            actions = self.NetworkBuilder.DDPG_choose_action(observation, self.networks)
+            actions = self.DDPG_choose_action(observation, self.networks)
             if not test:
                 actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
             actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
             return actions[0].cpu().detach().numpy()
 
         elif self.networks['learning_scheme'] == 'TD3':
-            return self.NetworkBuilder.TD3_choose_action(observation, self.networks, self.n_actions)
+            return self.TD3_choose_action(observation, self.networks, self.n_actions)
 
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection'+self.networks['learning_scheme'])
-    '''
+    
     def learn(self):
+        if self.networks['replay'].mem_ctr < (self.n_agents*self.batch_size + self.batch_size):
+                return
+
         if self.intention:
             self.learn_intention()
+
         if self.networks['learning_scheme'] == 'DQN':
-            self.learn_DQN
-    '''
+            self.networks['q_eval'].optimizer.zero_grad()
+            self.replace_target_network()
+            return self.learn_DQN(self.networks)
+
+        elif self.networks['learning_scheme'] == 'DDQN':
+            self.networks['q_eval'].optimizer.zero_grad()
+            self.replace_target_network()
+            return self.learn_DDQN(self.networks)
+
+        elif self.networks['learning_scheme'] == 'DDPG':
+            self.update_network_parameters()
+            return self.learn_DDPG(self.networks)
+
+        elif self.networks['learning_scheme'] == 'TD3':
+            self.update_network_parameters()
+            return self.learn_TD3(self.networks)
+            
+    
 if __name__=='__main__':
     agent_args = {'id':1, 'n_obs':32, 'n_actions':2, 'options_per_action':3, 'n_agents':1, 'n_chars':2, 'meta_param_size':2, 
                  'intention':False, 'recurrent_intention':False, 'intention_look_back':2}
     agent = Actor(**agent_args)
-    agent.epsilon = agent.eps_min
+    #agent.epsilon = agent.eps_min
     observation = np.zeros(agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
 
     
@@ -203,21 +225,46 @@ if __name__=='__main__':
     agent.build_networks('DQN')
     agent.learn_step_counter = agent.replace_target_ctr
     agent.replace_target_network()
-    print('[ACTION]', agent.choose_action(observation))
+    observation = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+    done = False
+    for i in range(200):
+        action = [agent.choose_action(observation)]
+        reward = np.random.random()
+        new_obs = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+        agent.store_transition(observation, action, reward, new_obs, done, agent.networks)
+        observation = new_obs
+    print('[LOSS]', agent.learn())
+
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
 
     print('[TESTING] DDQN')
     agent.build_networks('DDQN')
     agent.replace_target_network()
-    print('[ACTION]', agent.choose_action(observation))
+    observation = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+    done = False
+    for i in range(200):
+        action = [agent.choose_action(observation)]
+        reward = np.random.random()
+        new_obs = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+        agent.store_transition(observation, action, reward, new_obs, done, agent.networks)
+        observation = new_obs
+    print('[LOSS]', agent.learn())
     print(agent.networks['q_eval'])
     print(agent.networks['q_next'])
     
     print('[TESTING] DDPG and param update')
     agent.build_networks('DDPG')
     agent.update_network_parameters()
-    print('[ACTION]', agent.choose_action(observation))
+    observation = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+    done = False
+    for i in range(200):
+        action = [agent.choose_action(observation)]
+        reward = np.random.random()
+        new_obs = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+        agent.store_transition(observation, action, reward, new_obs, done, agent.networks)
+        observation = new_obs
+    print('[LOSS]', agent.learn())
 
     '''
     print('ACTOR')
@@ -240,7 +287,15 @@ if __name__=='__main__':
     print('[TESTING] TD3')
     agent.build_networks('TD3')
     agent.update_network_parameters()
-    print('[ACTION]', agent.choose_action(observation))
+    observation = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+    done = False
+    for i in range(200):
+        action = [agent.choose_action(observation)]
+        reward = np.random.random()
+        new_obs = np.random.random(size = agent_args['n_obs']+agent_args['n_agents']*agent_args['n_chars'])
+        agent.store_transition(observation, action, reward, new_obs, done, agent.networks)
+        observation = new_obs
+    print('[LOSS]', agent.learn())
     print(agent.networks['actor'])
     print(agent.networks['critic_1'])
     print(agent.networks['critic_2'])
