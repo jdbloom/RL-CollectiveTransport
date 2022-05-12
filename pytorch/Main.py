@@ -42,7 +42,6 @@ learning_scheme = args.learning_scheme
 port = args.port
 test_mode = args.test
 train_mode = not test_mode
-recurrent = args.recurrent
 
 #
 # Initialize zmq
@@ -128,7 +127,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'messages', 'speaker_loss', 'listener_loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'var_grad', 'intention_reward', 'run_time'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time'])
 
         if not exp_done:
             time_steps = 0
@@ -174,23 +173,29 @@ while not exp_done:
                 # append env observations and messages in inbox to make agent state
                 if args.independent_learning:
                     running_reward.append(0)
-                    agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
-                    #<--------------Generate initial Meta-parameters------------->
-                    #agent_state, action, agent_state_, rewards
-                    #TODO figure out what actions use here or put randon action
-                    if recurrent:
-                        # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = models[i].build_initial_ee_input(agent_state, action, agent_state, reward)
-                        # mp = models[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                        # mp = mp[-1]
-                        mp = T.Tensor(args.meta_param_size)
+                    if args.intention:
+                        agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
+                        #<--------------Generate initial Meta-parameters------------->
+                        #agent_state, action, agent_state_, rewards
+                        #TODO figure out what actions use here or put randon action
+                        if args.recurrent:
+                            # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = models[i].build_initial_ee_input(agent_state, action, agent_state, reward)
+                            # mp = models[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                            # mp = mp[-1]
+                            mp = T.Tensor(args.meta_param_size)
+                    else:
+                        agent_state = env_observations[i]
                         
                 else:
-                    agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
-                    if recurrent:
-                        # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, agent_state, reward)
-                        # mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                        # mp = mp[-1]
-                        mp = T.Tensor(args.meta_param_size)
+                    if args.intention:
+                        agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
+                        if args.recurrent:
+                            # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, agent_state, reward)
+                            # mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                            # mp = mp[-1]
+                            mp = T.Tensor(args.meta_param_size)
+                    else: 
+                        agent_state = env_observations[i]
 
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
@@ -225,33 +230,6 @@ while not exp_done:
                             action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
-                    import ipdb; ipdb.set_trace()
-'''
-                        #print(i, action)
-                        # Choose a message
-                        if args.independent_learning:
-                            if models[i].comms_scheme != 'None':
-                                if (time_steps-1)%messaging_frequency == 0:
-                                    message, message_num = models[i].choose_message(agent_states[i], failures[i], test_mode)
-                                    message_codes.append(message_num)
-                                # Schedule the message to neighbors
-                                    models[i].schedule_message_to_all_contacts(i, message_codes[i])
-                        else:
-                            if model.comms_scheme != 'None':
-                                if (time_steps-1)%messaging_frequency == 0:
-                                    message, message_num = model.choose_message(agent_states[i], failures[i], test_mode)
-                                    message_codes.append(message_num)
-                                # Schedule the message to neighbors
-                                    model.schedule_message_to_all_contacts(i, message_codes[i])
-
-                    # Carry scheduled messages
-                    if args.independent_learning:
-                        for i in range(Utility.params['num_robots']):
-                            if models[i].comms_scheme != 'None':
-                                models[i].carry_mail()
-                    else:
-                        if model.comms_scheme != 'None':
-                            model.carry_mail()
 
                     old_failures = failures[:]
                     # Take Step
@@ -275,8 +253,8 @@ while not exp_done:
                     object_positions.append([obj_stats[0], obj_stats[1]])
 
                     intention_reward = []
-                    
-                    if args.use_intention:
+                    ############################## INTENTION REWARD ##############################################
+                    if args.intention:
                         if len(object_positions) > 2:
                             object_positions.pop(0)
 
@@ -307,13 +285,8 @@ while not exp_done:
                     if args.independent_learning:
                         for i in range(Utility.params['num_robots']):
                             models[i].store_object_stats(obj_stats, time_steps>2)
-                            if models[i].comms_scheme != 'None':
-                                models[i].store_state_message(message_codes, time_steps>2)
                     else:
                         model.store_object_stats(obj_stats, time_steps>2)
-                        if model.comms_scheme != 'None':
-                            model.store_state_message(message_codes, time_steps>2)
-
 
                     # Store Transitions and Learn
                     old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
@@ -325,11 +298,10 @@ while not exp_done:
                     agent_prox_flags = []
                     next_object_heading = np.zeros(Utility.params['num_robots'])
 
-                    if args.use_intention:
+                    if args.intention:
                         for i in range(Utility.params['num_robots']):
                             prox_values = env_observations[i][7:]
-                            #print('[DEBUG] Prox Values', prox_values)
-                            prox_value = np.sum(prox_values)                ### Change to actual values instead of binary flag
+                            prox_value = np.sum(prox_values)              
                             agent_prox_flags.append(prox_value/24.0)
                             #if prox_value/24 > 0.5:
                             #    agent_prox_flags.append(1)
@@ -339,14 +311,7 @@ while not exp_done:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
                                     next_object_heading[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
-
-                                    if args.heading == 'polar':
-                                        x = math.cos(next_object_heading[i] * math.pi)
-                                        y = math.sin(next_object_heading[i] * math.pi)
-
-                                        next_heading_intention[i] = [x, y]
-                                    else:
-                                        next_heading_intention[i] = next_object_heading[i]
+                                    next_heading_intention[i] = next_object_heading[i]
                             else:
                                 ctde_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
                                 for i in range(Utility.params['num_robots']):
@@ -356,9 +321,9 @@ while not exp_done:
                             #store transitions of intentions
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0, state_vec=models[i].obj_state, message_vec=message_codes)
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
                                 else:
-                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0, state_vec=model.obj_state, message_vec=message_codes)
+                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
 
 
                     for i in range(Utility.params['num_robots']):
@@ -374,54 +339,44 @@ while not exp_done:
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
                         if args.independent_learning:
-                            new_agent_state, msg = models[i].make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
-                            if recurrent:
-                                agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, new_agent_state, reward)
-                                mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                                mp = mp[-1]
+                            if args.intention:
+                                new_agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
+                                if args.recurrent:
+                                    agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, new_agent_state, reward)
+                                    mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                                    mp = mp[-1]
+                            else:
+                                new_agent_state = env_observations[i]
                         else:
-                            # import ipdb; ipdb.set_trace()
-                            new_agent_state, msg = model.make_agent_state(env_observations[i], next_heading_intention[i], i, args.comms_mem, message_memory[i])
-                            if recurrent:
-                                agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, new_agent_state, reward)
-                                mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                                mp = mp[-1]
-                        if args.comms_scheme != 'Right' and args.comms_scheme != 'None':
-                            message_memory[i].append(msg.msgs)
-                        new_agent_states.append(new_agent_state)
+                            if args.intention:
+                                new_agent_state= model.make_agent_state(env_observations[i], next_heading_intention[i])
+                                if args.recurrent:
+                                    agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, new_agent_state, reward)
+                                    mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
+                                    mp = mp[-1]
+                            else:
+                                new_agent_state = env_observations[i]
 
+                        new_agent_states.append(new_agent_state)
                         if time_steps > 2:
                             if train_mode:
-                                if learning_scheme != 'None' and not args.no_buffer:
+                                if learning_scheme != 'None':
                                     if not old_failures[i] and not failures[i]:
                                         if not episode_done:
                                             if args.independent_learning:
-                                                if models[i].comms_scheme == 'None':
-                                                    message_codes = None
-                                                models[i].store_transition(agent_states[i],
-                                                                       (actions[i], actions_to_take[i]),
-                                                                          rewards[i],
-                                                                       new_agent_states[i],
-                                                                       episode_done,
-                                                                       state_vec = models[i].obj_state,
-                                                                       message_vec = message_codes)
-                                                if models[i].comms_scheme != 'None':
-                                                    models[i].store_comms_transition(agent_states[i],
-                                                                                 (message_codes[i], None),
-                                                                                 rewards[i],
-                                                                                 new_agent_states[i],
-                                                                                 episode_done,
-                                                                                 state_vec = models[i].obj_state,
-                                                                                 message_vec = message_codes)
                                                 if models[i].use_recurrent:
                                                     models[i].store_recurrent_transition(agent_states[i],
                                                                        (actions[i], actions_to_take[i]),
                                                                        rewards[i],
                                                                        new_agent_states[i],
                                                                        episode_done)
+                                                else:
+                                                    models[i].store_agent_transition(agent_states[i],
+                                                                       (actions[i], actions_to_take[i]),
+                                                                          rewards[i],
+                                                                       new_agent_states[i],
+                                                                       episode_done)
                                             else:
-                                                if model.comms_scheme == 'None':
-                                                    message_codes = None
                                                 if model.use_recurrent:
                                                     model.store_recurrent_transition(agent_states[i],
                                                                        (actions[i], actions_to_take[i]),
@@ -429,22 +384,12 @@ while not exp_done:
                                                                        new_agent_states[i],
                                                                        episode_done)
                                                 else:
-                                                    model.store_transition(agent_states[i],
+                                                    model.store_agent_transition(agent_states[i],
                                                                         (actions[i], actions_to_take[i]),
                                                                         rewards[i],
                                                                         new_agent_states[i],
-                                                                        episode_done,
-                                                                        state_vec = model.obj_state,
-                                                                        message_vec = message_codes)
-                                                    if model.comms_scheme != 'None':
-                                                        model.store_comms_transition(agent_states[i],
-                                                                                    (message_codes[i], None),
-                                                                                    rewards[i],
-                                                                                    new_agent_states[i],
-                                                                                    episode_done,
-                                                                                    state_vec = model.obj_state,
-                                                                                    message_vec = message_codes)
-
+                                                                        episode_done)
+                                                    
                         r.append(rewards[i][0])
                     #print('[DEBUG] Rewards:', r)
                     #print('[DEBUG] Reward Average:', np.average(r))
@@ -452,45 +397,12 @@ while not exp_done:
                     #    print('[DEBUG] robot %i memory:'%i, message_memory[i])
 
                     if train_mode:
-                        if args.no_buffer:
-                            sarsd = [np.array(agent_states, dtype = np.float32),
-                                     np.array(actions, dtype = np.int64),
-                                     np.array(r, dtype = np.float32),
-                                     np.array(new_agent_states, dtype = np.float32),
-                                     np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
-
-                            model.learn_no_buffer(sarsd)
-                        else:
-                            if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    listener_loss, var_grad = models[i].learn()
-                            else:
-                                listener_loss, var_grad = model.learn()
-
                         if args.independent_learning:
-                            if models[i].comms_scheme != 'None':
-                                if args.no_buffer:
-                                    sarsd = [np.array(agent_states, dtype = np.float32),
-                                             np.array(message_codes, dtype = np.int64),
-                                             np.array(r, dtype = np.float32),
-                                             np.array(new_agent_states, dtype = np.float32),
-                                             np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
-
-                                    models[i].learn_no_buffer_comms(sarsd)
-                                else:
-                                    speaker_loss, var_grad = models[i].learn_comms()
+                            for i in range(Utility.params['num_robots']):
+                                loss = models[i].learn()
                         else:
-                            if model.comms_scheme != 'None':
-                                if args.no_buffer:
-                                    sarsd = [np.array(agent_states, dtype = np.float32),
-                                             np.array(message_codes, dtype = np.int64),
-                                             np.array(r, dtype = np.float32),
-                                             np.array(new_agent_states, dtype = np.float32),
-                                             np.array([episode_done for i in range(Utility.params['num_robots'])], dtype = bool)]
+                            loss = model.learn()
 
-                                    model.learn_no_buffer_comms(sarsd)
-                                else:
-                                    speaker_loss, var_grad = model.learn_comms()
                     if args.independent_learning:
                         for i in range(Utility.params['num_robots']):
                             running_reward[i] += r[i]
@@ -527,11 +439,7 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    writer.writerow([r, tmp_epsilon, reached_goal, message_codes, speaker_loss, listener_loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, var_grad, intention_reward, time.time() - episode_start_time])
-
-                    if args.plot_comms:
-                        viz(message_codes, time_steps)
-
+                    writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, intention_reward, time.time() - episode_start_time])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time
@@ -597,4 +505,3 @@ print("Closing Server")
 #socket.unbind("tcp://:" + port)
 #socket.close()
 print("Experiment Done\n")
-'''

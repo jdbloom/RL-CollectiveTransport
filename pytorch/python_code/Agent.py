@@ -1,6 +1,3 @@
-#from .networks import DDQN, DDQNComms, DQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder
-#from .replay_buffer import ReplayBuffer
-from .communications import Mailbox
 from .Actor import Actor
 
 import numpy as np
@@ -360,8 +357,40 @@ class Agent(Actor):
             return self.failure_action, self.failure_action_code
 
         self.failed = False
-        ########################### NEED TO APPEND A 0 TO THE END OF THE ACTION
-        return np.concatenate(self.choose_action(observation, test), 0)
+        
+        if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
+            action_num = self.choose_action(observation, test)
+            actions = self.parse_action(action_num)
+
+        if self.networks['learning_scheme'] == 'DDPG' or self.networks['learning_scheme'] == 'TD3':
+            actions = self.choose_action(observation, test)
+            actions = np.pad(actions, (0, 1))
+            action_num = None
+
+        return actions, action_num
+
+    
+    def parse_action(self, action_num):
+        '''
+        This function will parse the number action to
+        a set of wheel actions:
+
+        0 - (- 1,-1)
+        1 - (-1, 0)
+        2 - (-1, 1)
+        3 - (0, -1)
+        4 - (0, 0)
+        5 - (0, 1)
+        6 - (1, -1)
+        7 - (1, 0)
+        8 - (1, 1)
+        '''
+        if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
+            raise Exception('Action Number Out of Range:'+str(action_num))
+        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
+        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
+        # Trailing zero is hardcoded control for gripper
+        return np.array([l_wheel, r_wheel, 0])
         
 
     def choose_object_intention(self, positions, agent_prox_flags, test = False):

@@ -36,7 +36,7 @@ class Actor(NetworkAids):
         self.recurrent_intention = recurrent_intention
         self.intention_look_back = intention_look_back
 
-        self.network_input_size = self.n_obs + 1#self.n_agents*self.n_chars
+        self.network_input_size = self.n_obs
         if self.intention and not self.recurrent_intention:
             self.network_input_size += 1
         self.intention_network_input = self.intention_look_back*2+self.n_agents*self.n_chars
@@ -144,45 +144,23 @@ class Actor(NetworkAids):
         if self.learn_step_counter % self.replace_target_ctr==0:
             self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
  
-    def parse_action(self, action_num):
-        '''
-        This function will parse the number action to
-        a set of wheel actions:
-
-        0 - (- 1,-1)
-        1 - (-1, 0)
-        2 - (-1, 1)
-        3 - (0, -1)
-        4 - (0, 0)
-        5 - (0, 1)
-        6 - (1, -1)
-        7 - (1, 0)
-        8 - (1, 1)
-        '''
-        if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
-            raise Exception('Action Number Out of Range:'+str(action_num))
-        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
-        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
-        # Trailing zero is hardcoded control for gripper
-        return np.array([l_wheel, r_wheel, 0])
-
     def choose_action(self, observation, test=False):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
             if test or np.random.random()>self.epsilon:
                 actions = self.DQN_DDQN_choose_action(observation, self.networks)
             else:
                 actions = np.random.choice(self.action_space)
-            return self.parse_action(actions), actions
+            return actions
 
         elif self.networks['learning_scheme'] =='DDPG':
             actions = self.DDPG_choose_action(observation, self.networks)
             if not test:
                 actions+=T.normal(0.0, self.noise, size = (1, self.n_actions)).to(self.networks['actor'].device)
             actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
-            return actions[0].cpu().detach().numpy(), None
+            return actions[0].cpu().detach().numpy()
 
         elif self.networks['learning_scheme'] == 'TD3':
-            return self.TD3_choose_action(observation, self.networks, self.n_actions), None
+            return self.TD3_choose_action(observation, self.networks, self.n_actions)
 
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection'+self.networks['learning_scheme'])
@@ -211,6 +189,10 @@ class Actor(NetworkAids):
         elif self.networks['learning_scheme'] == 'TD3':
             self.update_network_parameters()
             return self.learn_TD3(self.networks)
+
+    def store_agent_transition(self, s, a, r, s_, d):
+        self.store_transition(s, a, r, s_, d, self.networks)
+
 
     def save_model(self, path):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':

@@ -146,14 +146,13 @@ class NetworkAids(Hyperparameters):
 
         q_next[dones] = 0.0
 
-        q_target = rewards+self.gamma*q_next
+        q_target = rewards + self.gamma*q_next
 
         loss = networks['q_eval'].loss(q_target, q_pred).to(networks['q_eval'].device)
         loss.backward()
 
         networks['q_eval'].optimizer.step()
-
-        self.learn_step_counter+=1
+        self.learn_step_counter += 1
 
         self.decrement_epsilon()
 
@@ -162,14 +161,14 @@ class NetworkAids(Hyperparameters):
     def learn_DDQN(self, networks):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
-        indices = np.arange(self.batch_size)
+        indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
 
         q_pred = networks['q_eval'](states)[indices, actions.type(T.LongTensor)]
 
         q_next = networks['q_next'](states_)
         q_eval = networks['q_eval'](states_)
 
-        max_actions = T.argmax(q_eval, dim=1)
+        max_actions = T.argmax(q_eval, dim = 1)
 
         q_next[dones] = 0.0
 
@@ -178,6 +177,7 @@ class NetworkAids(Hyperparameters):
         loss = networks['q_eval'].loss(q_target, q_pred).to(networks['q_eval'].device)
 
         loss.backward()
+
         
         networks['q_eval'].optimizer.step()
 
@@ -195,7 +195,7 @@ class NetworkAids(Hyperparameters):
         q_value_[dones] = 0.0
         target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
 
-        # Critic Update
+        #Critic Update
         networks['critic'].zero_grad()
         q_value = networks['critic']([states, actions])
         value_loss = Loss(q_value, target)
@@ -217,15 +217,15 @@ class NetworkAids(Hyperparameters):
     def learn_TD3(self, networks):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
-        target_actions = networks['target_actor'](states_)
+        target_actions = networks['target_actor'].forward(states_)
         target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
         target_actions = T.clamp(target_actions, -self.min_max_action, self.min_max_action)
 
-        q1_ = networks['target_critic_1'](states_, target_actions)
-        q2_ = networks['target_critic_2'](states_, target_actions)
+        q1_ = networks['target_critic_1'].forward(states_, target_actions)
+        q2_ = networks['target_critic_2'].forward(states_, target_actions)
 
-        q1 = networks['critic_1'](states, actions).squeeze()
-        q2 = networks['critic_2'](states, actions).squeeze()
+        q1 = networks['critic_1'].forward(states, actions).squeeze() # need to squeeze to change shape from [100,1] to [100] to match target shape
+        q2 = networks['critic_2'].forward(states, actions).squeeze()
 
         q1_[dones] = 0.0
         q2_[dones] = 0.0
@@ -236,6 +236,7 @@ class NetworkAids(Hyperparameters):
         critic_value_ = T.min(q1_, q2_)
 
         target = rewards + self.gamma*critic_value_
+            
 
         networks['critic_1'].optimizer.zero_grad()
         networks['critic_2'].optimizer.zero_grad()
@@ -250,13 +251,14 @@ class NetworkAids(Hyperparameters):
         self.learn_step_counter += 1
 
         if self.learn_step_counter % self.update_actor_iter != 0:
-            return 0
-        
-        networks['actor'].optimizer.zero_grad
-        actor_q1_loss = networks['critic_1'](states, networks['actor'](states))
+            return 0, 0
+        #print('Actor Learn Step')
+        networks['actor'].optimizer.zero_grad()
+        actor_q1_loss = networks['critic_1'].forward(states, networks['actor'].forward(states))
         actor_loss = -T.mean(actor_q1_loss)
         actor_loss.backward()
         networks['actor'].optimizer.step()
+
 
         return actor_loss.item()
         
