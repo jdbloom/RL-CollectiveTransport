@@ -114,7 +114,7 @@ class NetworkAids(Hyperparameters):
     def DQN_DDQN_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['q_eval'].device)
         action_values = networks['q_eval'].forward(state)
-        return T.argmax(action_values[0]).item()
+        return T.argmax(action_values).item()
     
     def DDPG_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
@@ -136,6 +136,8 @@ class NetworkAids(Hyperparameters):
 
     
     def learn_DQN(self, networks):
+        networks['q_eval'].optimizer.zero_grad()
+
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
         indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
@@ -157,8 +159,11 @@ class NetworkAids(Hyperparameters):
         self.decrement_epsilon()
 
         return loss.item()
+    
 
     def learn_DDQN(self, networks):
+        networks['q_eval'].optimizer.zero_grad()
+
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
         indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))

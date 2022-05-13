@@ -151,7 +151,6 @@ class Actor(NetworkAids):
             else:
                 actions = np.random.choice(self.action_space)
             return actions
-
         elif self.networks['learning_scheme'] =='DDPG':
             actions = self.DDPG_choose_action(observation, self.networks)
             if not test:
@@ -173,12 +172,11 @@ class Actor(NetworkAids):
             self.learn_intention()
 
         if self.networks['learning_scheme'] == 'DQN':
-            self.networks['q_eval'].optimizer.zero_grad()
             self.replace_target_network()
+            
             return self.learn_DQN(self.networks)
 
         elif self.networks['learning_scheme'] == 'DDQN':
-            self.networks['q_eval'].optimizer.zero_grad()
             self.replace_target_network()
             return self.learn_DDQN(self.networks)
 
