@@ -44,49 +44,46 @@ class Actor(NetworkAids):
 
     def build_networks(self, learning_scheme):
         if learning_scheme == 'DQN':
-            self.networks = self.build_DQN()
+            nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
+                   'num_ops_per_action':self.options_per_action}
+            self.networks = self.build_DQN(nn_args)
             self.networks['learning_scheme'] = 'DQN'
             self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
         elif learning_scheme == 'DDQN':
-            self.networks = self.build_DDQN()
+            nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
+                   'num_ops_per_action':self.options_per_action}
+            self.networks = self.build_DDQN(nn_args)
             self.networks['learning_scheme'] = 'DDQN'
             self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, 1, 'Discrete')
         elif learning_scheme == 'DDPG':
-            self.networks = self.build_DDPG()
+            actor_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
+                         'lr': self.lr, 'min_max_action':self.min_max_action}
+            critic_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'lr': self.lr, 'observation_size':self.network_input_size}
+            self.networks = self.build_DDPG(actor_nn_args, critic_nn_args)
             self.networks['learning_scheme'] = 'DDPG'
             self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
         elif learning_scheme == 'TD3':
-            self.networks = self.build_TD3()
+            actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims': self.network_input_size, 'fc1_dims':400,
+                         'fc2_dims':300, 'n_actions':self.n_actions}
+            critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':self.network_input_size, 'fc1_dims':400,
+                          'fc2_dims':300, 'n_actions':self.n_actions}
+            self.networks = self.build_TD3(actor_nn_args, critic_nn_args)
             self.networks['learning_scheme'] = 'TD3'
             self.networks['replay'] = ReplayBuffer(self.mem_size, self.network_input_size, self.n_actions, 'Continuous')
         else:
             raise Exception('[ERROR] Learning scheme is not recognised: '+learning_scheme)
 
 
-    def build_DQN(self):
-        nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
-                   'num_ops_per_action':self.options_per_action}
+    def build_DQN(self, nn_args):
         return self.make_DQN_networks(nn_args)
     
-    def build_DDQN(self):
-        nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
-                   'num_ops_per_action':self.options_per_action}
+    def build_DDQN(self, nn_args):
         return self.make_DDQN_networks(nn_args)
     
-    def build_DDPG(self):
-        actor_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
-                         'lr': self.lr, 'min_max_action':self.min_max_action}
-        critic_nn_args = {'id':self.id, 'num_actions':self.n_actions, 'lr': self.lr, 'observation_size':self.network_input_size}
-
+    def build_DDPG(self, actor_nn_args, critic_nn_args):
         return self.make_DDPG_networks(actor_nn_args, critic_nn_args)
 
-
-    def build_TD3(self):
-        actor_nn_args = {'id':self.id, 'alpha':self.alpha, 'input_dims': self.network_input_size, 'fc1_dims':400,
-                         'fc2_dims':300, 'n_actions':self.n_actions}
-        critic_nn_args = {'id':self.id, 'beta':self.beta, 'input_dims':self.network_input_size, 'fc1_dims':400,
-                          'fc2_dims':300, 'n_actions':self.n_actions}
-
+    def build_TD3(self, actor_nn_args, critic_nn_args):
         return self.make_TD3_networks(actor_nn_args, critic_nn_args)
 
     def build_intention_network(self, learning_scheme):
@@ -95,7 +92,7 @@ class Actor(NetworkAids):
                 self.intention_networks = self.build_RDDPG_intention()
                 self.intention_networks['learning_scheme'] = 'RDDPG'
             else:
-                self.intention_networks = self.build_DDPG_intention()
+                self.intention_networks = self.build_DDPG()
                 self.intention_networks['learning_scheme'] = 'DDPG'
         elif learning_scheme == 'TD3':
             if self.recurrent_intention:

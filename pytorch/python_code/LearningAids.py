@@ -182,7 +182,6 @@ class NetworkAids(Hyperparameters):
         loss = networks['q_eval'].loss(q_target, q_pred).to(networks['q_eval'].device)
 
         loss.backward()
-
         
         networks['q_eval'].optimizer.step()
 
@@ -241,7 +240,6 @@ class NetworkAids(Hyperparameters):
         critic_value_ = T.min(q1_, q2_)
 
         target = rewards + self.gamma*critic_value_
-            
 
         networks['critic_1'].optimizer.zero_grad()
         networks['critic_2'].optimizer.zero_grad()
@@ -264,10 +262,8 @@ class NetworkAids(Hyperparameters):
         actor_loss.backward()
         networks['actor'].optimizer.step()
 
-
         return actor_loss.item()
         
-
     def decrement_epsilon(self):
         self.epsilon = max(self.epsilon-self.eps_dec, self.eps_min)
 

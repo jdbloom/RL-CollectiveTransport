@@ -52,9 +52,7 @@ class Agent(Actor):
     def make_agent_state(self, env_obs, heading_intention):
         if self.use_intention:
             env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
-        return env_obs
-
-   
+        return env_obs   
 
     def angle_difference(self, a1, a2):
         diff = a1 - a2
@@ -98,14 +96,6 @@ class Agent(Actor):
             if angular_velocity_t0 < self.min_obj_stats[2]: self.min_obj_stats[2] = angular_velocity_t0
             if angular_acceleration > self.max_obj_stats[3]: self.max_obj_stats[3] = angular_acceleration
             if angular_acceleration < self.min_obj_stats[3]: self.min_obj_stats[3] = angular_acceleration
-
-            #print("[INFO] Angle: %0.2f" %self.object_stats[0][5])
-            #print("[INFO] Velocity[0]: %0.2f m/s" % velocity_t0)
-            #print("[INFO] Velocity[1]: %0.2f m/s" % velocity_t1)
-            #print("[INFO] Acceleration: %0.5f m/s^2" % acceleration)
-            #print("[INFO] Angular Velocity[0]: %0.2f deg/s" % angular_velocity_t0)
-            #print("[INFO] Angular Velocity[1]: %0.2f deg/s" % angular_velocity_t1)
-            #print("[INFO] Angular Acceleration: %0.5f deg/s^2" % angular_acceleration)
 
     def reset_obj_stats(self):
         self.object_stats = []
