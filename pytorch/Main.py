@@ -402,6 +402,8 @@ while not exp_done:
                                 loss = models[i].learn()
                         else:
                             loss = model.learn()
+                    else:
+                        loss = 0
 
                     if args.independent_learning:
                         for i in range(Utility.params['num_robots']):
