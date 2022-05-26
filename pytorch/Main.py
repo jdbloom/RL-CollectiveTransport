@@ -80,7 +80,6 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'intention_look_back':2}
 
 
-
 if args.independent_learning:
     models = [Agent.Agent(id=i, **agent_args) for i in range(Utility.params['num_robots'])]
     if test_mode:
@@ -263,12 +262,8 @@ while not exp_done:
                             y1 = math.sin(last_object_heading)
 
                             for i in range(Utility.params['num_robots']):
-                                if args.heading == 'polar':
-                                    x2, y2 = next_heading_intention[i]
-
-                                else:
-                                    x2 = math.cos(next_heading_intention[i] * math.pi)
-                                    y2 = math.sin(next_heading_intention[i] * math.pi)
+                                x2 = math.cos(next_heading_intention[i] * math.pi)
+                                y2 = math.sin(next_heading_intention[i] * math.pi)
 
                                 diff = np.dot([x1, y1], [x2, y2])
                                 intention_reward.append(-1 + diff)
@@ -321,9 +316,13 @@ while not exp_done:
                             #store transitions of intentions
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
                                 else:
-                                    model.store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_object_heading[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                    state = np.append(np.array(old_object_positions).flatten(), agent_prox_flags)
+                                    action = next_heading_intention[i]
+                                    reward = intention_reward[i]
+                                    new_state = np.append(object_positions, old_agent_prox_flags)
+                                    model.store_intention_transition(state, action, reward, new_state, 0)
 
 
                     for i in range(Utility.params['num_robots']):
@@ -364,7 +363,7 @@ while not exp_done:
                                     if not old_failures[i] and not failures[i]:
                                         if not episode_done:
                                             if args.independent_learning:
-                                                if models[i].use_recurrent:
+                                                if models[i].recurrent_intention:
                                                     models[i].store_recurrent_transition(agent_states[i],
                                                                        (actions[i], actions_to_take[i]),
                                                                        rewards[i],
@@ -377,7 +376,7 @@ while not exp_done:
                                                                        new_agent_states[i],
                                                                        episode_done)
                                             else:
-                                                if model.use_recurrent:
+                                                if model.recurrent_intention:
                                                     model.store_recurrent_transition(agent_states[i],
                                                                        (actions[i], actions_to_take[i]),
                                                                        rewards[i],
@@ -470,7 +469,7 @@ while not exp_done:
                                 else:
                                     print('Agent', i, 'reward %.1f' % running_reward,
                                           'epsilon:%.2f' % model.epsilon,
-                                          'steps:', model.learn_step_counter)
+                                          'steps:', model.networks['learn_step_counter'])
                                     print('Intention rewards %.2f' % episode_intention_rewards[i])
 
                         if ep_counter % 10 == 0:

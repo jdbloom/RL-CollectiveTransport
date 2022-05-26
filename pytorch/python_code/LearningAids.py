@@ -31,9 +31,7 @@ class Hyperparameters:
         self.replace_target_ctr = 1000
         self.failed = False
         self.failure_action = [0, 0, 1]
-        
-        self.learn_step_counter = 0
-        self.intention_learn_step_counter = 0
+
         self.noise = 0.1
         self.update_actor_iter = 2
         self.warmup = 1000
@@ -154,7 +152,7 @@ class NetworkAids(Hyperparameters):
         loss.backward()
 
         networks['q_eval'].optimizer.step()
-        self.learn_step_counter += 1
+        networks['learn_step_counter'] += 1
 
         self.decrement_epsilon()
 
@@ -185,14 +183,19 @@ class NetworkAids(Hyperparameters):
         
         networks['q_eval'].optimizer.step()
 
-        self.learn_step_counter+=1
+        networks['learn_step_counter']+=1
 
         self.decrement_epsilon()
 
         return loss.item()
 
-    def learn_DDPG(self, networks):
+    def learn_DDPG(self, networks, intention = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
+
+        if not intention:
+            actions = actions[:,:2]
+        else:
+            actions = actions.unsqueeze(1)
 
         target_actions = networks['target_actor'](states_)
         q_value_ = networks['target_critic']([states_, target_actions])
@@ -213,13 +216,18 @@ class NetworkAids(Hyperparameters):
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         networks['actor'].optimizer.step()
-    
-        self.learn_step_counter += 1
+
+        networks['learn_step_counter'] += 1
 
         return actor_loss.item()
 
-    def learn_TD3(self, networks):
+    def learn_TD3(self, networks, intention):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
+
+        if not intention:
+            actions = actions[:,:2]
+        else:
+            actions.unsqueeze(1)
 
         target_actions = networks['target_actor'].forward(states_)
         target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale = 0.2)), -0.5, 0.5)
@@ -251,9 +259,9 @@ class NetworkAids(Hyperparameters):
         networks['critic_1'].optimizer.step()
         networks['critic_2'].optimizer.step()
 
-        self.learn_step_counter += 1
+        networks['learn_step_counter'] += 1
 
-        if self.learn_step_counter % self.update_actor_iter != 0:
+        if networks['learn_step_counter'] % self.update_actor_iter != 0:
             return 0, 0
         #print('Actor Learn Step')
         networks['actor'].optimizer.zero_grad()
