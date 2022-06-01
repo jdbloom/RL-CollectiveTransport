@@ -74,7 +74,7 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'learning_scheme': args.learning_scheme,
               'options_per_action':3,
               'n_chars':Utility.params['alphabet_size'],
-              'meta_param_size':args.meta_param_size, 
+              'meta_param_size':1, 
               'use_intention':args.intention, 
               'use_recurrent':args.recurrent, 
               'intention_look_back':2}
@@ -162,7 +162,6 @@ while not exp_done:
             agent_states = []
             force_mags = []
             force_angs = []
-            mp = None
             if args.independent_learning:
                 running_reward = []
             else:
@@ -174,25 +173,12 @@ while not exp_done:
                     running_reward.append(0)
                     if args.intention:
                         agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
-                        #<--------------Generate initial Meta-parameters------------->
-                        #agent_state, action, agent_state_, rewards
-                        #TODO figure out what actions use here or put randon action
-                        if args.recurrent:
-                            # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = models[i].build_initial_ee_input(agent_state, action, agent_state, reward)
-                            # mp = models[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                            # mp = mp[-1]
-                            mp = T.Tensor(args.meta_param_size)
                     else:
                         agent_state = env_observations[i]
                         
                 else:
                     if args.intention:
                         agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
-                        if args.recurrent:
-                            # agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, agent_state, reward)
-                            # mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                            # mp = mp[-1]
-                            mp = T.Tensor(args.meta_param_size)
                     else: 
                         agent_state = env_observations[i]
 
@@ -340,19 +326,11 @@ while not exp_done:
                         if args.independent_learning:
                             if args.intention:
                                 new_agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
-                                if args.recurrent:
-                                    agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model[i].build_initial_ee_input(agent_state, action, new_agent_state, reward)
-                                    mp = model[i].generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                                    mp = mp[-1]
                             else:
                                 new_agent_state = env_observations[i]
                         else:
                             if args.intention:
                                 new_agent_state= model.make_agent_state(env_observations[i], next_heading_intention[i])
-                                if args.recurrent:
-                                    agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee = model.build_initial_ee_input(agent_state, action, new_agent_state, reward)
-                                    mp = model.generate_meta_param(agent_states_ee, actions_ee, new_agent_states_ee, rewards_ee)
-                                    mp = mp[-1]
                             else:
                                 new_agent_state = env_observations[i]
 
@@ -363,31 +341,17 @@ while not exp_done:
                                     if not old_failures[i] and not failures[i]:
                                         if not episode_done:
                                             if args.independent_learning:
-                                                if models[i].recurrent_intention:
-                                                    models[i].store_recurrent_transition(agent_states[i],
-                                                                       (actions[i], actions_to_take[i]),
-                                                                       rewards[i],
-                                                                       new_agent_states[i],
-                                                                       episode_done)
-                                                else:
-                                                    models[i].store_agent_transition(agent_states[i],
-                                                                       (actions[i], actions_to_take[i]),
-                                                                          rewards[i],
-                                                                       new_agent_states[i],
-                                                                       episode_done)
-                                            else:
-                                                if model.recurrent_intention:
-                                                    model.store_recurrent_transition(agent_states[i],
-                                                                       (actions[i], actions_to_take[i]),
-                                                                       rewards[i],
-                                                                       new_agent_states[i],
-                                                                       episode_done)
-                                                else:
-                                                    model.store_agent_transition(agent_states[i],
-                                                                        (actions[i], actions_to_take[i]),
+                                                models[i].store_agent_transition(agent_states[i],
+                                                                    (actions[i], actions_to_take[i]),
                                                                         rewards[i],
-                                                                        new_agent_states[i],
-                                                                        episode_done)
+                                                                    new_agent_states[i],
+                                                                    episode_done)
+                                            else:
+                                                model.store_agent_transition(agent_states[i],
+                                                                    (actions[i], actions_to_take[i]),
+                                                                    rewards[i],
+                                                                    new_agent_states[i],
+                                                                    episode_done)
                                                     
                         r.append(rewards[i][0])
                     #print('[DEBUG] Rewards:', r)

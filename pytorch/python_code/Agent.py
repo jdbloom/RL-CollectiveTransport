@@ -15,7 +15,7 @@ Loss = nn.MSELoss()
 class Agent(Actor):
     def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
                  n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
-                 use_recurrent=False, meta_param_size = 0, seq_len=5):
+                 use_recurrent=False, meta_param_size = 1, seq_len=5):
 
 
         args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
@@ -105,7 +105,6 @@ class Agent(Actor):
             return self.failure_action, self.failure_action_code
 
         self.failed = False
-        
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
             action_num = self.choose_action(observation, self.networks, test)
             actions = self.parse_action(action_num)
@@ -145,43 +144,3 @@ class Agent(Actor):
         observation = np.append(np.array(positions), np.array(agent_prox_flags))
         return self.choose_action(observation, self.intention_networks, test)        
 
-    def build_initial_ee_input(self,s,a,s_,r):
-        if len(r) == 0:
-            r.append(0)
-        state = T.from_numpy(s)
-        reward = T.from_numpy(np.array(r))
-        state_ = T.from_numpy(s_)
-        action = T.from_numpy(a)
-        #Padding single inputs, EE takes in batches.
-        stateP = self.pad_input(state,self.seq_len,self.batch_size)
-        actionP = self.pad_input(action,self.seq_len,self.batch_size)
-        state_P = self.pad_input(state_,self.seq_len,self.batch_size)
-        rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,self.seq_len-1,0,self.batch_size-1,0), value=0)
-        return stateP, actionP, state_P, rewardP
-
-    def build_ee_input(self,s,a,r,s_):
-        observation = T.cat((s,a,s_), -1)
-        if r.dim() == 0:
-            r = r.reshape([1])
-        if r.dim()== 2:
-            r = r.unsqueeze(-1)
-        observation = T.cat((observation,r), -1)
-        if observation.dim() == 1:
-            observation = T.reshape(observation,(1,1,observation.shape[0]))
-        return observation.to(T.float32)
-
-    def generate_meta_param(self,s,a,s_,r):
-        observation = self.build_ee_input(s,a,r,s_)
-        meta_param = self.ee(observation)
-        return meta_param
-    
-    def build_ac_input(self, state, mp):
-        #TODO figure out what to replace 4 with
-        state = state[:,-1,:]
-        obs = T.cat((state,mp), 1)
-        return obs
-        
-    def pad_input(self,s,seqlen,batch):
-        s = s.unsqueeze(0).unsqueeze(0)
-        s = F.pad(s,pad=(0,0,seqlen-1,0,batch-1,0))
-        return s

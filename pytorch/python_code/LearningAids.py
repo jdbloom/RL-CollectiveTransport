@@ -116,6 +116,10 @@ class NetworkAids(Hyperparameters):
     
     def DDPG_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
+        if networks['learning_scheme'] == 'RDDPG':
+            mp = networks['ee'](state.unsqueeze(0).unsqueeze(0), True)
+            state = T.cat((state, mp.squeeze(0)))
+            return networks['actor'].forward(state).unsqueeze(0)
         return networks['actor'].forward(state).unsqueeze(0)
         
     
@@ -189,16 +193,25 @@ class NetworkAids(Hyperparameters):
 
         return loss.item()
 
-    def learn_DDPG(self, networks, intention = False):
+    def learn_DDPG(self, networks, intention = False, recurrent = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
-
+        import ipdb; ipdb.set_trace()
         if not intention:
             actions = actions[:,:2]
-        else:
+        elif not recurrent:
             actions = actions.unsqueeze(1)
 
+        if intention and recurrent:
+            #meta_param_obs = self.build_ee_input(states, actions, states_, rewards)
+            meta_param = networks['ee'](states)
+            meta_param_clone = T.clone(meta_param).detach()
+            states = self.build_ac_input(states, meta_param)
+            states_ = self.build_ac_input(states_, meta_param_clone)
+            states_clone = T.clone(states).detach()
+            
         target_actions = networks['target_actor'](states_)
         q_value_ = networks['target_critic']([states_, target_actions])
+        
         q_value_[dones] = 0.0
         target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
 
@@ -211,8 +224,12 @@ class NetworkAids(Hyperparameters):
 
         #Actor Update
         networks['actor'].zero_grad()
-        new_policy_actions = networks['actor'](states)
-        actor_loss = -networks['critic']([states, new_policy_actions])
+        if intention and recurrent:
+            new_policy_actions = networks['actor'](states_clone)
+            actor_loss = -networks['critic']([states_clone, new_policy_actions])
+        else:
+            new_policy_actions = networks['actor'](states)
+            actor_loss = -networks['critic']([states, new_policy_actions])
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         networks['actor'].optimizer.step()
@@ -271,6 +288,22 @@ class NetworkAids(Hyperparameters):
         networks['actor'].optimizer.step()
 
         return actor_loss.item()
+
+    def build_ee_input(self, s, a, s_, r):
+        observation = T.cat((s, a, s_), -1)
+        if r.dim() == 0:
+            r.reshape([1])
+        if r.dim() == 2:
+            r = r.unsqueeze(-1)
+        observation = T.cat((observation, r), -1)
+        if observation.dim() == 1:
+            observation = T.reshape(observation, (1, 1, observation.shape[0]))
+        return observation.to(T.float32)
+    
+    def build_ac_input(self, state, mp):
+        state = state[:, -1, :]
+        obs = T.cat((state, mp), 1)
+        return obs
         
     def decrement_epsilon(self):
         self.epsilon = max(self.epsilon-self.eps_dec, self.eps_min)
@@ -280,9 +313,9 @@ class NetworkAids(Hyperparameters):
 
     def sample_memory(self, networks):
         states, actions, rewards, states_, dones = networks['replay'].sample_buffer(self.batch_size)
-        if networks['learning_scheme'] == 'DQN' or networks['learning_scheme'] == 'DDQN':
+        if networks['learning_scheme'] in {'DQN', 'DDQN'}:
             device = networks['q_eval'].device
-        elif networks['learning_scheme'] == 'DDPG' or networks['learning_scheme'] == 'TD3':
+        elif networks['learning_scheme'] in {'DDPG', 'RDDPG', 'TD3'}:
             device = networks['actor'].device
         states = T.tensor(states, dtype=T.float32).to(device)
         actions = T.tensor(actions, dtype=T.float32).to(device)

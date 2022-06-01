@@ -221,12 +221,14 @@ class EnvironmentEncoder(nn.Module):
 
         self.to(self.device)
 
-    def forward(self, observation):
+    def forward(self, observation, choose_action = False):
         hidden0 = (T.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device), T.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device))
         lstm_out , (h_out, _) = self.ee(observation,hidden0)
         lstm_out = h_out.view(-1,self.hidden_size)
         meta_parameters = self.meta_layer(lstm_out)
         meta_parameters = T.relu(meta_parameters)
+        if choose_action:
+            meta_parameters = meta_parameters[-meta_param_size:]
         return meta_parameters
 
     def save_checkpoint(self, path):
