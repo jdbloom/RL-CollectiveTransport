@@ -117,7 +117,8 @@ class NetworkAids(Hyperparameters):
     def DDPG_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
-            #TODO pad if 
+            #TODO add condition for when to pad
+            self.build_initial_state_ee_input(observation)
             mp = networks['ee'](state.unsqueeze(0).unsqueeze(0), True)
             state = T.cat((state, mp.squeeze(0)))
             return networks['actor'].forward(state).unsqueeze(0)
