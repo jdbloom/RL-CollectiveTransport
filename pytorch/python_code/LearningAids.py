@@ -118,7 +118,7 @@ class NetworkAids(Hyperparameters):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
             #TODO add condition for when to pad
-            self.build_initial_state_ee_input(observation)
+            state = self.build_initial_state_ee_input(state)
             mp = networks['ee'](state.unsqueeze(0).unsqueeze(0), True)
             state = T.cat((state, mp.squeeze(0)))
             return networks['actor'].forward(state).unsqueeze(0)
@@ -291,8 +291,7 @@ class NetworkAids(Hyperparameters):
 
         return actor_loss.item()
 
-    def build_initial_state_ee_input(self,s):
-        state = T.from_numpy(s)
+    def build_initial_state_ee_input(self,state):
         #Padding single inputs, EE takes in batches.
         stateP = self.pad_input(state,self.seq_len,self.batch_size)
         return stateP
@@ -312,6 +311,11 @@ class NetworkAids(Hyperparameters):
     #     rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,self.seq_len-1,0,self.batch_size-1,0), value=0)
     #     return stateP, actionP, state_P, rewardP
 
+    def pad_input(self,s,seqlen,batch):
+        s = s.unsqueeze(0).unsqueeze(0)
+        s = F.pad(s,pad=(0,0,seqlen-1,0,batch-1,0))
+        return s
+        
     def build_ee_input(self, s, a, s_, r):
         observation = T.cat((s, a, s_), -1)
         if r.dim() == 0:
