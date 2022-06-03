@@ -117,6 +117,7 @@ class NetworkAids(Hyperparameters):
     def DDPG_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
+            #TODO pad if 
             mp = networks['ee'](state.unsqueeze(0).unsqueeze(0), True)
             state = T.cat((state, mp.squeeze(0)))
             return networks['actor'].forward(state).unsqueeze(0)
@@ -238,7 +239,7 @@ class NetworkAids(Hyperparameters):
 
         return actor_loss.item()
 
-    def learn_TD3(self, networks, intention):
+    def learn_TD3(self, networks, intention = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
         if not intention:
@@ -288,6 +289,27 @@ class NetworkAids(Hyperparameters):
         networks['actor'].optimizer.step()
 
         return actor_loss.item()
+
+    def build_initial_state_ee_input(self,s):
+        state = T.from_numpy(s)
+        #Padding single inputs, EE takes in batches.
+        stateP = self.pad_input(state,self.seq_len,self.batch_size)
+        return stateP
+
+#TODO here for later use to build (s,a,s',r,done) input
+    # def build_initial_ee_input(self,s,a,s_,r):
+    #     if len(r) == 0:
+    #         r.append(0)
+    #     state = T.from_numpy(s)
+    #     reward = T.from_numpy(np.array(r))
+    #     state_ = T.from_numpy(s_)
+    #     action = T.from_numpy(a)
+    #     #Padding single inputs, EE takes in batches.
+    #     stateP = self.pad_input(state,self.seq_len,self.batch_size)
+    #     actionP = self.pad_input(action,self.seq_len,self.batch_size)
+    #     state_P = self.pad_input(state_,self.seq_len,self.batch_size)
+    #     rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,self.seq_len-1,0,self.batch_size-1,0), value=0)
+    #     return stateP, actionP, state_P, rewardP
 
     def build_ee_input(self, s, a, s_, r):
         observation = T.cat((s, a, s_), -1)
