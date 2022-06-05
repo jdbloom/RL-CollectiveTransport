@@ -228,7 +228,7 @@ class EnvironmentEncoder(nn.Module):
         meta_parameters = self.meta_layer(lstm_out)
         meta_parameters = T.relu(meta_parameters)
         if choose_action:
-            meta_parameters = meta_parameters[-meta_param_size:]
+            meta_parameters = meta_parameters[-1]
         return meta_parameters
 
     def save_checkpoint(self, path):

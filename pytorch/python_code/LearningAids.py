@@ -118,9 +118,10 @@ class NetworkAids(Hyperparameters):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
             #TODO add condition for when to pad
-            state = self.build_initial_state_ee_input(state)
-            mp = networks['ee'](state.unsqueeze(0).unsqueeze(0), True)
-            state = T.cat((state, mp.squeeze(0)))
+            # import ipdb; ipdb.set_trace()
+            state_padded = self.build_initial_state_ee_input(state)
+            mp = networks['ee'](state_padded, True)
+            state = T.cat((state, mp))
             return networks['actor'].forward(state).unsqueeze(0)
         return networks['actor'].forward(state).unsqueeze(0)
         
@@ -197,7 +198,7 @@ class NetworkAids(Hyperparameters):
 
     def learn_DDPG(self, networks, intention = False, recurrent = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         if not intention:
             actions = actions[:,:2]
         elif not recurrent:
@@ -210,11 +211,16 @@ class NetworkAids(Hyperparameters):
             states = self.build_ac_input(states, meta_param)
             states_ = self.build_ac_input(states_, meta_param_clone)
             states_clone = T.clone(states).detach()
+            #reformatting inputs
+            actions = actions[:,-1,:]
+            rewards = rewards[:,-1]
+
             
         target_actions = networks['target_actor'](states_)
         q_value_ = networks['target_critic']([states_, target_actions])
-        
-        q_value_[dones] = 0.0
+        # import ipdb; ipdb.set_trace()
+        #TODO what is dones doing ?
+        # q_value_[dones] = 0.0
         target = T.unsqueeze(rewards, 1) + self.gamma*q_value_
 
         #Critic Update
