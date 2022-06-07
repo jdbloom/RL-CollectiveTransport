@@ -35,8 +35,7 @@ class ReplayBuffer():
         self.new_state_memory[mem_index] = state_
         self.terminal_memory[mem_index] = done
         self.mem_ctr += 1
-
-
+        
 
     def sample_buffer(self, batch_size):
         max_mem = min(self.mem_ctr, self.mem_size)
@@ -75,7 +74,7 @@ class SequenceReplayBuffer:
 
     def store_transition(self, s, a ,r, s_, d):
         mem_index = self.mem_ctr % self.mem_size
-
+        # import ipdb; ipdb.set_trace()
         self.seq_state_memory[self.seq_mem_cntr] = s
         self.seq_action_memory[self.seq_mem_cntr] = a
         self.seq_new_state_memory[self.seq_mem_cntr] = s_
@@ -93,6 +92,15 @@ class SequenceReplayBuffer:
                 self.terminal_memory[mem_index+i] = self.seq_terminal_memory[i]
             self.mem_ctr += self.seq_len
             self.seq_mem_cntr = 0
+
+    def get_current_sequence(self):
+        j = self.mem_ctr % self.mem_size
+        s = self.state_memory[j:j+self.seq_len]
+        s_ = self.new_state_memory[j:j+self.seq_len]
+        a = self.action_memory[j:j+self.seq_len]
+        r = self.reward_memory[j:j+self.seq_len]
+        d = self.terminal_memory[j:j+self.seq_len]
+        return s,s_,a,r,d
 
     def sample_buffer(self, batch_size, replace=True):
         max_mem = min(self.mem_ctr, self.mem_size)

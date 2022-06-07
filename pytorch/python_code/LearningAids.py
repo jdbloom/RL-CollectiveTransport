@@ -117,10 +117,12 @@ class NetworkAids(Hyperparameters):
     def DDPG_choose_action(self, observation, networks):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
-            #TODO add condition for when to pad
-            # import ipdb; ipdb.set_trace()
-            state_padded = self.build_initial_state_ee_input(state)
-            mp = networks['ee'](state_padded, True)
+            s,s_,a,r,d = networks['replay'].get_current_sequence()
+            if len(s) == 0:
+                import ipdb; ipdb.set_trace()
+            s,a,s_,r = self.build_initial_ee_input(s,a,s_,r)
+            obs_padded = self.build_ee_input(s,a,s_,r).to(networks['ee'].device)
+            mp = networks['ee'](obs_padded, True)
             state = T.cat((state, mp))
             return networks['actor'].forward(state).unsqueeze(0)
         return networks['actor'].forward(state).unsqueeze(0)
@@ -198,15 +200,14 @@ class NetworkAids(Hyperparameters):
 
     def learn_DDPG(self, networks, intention = False, recurrent = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
-        # import ipdb; ipdb.set_trace()
         if not intention:
             actions = actions[:,:2]
         elif not recurrent:
             actions = actions.unsqueeze(1)
 
         if intention and recurrent:
-            #meta_param_obs = self.build_ee_input(states, actions, states_, rewards)
-            meta_param = networks['ee'](states)
+            meta_param_obs = self.build_ee_input(states, actions, states_, rewards)
+            meta_param = networks['ee'](meta_param_obs)
             meta_param_clone = T.clone(meta_param).detach()
             states = self.build_ac_input(states, meta_param)
             states_ = self.build_ac_input(states_, meta_param_clone)
@@ -303,26 +304,27 @@ class NetworkAids(Hyperparameters):
         return stateP
 
 #TODO here for later use to build (s,a,s',r,done) input
-    # def build_initial_ee_input(self,s,a,s_,r):
-    #     if len(r) == 0:
-    #         r.append(0)
-    #     state = T.from_numpy(s)
-    #     reward = T.from_numpy(np.array(r))
-    #     state_ = T.from_numpy(s_)
-    #     action = T.from_numpy(a)
-    #     #Padding single inputs, EE takes in batches.
-    #     stateP = self.pad_input(state,self.seq_len,self.batch_size)
-    #     actionP = self.pad_input(action,self.seq_len,self.batch_size)
-    #     state_P = self.pad_input(state_,self.seq_len,self.batch_size)
-    #     rewardP = F.pad(reward.unsqueeze(0).unsqueeze(0), pad=(0,0,self.seq_len-1,0,self.batch_size-1,0), value=0)
-    #     return stateP, actionP, state_P, rewardP
+    def build_initial_ee_input(self,s,a,s_,r):
+        s = T.from_numpy(s)
+        s_ = T.from_numpy(s_)
+        a = T.from_numpy(a)
+        r = T.from_numpy(r).unsqueeze(-1)
+        #Padding single inputs, EE takes in batches.
+        if len(s) == 0:
+            import ipdb; ipdb.set_trace()
+        stateP = self.pad_input(s,0,self.batch_size)
+        actionP = self.pad_input(a,0,self.batch_size)
+        state_P = self.pad_input(s_,0,self.batch_size)
+        rewardP = F.pad(r.unsqueeze(0), pad=(0,0,0,0,self.batch_size-1,0), value=0)
+        return stateP, actionP, state_P, rewardP
 
     def pad_input(self,s,seqlen,batch):
-        s = s.unsqueeze(0).unsqueeze(0)
-        s = F.pad(s,pad=(0,0,seqlen-1,0,batch-1,0))
+        s = s.unsqueeze(0)
+        s = F.pad(s,pad=(0,0,0,0,batch-1,0))
         return s
         
     def build_ee_input(self, s, a, s_, r):
+        # import ipdb; ipdb.set_trace()
         observation = T.cat((s, a, s_), -1)
         if r.dim() == 0:
             r.reshape([1])

@@ -135,7 +135,7 @@ class Actor(NetworkAids):
         actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.recurrent_intention_network_input,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
         critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.recurrent_intention_network_input}
-        ee_nn_args = {'observation_size': self.intention_network_input, 'hidden_size':self.meta_param_size, 'meta_param_size': self.meta_param_size, 'batch_size': self.batch_size, 'num_layers':1, 'lr': self.ee_lr}
+        ee_nn_args = {'observation_size': 18, 'hidden_size':self.meta_param_size, 'meta_param_size': self.meta_param_size, 'batch_size': self.batch_size, 'num_layers':1, 'lr': self.ee_lr}
         Networks = self.make_DDPG_networks(actor_nn_args, critic_nn_args)
         Networks['ee'] = self.make_EE_networks(ee_nn_args)
 
