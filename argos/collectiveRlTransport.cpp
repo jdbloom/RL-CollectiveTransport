@@ -118,6 +118,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecFailures.resize(m_unNumRobots, 0);
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
+      m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
       m_vecObjStats.resize(6, 0.0);
       m_vecGateStats.resize(4, 0.0);
       if (m_unNumObstacles > 0){
@@ -551,6 +552,14 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
       CRadians cRobotZ, cRobotY, cRobotX;
       cRobotOrient.ToEulerAngles(cRobotZ, cRobotY, cRobotX);
+      /* Save Robot Positions and Orientations to send to python for MME learning (Stephen Powers)*/
+      m_vecRobotStats[i*6] = cRobotPos.GetX();
+      m_vecRobotStats[i*6+1] = cRobotPos.GetY();
+      m_vecRobotStats[i*6+2] = cRobotPos.GetZ();
+      m_vecRobotStats[i*6+3] = ToDegrees(cRobotX).GetValue();
+      m_vecRobotStats[i*6+4] = ToDegrees(cRobotY).GetValue();
+      m_vecRobotStats[i*6+5] = ToDegrees(cRobotZ).GetValue();
+
       /* Get vector from robot to goal (robot-local) */
       CVector2 cVecRobot2Goal(
          m_cGoal.GetX() - cRobotPos.GetX(),
@@ -654,6 +663,7 @@ void CCollectiveRLTransport::PreStep() {
    ZMQSendObservations();
    ZMQSendFailures();
    ZMQSendRewards();
+   ZMQSendForceStats();
    ZMQSendRobotStats();
    if(m_unNumObstacles> 0){
      ZMQSendObjectStats();
@@ -762,6 +772,7 @@ void CCollectiveRLTransport::PostStep() {
       ZMQSendObservations();
       ZMQSendFailures();
       ZMQSendRewards();
+      ZMQSendForceStats();
       ZMQSendRobotStats();
       if(m_unNumObstacles> 0){
         ZMQSendObjectStats();
@@ -989,7 +1000,7 @@ void CCollectiveRLTransport::ZMQSendRewards(){
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendRobotStats(){
+void CCollectiveRLTransport::ZMQSendForceStats(){
   if (zmq_send_const(
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecStats[0]),  // data pointer
@@ -1007,6 +1018,19 @@ void CCollectiveRLTransport::ZMQSendObjectStats(){
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecObjStats[0]),  // data pointer
     sizeof(float)*m_vecObjStats.size(),      // data size in bytes
+    ZMQ_SNDMORE)                                    //more to come
+  < 0) {                                  // >= 0 means success
+    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+  }
+}
+
+/****************************************/
+/****************************************/
+void CCollectiveRLTransport::ZMQSendRobotStats(){
+  if (zmq_send_const(
+    m_ptZMQSocket,                        // The socket
+    const_cast <float*>(&m_vecRobotStats[0]),  // data pointer
+    sizeof(float)*m_vecRobotStats.size(),      // data size in bytes
     ZMQ_SNDMORE)                                    //more to come
   < 0) {                                  // >= 0 means success
     THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
@@ -1038,6 +1062,8 @@ void CCollectiveRLTransport::ZMQSendGateStats(){
     THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
   }
 }
+
+
 
 /****************************************/
 /****************************************/

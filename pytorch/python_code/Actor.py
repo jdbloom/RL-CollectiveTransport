@@ -217,6 +217,12 @@ class Actor(NetworkAids):
     def store_intention_transition(self, s, a, r, s_, d):
         self.store_transition(s, a, r, s_, d, self.intention_networks)
 
+    def reset_intention_sequence(self):
+        self.intention_sequence = [np.zeros(self.intention_network_input) for i in range(self.seq_len)]
+    
+    def add_intention_sequence(self, obs):
+        self.intention_sequence.append(obs)
+        self.intention_sequence.pop(0)
 
     def save_model(self, path):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':

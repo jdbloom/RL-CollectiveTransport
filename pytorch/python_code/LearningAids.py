@@ -195,7 +195,6 @@ class NetworkAids(Hyperparameters):
 
     def learn_DDPG(self, networks, intention = False, recurrent = False):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
-        import ipdb; ipdb.set_trace()
         if not intention:
             actions = actions[:,:2]
         elif not recurrent:

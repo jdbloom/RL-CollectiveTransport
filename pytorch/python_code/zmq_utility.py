@@ -24,6 +24,8 @@ class ZMQ_Utility:
         self.REWARDS_FMT = '1f'
         self.STATS_FIELDS = ['magnitude', 'angle']
         self.STATS_FMT = '2f'
+        self.ROBOT_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
+        self.ROBOT_STATS_FMT = '6f'
         self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.OBJ_STATS_FMT = '6f'
         self.GATE_STATS_FIELDS = ['neg_wall_1_x', 'neg_wall_1_length_y',
@@ -137,6 +139,16 @@ class ZMQ_Utility:
             # Append it to the stats array
             stats.append(nparr)
         return stats
+    
+    def parse_robot_stats(self, msg):
+        robot_stats = []
+        for r in range(0, self.params['num_robots']):
+            m = msg[r *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE:(r+1) *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE] 
+            # Parse the bytes into a dictionary
+            data = self.parse_msg(m, 'robot_stats', self.ROBOT_STATS_FIELDS, self.ROBOT_STATS_FMT)
+            # Make a numpy array
+            robot_stats.append(np.fromiter(data.values(), dtype=np.float32, count = len(data)))
+        return robot_stats
 
     def parse_obj_stats(self, msg):
         # Parse the bytes into a dictionary
