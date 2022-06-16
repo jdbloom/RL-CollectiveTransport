@@ -150,9 +150,9 @@ while not exp_done:
             object_positions.append([obj_stats[0], obj_stats[1]])
 
             if Utility.params['num_obstacles'] > 0:
-                obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
+                obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
             elif Utility.params['use_gate'] == 1:
-                gate_stats = Utility.parse_gate_stats(msgs[6])
+                gate_stats = Utility.parse_gate_stats(msgs[7])
 
             # Store the object stats in agent for learning later
             if args.independent_learning:
@@ -241,9 +241,9 @@ while not exp_done:
                         robot_y_pos.append(robot_stats[i][1])
                         robot_angle.append(robot_stats[i][5])
                     if Utility.params['num_obstacles'] > 0:
-                        obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
+                        obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
                     elif Utility.params['use_gate'] == 1:
-                        gate_stats = Utility.parse_gate_stats(msgs[6])
+                        gate_stats = Utility.parse_gate_stats(msgs[7])
 
                     old_object_positions = copy.deepcopy(object_positions)
                     object_positions.append([obj_stats[0], obj_stats[1]])
