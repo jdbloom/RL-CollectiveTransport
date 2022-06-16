@@ -126,11 +126,11 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle'])
 
         if not exp_done:
             time_steps = 0
-
+            
             object_positions = []
             agent_prox_flags = []
             last_object_heading = None
@@ -144,7 +144,8 @@ while not exp_done:
             failures = Utility.parse_failures(msgs[2])
             rewards = Utility.parse_rewards(msgs[3])
             stats = Utility.parse_stats(msgs[4])
-            obj_stats = Utility.parse_obj_stats(msgs[5])
+            robot_stats = Utility.parse_robot_stats(msgs[5])
+            obj_stats = Utility.parse_obj_stats(msgs[6])
 
             object_positions.append([obj_stats[0], obj_stats[1]])
 
@@ -156,8 +157,10 @@ while not exp_done:
             # Store the object stats in agent for learning later
             if args.independent_learning:
                 [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
+                [models[i].reset_intention_sequence()]
             else:
                 model.store_object_stats(obj_stats, time_steps>2)
+                model.reset_intention_sequence()
 
             agent_states = []
             force_mags = []
@@ -227,8 +230,16 @@ while not exp_done:
                     #print('[DEBUG] Received Failures ', failures)
                     rewards = Utility.parse_rewards(msgs[3])
                     stats = Utility.parse_stats(msgs[4])
-                    obj_stats = Utility.parse_obj_stats(msgs[5])
+                    robot_stats = Utility.parse_robot_stats(msgs[5])
+                    obj_stats = Utility.parse_obj_stats(msgs[6])
                     
+                    robot_x_pos = []
+                    robot_y_pos = []
+                    robot_angle = []
+                    for i in range(Utility.params['num_robots']):
+                        robot_x_pos.append(robot_stats[i][0])
+                        robot_y_pos.append(robot_stats[i][1])
+                        robot_angle.append(robot_stats[i][5])
                     if Utility.params['num_obstacles'] > 0:
                         obstacle_stats = Utility.parse_obstacle_stats(msgs[6])
                     elif Utility.params['use_gate'] == 1:
@@ -302,7 +313,7 @@ while not exp_done:
                             #store transitions of intentions
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags), 0)
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags),0)
                                 else:
                                     state = np.append(np.array(old_object_positions).flatten(), agent_prox_flags)
                                     action = next_heading_intention[i]
@@ -404,7 +415,10 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1], gate, obstacles, intention_reward, time.time() - episode_start_time])
+                    writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
+                                    [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
+                                    gate, obstacles, intention_reward, time.time() - episode_start_time, robot_x_pos, 
+                                    robot_y_pos, robot_angle])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time

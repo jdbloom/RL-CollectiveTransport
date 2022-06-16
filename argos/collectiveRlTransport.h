@@ -203,6 +203,8 @@ private:
    /** The vector of object stats*/
    std::vector<float> m_vecObjStats;
 
+   /** The vector of robot stats */
+   std::vector<float> m_vecRobotStats;
    /** The vector of gate stats*/
    std::vector<float> m_vecGateStats;
 
@@ -289,7 +291,7 @@ private:
 
    void ZMQSendRewards();
 
-   void ZMQSendRobotStats();
+   void ZMQSendForceStats();
 
    void ZMQGetActions();
 
@@ -300,6 +302,8 @@ private:
    void ZMQSendGateStats();
 
    void ZMQSendObstacleStats();
+
+   void ZMQSendRobotStats();
 
    void ZMQGetAck();
 
