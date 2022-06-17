@@ -110,7 +110,7 @@
   <!-- ****************** -->
   <!-- * Visualization * -->
   <!-- ****************** -->
-  <!--<visualization>
+  <visualization>
     <qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
@@ -124,6 +124,6 @@
           </placements>
         </camera>
       </qt-opengl>
-  </visualization>-->
-
+  </visualization>
+  
 </argos-configuration>
