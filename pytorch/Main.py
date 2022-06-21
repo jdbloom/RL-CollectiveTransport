@@ -415,6 +415,7 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
+
                     writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     gate, obstacles, intention_reward, time.time() - episode_start_time, robot_x_pos, 
