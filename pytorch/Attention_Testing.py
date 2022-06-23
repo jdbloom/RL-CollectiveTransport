@@ -116,16 +116,19 @@ class Encoder(nn.Module):
 
 # embed_size = 256, num_layes = 6, forward_expansion = 4, heads, = 8, dropout = 0, device = "cuda", max_length = 100
 
+sequence_length = 5
+
 intention = Encoder(embed_size=256,
                     num_layers = 6,
                     heads = 8,
                     device = T.device('cuda:0' if T.cuda.is_available() else 'cpu'),
                     forward_expansion = 4,
                     dropout = 0,
-                    max_length = 100)
+                    max_length = sequence_length)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
+parser.add_argument("plot_prox", default = False, action = "store_true")
 
 args = parser.parse_args()
 
@@ -136,43 +139,48 @@ Loss = nn.MSELoss()
 Y_history = []
 Pred_history = []
 episode_reward_history = []
-
+loss_history = []
+failure_eps = []
 print("... Loading CSV Paths ...")
 file_names = []
 for file in os.listdir(data_path):
     file_names.append(file)
-
+plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 for episode in range(len(file_names)-1):
-    print('[EPISODE]', episode)
-    history = [[0 for _ in range(6)] for _ in range(100)]
+    
+    history = [[0 for _ in range(6)] for _ in range(sequence_length)]
     Y_actual = []
+    P_values = []
     episode_reward = 0
+    running_loss = 0
+    
     name = 'Data_Episode_'+str(episode)+'.csv'
     file_path = data_path + name
     df = pd.read_csv(file_path)
     for t in range(len(df[:-1])):
-        #print(episode, t)
         cx = df['cyl_x_pos'][t+1]
         cx_ = df['cyl_x_pos'][t]
         cy = df['cyl_y_pos'][t+1]
         cy_ = df['cyl_y_pos'][t]
         obs = df['env_observations'][t]
         obs = [[float(d) for d in e] for e in [e.split(',') for e in (re.sub(r"[\n\t\s]*", "", (obs[8:-18]))).split('],dtype=float32),array([')]]
-        P = [sum(obs[i][-24:])/24 for i in range(len(obs))] #Normalized proximity readings (1 per robot (0, 1))
+        P = [sum(obs[i][-24:])/24.0 for i in range(len(obs))] #Normalized proximity readings (1 per robot (0, 1))
         attention_observation = [cx_, cy_] + P
-
+        P_values.append(P)
         history.append(attention_observation)
-        if len(history) > 100:
+        if len(history) > sequence_length:
             history.pop(0)
 
         Y = T.Tensor([math.atan2((cy_ - cy), (cx_ - cx))/math.pi]).to(intention.device)
 
         observation = T.Tensor(history).unsqueeze(0).to(intention.device)
-
+        intention.optimizer.zero_grad()
         predicted_heading = intention(observation)
         loss = Loss(predicted_heading, Y)
         loss.backward()
         intention.optimizer.step()
+
+        running_loss += loss.cpu().detach().numpy()
 
         Y_history.append(Y.cpu().detach().numpy())
         Pred_history.append(predicted_heading.cpu().detach().numpy())
@@ -185,16 +193,30 @@ for episode in range(len(file_names)-1):
 
         diff = np.dot([x_y, y_y], [x_pred, y_pred])
         episode_reward += diff
-        
+    
+    if len(df[:-1]) == 4499:
+        failure_eps.append(episode)
+    loss_history.append(running_loss/len(df[:-1]))
     episode_reward_history.append(episode_reward/len(df[:-1]))
+    print('[EPISODE]', episode, loss_history[-1], episode_reward_history[-1])
     plt.clf()
     #plt.plot(Y_history, label = 'Y')
     #plt.plot(Pred_history, label = 'Pred')
     plt.plot(episode_reward_history)
+    plt.scatter(failure_eps, [0]*len(failure_eps), marker = 'x', color = 'r')
     #plt.legend()
-    plt.savefig('python_code/Data/Figures/Attention_Testing.png')
+    plt.title('Normalized Reward H=5')
+    plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/reward_h=5.png')
 
-
+    plt.clf()
+    plt.plot(loss_history)
+    plt.title('Scalled Loss H=5')
+    plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/loss_h=5.png')
+    if args.plot_prox:
+        plt.clf()
+        [plt.plot(P[:][i]) for i in range(len(P[0]))]
+        plt.title('Proximity Values for Episode ' + str(episode))
+        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/Proximity_EP_'+str(episode)+'.png')
         
         
     
