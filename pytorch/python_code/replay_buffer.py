@@ -143,7 +143,6 @@ class AttentionSequenceReplayBuffer:
         self.seq_label_memory[self.seq_mem_cntr] = y
         self.seq_mem_cntr += 1
 
-        print(self.seq_mem_cntr, self.seq_len)
         if self.seq_mem_cntr == self.seq_len:
             #Transfer Seq to main mem and clear seq buffer
             for i in range(self.seq_len):
@@ -162,7 +161,6 @@ class AttentionSequenceReplayBuffer:
         max_mem = min(self.mem_ctr, self.mem_size)
         #selecting starting indices of the sequence in buffer
         indices = [x*self.seq_len for x in range((max_mem//self.seq_len)-1)]
-        import ipdb; ipdb.set_trace()
         samples_indices = np.random.choice(indices, batch_size, replace = replace)
         s = np.zeros((batch_size,self.seq_len,self.num_observations))
         y = np.zeros((batch_size,self.seq_len,self.num_actions))
