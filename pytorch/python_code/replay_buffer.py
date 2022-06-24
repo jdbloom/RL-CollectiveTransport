@@ -10,7 +10,7 @@ class ReplayBuffer():
         self.new_state_memory = np.zeros((self.mem_size, num_observations), dtype = np.float32)
         if not use_intention:
             if self.action_type == 'Discrete':
-                self.action_memory = np.zeros((self.mem_size), dtype = np.int64)
+                self.action_memory = np.zeros((self.mem_size), dtype = int)
             elif self.action_type == 'Continuous':
                 self.action_memory = np.zeros((self.mem_size, num_actions), dtype = np.float32)
             else:
@@ -119,3 +119,53 @@ class SequenceReplayBuffer:
             r[i] = self.reward_memory[j:j+self.seq_len]
             d[i] = self.terminal_memory[j:j+self.seq_len]
         return s, a, r, s_, d
+
+class AttentionSequenceReplayBuffer:
+    def __init__(self, max_sequence, num_observations, seq_len):
+        self.mem_size = max_sequence*seq_len
+        self.num_observations = num_observations
+        self.seq_len = seq_len
+        self.mem_ctr = 0
+        self.seq_mem_cntr = 0
+
+        #main buffer used for sampling
+        self.state_memory = np.zeros((self.mem_size, self.num_observations), dtype = np.float64)
+        self.label_memory = np.zeros(self.mem_size, dtype = np.float64)
+
+        #sequence buffer stores 1 sequence of len seq_len, transfers seq to main buffer once full
+        self.seq_state_memory = np.zeros((self.seq_len, self.num_observations), dtype=np.float64)
+        self.seq_label_memory = np.zeros(self.seq_len, dtype=np.float64)
+
+    def store_transition(self, s, y):
+        mem_index = self.mem_ctr % self.mem_size
+        #import ipdb; ipdb.set_trace()
+        self.seq_state_memory[self.seq_mem_cntr] = s
+        self.seq_label_memory[self.seq_mem_cntr] = y
+        
+        if self.seq_mem_cntr == self.seq_len:
+            #Transfer Seq to main mem and clear seq buffer
+            for i in range(self.seq_len):
+                self.state_memory[mem_index+i] = self.seq_state_memory[i]
+                self.label_memory[mem_index+i] = self.seq_action_memory[i]
+            self.mem_ctr += self.seq_len
+            self.seq_mem_cntr = 0
+
+    def get_current_sequence(self):
+        j = self.mem_ctr % self.mem_size
+        s = self.state_memory[j-self.seq_len+1:j+1]
+        y = self.label_memory[j-self.seq_len+1:j+1]
+        return s,y
+
+    def sample_buffer(self, batch_size, replace=True):
+        max_mem = min(self.mem_ctr, self.mem_size)
+        #selecting starting indices of the sequence in buffer
+        indices = [x*self.seq_len for x in range((max_mem//self.seq_len)-1)]
+        import ipdb; ipdb.set_trace()
+        samples_indices = np.random.choice(indices, batch_size, replace = replace)
+        s = np.zeros((batch_size,self.seq_len,self.num_observations))
+        y = np.zeros((batch_size,self.seq_len,self.num_actions))
+        for i,j in enumerate(samples_indices):
+            s[i] = self.state_memory[j:j+self.seq_len]
+            y[i] = self.label_memory[j:j+self.seq_len]
+            
+        return s, y

@@ -15,12 +15,12 @@ Loss = nn.MSELoss()
 class Agent(Actor):
     def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
                  n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
-                 use_recurrent=False, meta_param_size = 1, seq_len=5):
+                 use_recurrent=False, attention=False, meta_param_size = 1, seq_len=5):
 
 
         args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
                 'n_chars':n_chars, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
-                'intention_look_back':intention_look_back, 'seq_len':seq_len}
+                'attention':attention, 'intention_look_back':intention_look_back, 'seq_len':seq_len}
 
         super().__init__(**args)
 

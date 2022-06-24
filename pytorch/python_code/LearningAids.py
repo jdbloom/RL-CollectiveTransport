@@ -1,4 +1,4 @@
-from .networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder
+from .networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder, AttentionEncoder
 
 import torch as T
 import torch.nn as nn
@@ -68,6 +68,10 @@ class NetworkAids(Hyperparameters):
     
     def make_EE_networks(self, nn_args):
         return EnvironmentEncoder(**nn_args)
+
+    def make_Attention_Encoder(self, nn_args):
+        Attention_networks = {'attention': AttentionEncoder(**nn_args)}
+        return Attention_networks
 
     def update_DDPG_network_parameters(self, tau, networks):
         # Update Actor Network
@@ -140,6 +144,9 @@ class NetworkAids(Hyperparameters):
         mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
         self.time_step += 1
         return mu_prime.cpu().detach().numpy()
+    
+    def Attention_choose_action(self, observation, networks):
+        return networks['attention'](observation).cpu().detach().numpy()
 
     
     def learn_DQN(self, networks):
@@ -298,10 +305,24 @@ class NetworkAids(Hyperparameters):
 
         return actor_loss.item()
 
+    def learn_attention(self, networks):
+        if networks['replay'].mem_ctr < self.batch_size:
+            return 0
+        observations, labels = self.sample_attention_memory(networks)
+        networks['learn_step_counter'] += 1
+        networks['attention'].zero_grad()
+        pred_headings = networks['attention'](observations)
+        loss = Loss(labels, pred_headings)
+        loss.backward()
+        networks['attention'].optimizer.step()
+        return loss.item()
+
+
     def build_initial_state_ee_input(self,state):
         #Padding single inputs, EE takes in batches.
         stateP = self.pad_input(state,self.seq_len,self.batch_size)
         return stateP
+
 
 #TODO here for later use to build (s,a,s',r,done) input
     def build_initial_ee_input(self,s,a,s_,r):
@@ -345,6 +366,9 @@ class NetworkAids(Hyperparameters):
 
     def store_transition(self, s, a, r, s_, d, networks):
         networks['replay'].store_transition(s, a, r, s_, d)
+    
+    def store_attention_transition(self, s, y, networks):
+        networks['replay'].store_transition(s, y)
 
     def sample_memory(self, networks):
         states, actions, rewards, states_, dones = networks['replay'].sample_buffer(self.batch_size)
@@ -359,6 +383,12 @@ class NetworkAids(Hyperparameters):
         dones = T.tensor(dones).to(device)
 
         return states, actions, rewards, states_, dones
+
+    def sample_attention_memory(self, networks):
+        observations, labels = networks['replay'].sample_buffer(self.batch_size)
+        observations = T.tensor(observations, dtype = T.float32).to(networks['intention'].device)
+        labels = T.tensor(labels, dtype = T.float32).to(networks['intention'].device)
+        return observations, labels
 
 
 

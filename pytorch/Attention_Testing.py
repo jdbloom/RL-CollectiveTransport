@@ -103,6 +103,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask = None):
         N, seq_len, obs_size = x.shape
+        import ipdb; ipdb.set_trace()
         positions = T.arange(0, seq_len).expand(N, seq_len).to(self.device)
 
         out = self.word_embedding(x) + self.position_embedding(positions) 
@@ -128,16 +129,15 @@ intention = Encoder(embed_size=256,
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
-parser.add_argument("plot_prox", default = False, action = "store_true")
-
+parser.add_argument("--plot_prox", default = False, action = "store_true")
+parser.add_argument("--plot_headings", default = False, action = "store_true")
 args = parser.parse_args()
 
 data_path = args.data_path + "Data/"
 
 Loss = nn.MSELoss()
+#Loss = nn.CosineSimilarity(dim=0, eps=1e-6)
 
-Y_history = []
-Pred_history = []
 episode_reward_history = []
 loss_history = []
 failure_eps = []
@@ -151,6 +151,8 @@ for episode in range(len(file_names)-1):
     history = [[0 for _ in range(6)] for _ in range(sequence_length)]
     Y_actual = []
     P_values = []
+    Y_history = []
+    Pred_history = []
     episode_reward = 0
     running_loss = 0
     
@@ -176,7 +178,7 @@ for episode in range(len(file_names)-1):
         observation = T.Tensor(history).unsqueeze(0).to(intention.device)
         intention.optimizer.zero_grad()
         predicted_heading = intention(observation)
-        loss = Loss(predicted_heading, Y)
+        loss = T.abs(Loss(predicted_heading, Y))
         loss.backward()
         intention.optimizer.step()
 
@@ -206,18 +208,29 @@ for episode in range(len(file_names)-1):
     plt.scatter(failure_eps, [0]*len(failure_eps), marker = 'x', color = 'r')
     #plt.legend()
     plt.title('Normalized Reward H=5')
-    plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/reward_h=5.png')
+    #plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/reward_h=5.png')
 
     plt.clf()
     plt.plot(loss_history)
     plt.title('Scalled Loss H=5')
-    plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/loss_h=5.png')
+    #plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/loss_h=5.png')
     if args.plot_prox:
+        prox_values = [[] for _ in range(len(P_values[0]))]
+        for i in range(len(P_values)):
+            [prox_values[j].append(P_values[i][j]) for j in range(len(P_values[0]))]
         plt.clf()
-        [plt.plot(P[:][i]) for i in range(len(P[0]))]
+        [plt.plot(prox_values[i]) for i in range(len(prox_values))]
+        plt.ylim(0, 1)
         plt.title('Proximity Values for Episode ' + str(episode))
-        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/Proximity_EP_'+str(episode)+'.png')
+        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/prox_charts/Proximity_EP_'+str(episode)+'.png')
         
+    if args.plot_headings:
+        plt.clf()
+
+        plt.plot(Y_history, label = 'Y')
+        plt.plot(Pred_history, label = 'Pred')   
+        plt.legend()
+        plt.title('Headings for Episode ' + str(episode)) 
+        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/heading_charts/Heading_EP_'+str(episode)+'.png')
         
-    
     

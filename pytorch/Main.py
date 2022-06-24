@@ -32,6 +32,7 @@ parser.add_argument("--port", default = "55555")
 parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
+parser.add_argument("--attention", default= False, action= 'store_true')
 parser.add_argument("--meta_param_size", default=0, type=int)
 args = parser.parse_args()
 
@@ -76,7 +77,8 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'n_chars':Utility.params['alphabet_size'],
               'meta_param_size':1, 
               'use_intention':args.intention, 
-              'use_recurrent':args.recurrent, 
+              'use_recurrent':args.recurrent,
+              'attention':args.attention, 
               'intention_look_back':2}
 
 
@@ -249,6 +251,7 @@ while not exp_done:
                     object_positions.append([obj_stats[0], obj_stats[1]])
 
                     intention_reward = []
+                    label = 0
                     ############################## INTENTION REWARD ##############################################
                     if args.intention:
                         if len(object_positions) > 2:
@@ -257,6 +260,7 @@ while not exp_done:
                             last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
                             x1 = math.cos(last_object_heading)
                             y1 = math.sin(last_object_heading)
+                            label = last_object_heading
 
                             for i in range(Utility.params['num_robots']):
                                 x2 = math.cos(next_heading_intention[i] * math.pi)
@@ -299,7 +303,19 @@ while not exp_done:
                             #    agent_prox_flags.append(1)
                             #else:
                             #    agent_prox_flags.append(0)
-                        if len(object_positions) == 2:
+                        if args.attention:
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    import ipdb; ipdb.set_trace()
+                                    # Check the syntax on object positions to make sure we are giving an X and Y
+                                    next_object_heading[i] = models[i].choose_object_intention(object_positions[-1], agent_prox_flags, test_mode)
+                                    next_heading_intention[i] = next_object_heading[i]
+                            else:
+                                ctde_intention = model.choose_object_intention(object_positions[-1], agent_prox_flags, test_mode)
+                                for i in range(Utility.params['num_robots']):
+                                    next_heading_intention[i] = ctde_intention
+
+                        elif len(object_positions) == 2:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
                                     next_object_heading[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
@@ -308,9 +324,14 @@ while not exp_done:
                                 ctde_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
                                 for i in range(Utility.params['num_robots']):
                                     next_heading_intention[i] = ctde_intention
+                        #store transitions of intentions
+                        if args.attention:
+                            if args.independent_learning:
+                                    models[i].store_intention_transition(np.append(np.array(old_object_positions[-1]).flatten(), agent_prox_flags), label, 0, 0, 0)
+                            else:
+                                model.store_intention_transition(np.append(np.array(old_object_positions[-1]).flatten(), agent_prox_flags), label, 0, 0, 0)
 
-                        if len(old_object_positions) == 2:
-                            #store transitions of intentions
+                        elif len(old_object_positions) == 2:
                             for i in range(Utility.params['num_robots']):
                                 if args.independent_learning:
                                     models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags),0)
@@ -354,7 +375,7 @@ while not exp_done:
                                             if args.independent_learning:
                                                 models[i].store_agent_transition(agent_states[i],
                                                                     (actions[i], actions_to_take[i]),
-                                                                        rewards[i],
+                                                                    rewards[i],
                                                                     new_agent_states[i],
                                                                     episode_done)
                                             else:
@@ -402,11 +423,11 @@ while not exp_done:
                             average_force_mag = 0
                             average_force_ang = 0
 
-                    if type(gate_stats) != np.int:
+                    if type(gate_stats) != int:
                         gate = []
                         for i in range(len(gate_stats)):
                             gate.append(gate_stats[i])
-                    if type(obstacle_stats) != np.int:
+                    if type(obstacle_stats) != int:
                         obstacles = []
                         for i in range(len(obstacle_stats)):
                             obstacles.append(obstacle_stats[i])
