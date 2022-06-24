@@ -459,7 +459,7 @@ class AttentionEncoder(nn.Module):
         
         for layer in self.layers:
             mp = layer(out, out, out, mask)
-        out = self.fc_out(mp.view(-1))
+        out = self.fc_out(mp.view(N,-1))
         out = self.tanh(out) # converts to single number in range (-1, 1) to represent angle
         return out
     

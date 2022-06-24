@@ -312,7 +312,7 @@ class NetworkAids(Hyperparameters):
         networks['learn_step_counter'] += 1
         networks['attention'].zero_grad()
         pred_headings = networks['attention'](observations)
-        loss = Loss(labels, pred_headings)
+        loss = Loss(pred_headings, labels.unsqueeze(-1))
         loss.backward()
         networks['attention'].optimizer.step()
         return loss.item()
@@ -386,8 +386,8 @@ class NetworkAids(Hyperparameters):
 
     def sample_attention_memory(self, networks):
         observations, labels = networks['replay'].sample_buffer(self.batch_size)
-        observations = T.tensor(observations, dtype = T.float32).to(networks['intention'].device)
-        labels = T.tensor(labels, dtype = T.float32).to(networks['intention'].device)
+        observations = T.tensor(observations, dtype = T.float32).to(networks['attention'].device)
+        labels = T.tensor(labels, dtype = T.float32).to(networks['attention'].device)
         return observations, labels
 
 

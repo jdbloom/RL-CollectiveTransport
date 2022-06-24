@@ -192,7 +192,8 @@ class Actor(NetworkAids):
         elif networks['learning_scheme'] == 'attention':
             self.attention_observation.append(observation)
             self.attention_observation.pop(0)
-            observation = T.Tensor(self.attention_observation).to(networks['attention'].device)
+            observation = np.array(self.attention_observation)
+            observation = T.Tensor(observation).to(networks['attention'].device)
             return self.Attention_choose_action(observation.unsqueeze(0), networks)
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection ' + networks['learning_scheme'])

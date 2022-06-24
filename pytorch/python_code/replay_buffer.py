@@ -122,7 +122,7 @@ class SequenceReplayBuffer:
 
 class AttentionSequenceReplayBuffer:
     def __init__(self, max_sequence, num_observations, seq_len):
-        self.mem_size = max_sequence*seq_len
+        self.mem_size = 10000
         self.num_observations = num_observations
         self.seq_len = seq_len
         self.mem_ctr = 0
@@ -134,19 +134,17 @@ class AttentionSequenceReplayBuffer:
 
         #sequence buffer stores 1 sequence of len seq_len, transfers seq to main buffer once full
         self.seq_state_memory = np.zeros((self.seq_len, self.num_observations), dtype=np.float64)
-        self.seq_label_memory = np.zeros(self.seq_len, dtype=np.float64)
 
     def store_transition(self, s, y):
         mem_index = self.mem_ctr % self.mem_size
         #import ipdb; ipdb.set_trace()
         self.seq_state_memory[self.seq_mem_cntr] = s
-        self.seq_label_memory[self.seq_mem_cntr] = y
         self.seq_mem_cntr += 1
         if self.seq_mem_cntr == self.seq_len:
             #Transfer Seq to main mem and clear seq buffer
             for i in range(self.seq_len):
                 self.state_memory[mem_index+i] = self.seq_state_memory[i]
-                self.label_memory[mem_index+i] = self.seq_label_memory[i]
+            self.label_memory[mem_index] = y
             self.mem_ctr += self.seq_len
             self.seq_mem_cntr = 0
 
@@ -162,9 +160,8 @@ class AttentionSequenceReplayBuffer:
         indices = [x*self.seq_len for x in range((max_mem//self.seq_len)-1)]
         samples_indices = np.random.choice(indices, batch_size, replace = replace)
         s = np.zeros((batch_size,self.seq_len,self.num_observations))
-        y = np.zeros((batch_size,self.seq_len,self.num_actions))
+
         for i,j in enumerate(samples_indices):
             s[i] = self.state_memory[j:j+self.seq_len]
-            y[i] = self.label_memory[j:j+self.seq_len]
-            
+        y = self.label_memory[samples_indices] 
         return s, y

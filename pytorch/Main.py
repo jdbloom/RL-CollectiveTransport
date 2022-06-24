@@ -261,7 +261,6 @@ while not exp_done:
                             x1 = math.cos(last_object_heading)
                             y1 = math.sin(last_object_heading)
                             label = last_object_heading
-
                             for i in range(Utility.params['num_robots']):
                                 x2 = math.cos(next_heading_intention[i] * math.pi)
                                 y2 = math.sin(next_heading_intention[i] * math.pi)
