@@ -141,12 +141,14 @@ class AttentionSequenceReplayBuffer:
         #import ipdb; ipdb.set_trace()
         self.seq_state_memory[self.seq_mem_cntr] = s
         self.seq_label_memory[self.seq_mem_cntr] = y
-        
+        self.seq_mem_cntr += 1
+
+        print(self.seq_mem_cntr, self.seq_len)
         if self.seq_mem_cntr == self.seq_len:
             #Transfer Seq to main mem and clear seq buffer
             for i in range(self.seq_len):
                 self.state_memory[mem_index+i] = self.seq_state_memory[i]
-                self.label_memory[mem_index+i] = self.seq_action_memory[i]
+                self.label_memory[mem_index+i] = self.seq_label_memory[i]
             self.mem_ctr += self.seq_len
             self.seq_mem_cntr = 0
 
