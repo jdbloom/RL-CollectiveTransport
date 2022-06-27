@@ -142,7 +142,7 @@ class DDQN(nn.Module):
 
     def load_model(self, file_path):
         print('... loading', self.name, ' ...')
-        self.load_state_dict(T.load(file_path))
+        self.load_state_dict(T.load(file_path+'_'+self.name))
 
 ############################################################################
 # Actor Network for DDPG

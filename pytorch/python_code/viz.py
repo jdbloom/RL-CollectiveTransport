@@ -97,6 +97,8 @@ print('. . . Statistics')
 [print('[Models]', last_10_axis[0][i], np.average([last_10_rewards[j][i] for j in range(len(last_10_axis))])) for i in range(len(last_10_axis[0]))]
 print('\n[STATISTICS] Success Rate:', (len(episode_success_reward[0])/ len(episode_rewards)))
 print('[STATISTICS] Failures:', len(episode_failure_reward[0]))
+print('[STATISTICS] Avg Exp Reward:', np.average(robot_exp_rewards))
+print('[STATISTICS] Avg Exp Intention Reward:', np.average(robot_exp_intentions))
 #print('[STATISTICS] Best Model:', last_10_axis[0][np.argmax(last_10_rewards[0])])
 
 

@@ -303,7 +303,7 @@ class Actor(NetworkAids):
         
         if self.intention:
             if self.intention_networks['learning_scheme'] == 'attention':
-                self.networks['attention'].load_checkpoint(path)
+                self.intention_networks['attention'].load_checkpoint(path)
             else:
                 self.intention_network['actor'].load_checkpoint(path)
                 self.intention_network['target_actor'].load_checkpoint(path)
