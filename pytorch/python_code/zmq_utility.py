@@ -26,8 +26,8 @@ class ZMQ_Utility:
         self.STATS_FMT = '2f'
         self.ROBOT_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.ROBOT_STATS_FMT = '6f'
-        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
-        self.OBJ_STATS_FMT = '6f'
+        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'cyl_angle2goal']
+        self.OBJ_STATS_FMT = '7f'
         self.GATE_STATS_FIELDS = ['neg_wall_1_x', 'neg_wall_1_length_y',
                                   'pos_wall_2_x', 'pos_wall_2_length_y']
         self.GATE_STATS_FMT = '4f'

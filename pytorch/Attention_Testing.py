@@ -103,7 +103,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask = None):
         N, seq_len, obs_size = x.shape
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
         positions = T.arange(0, seq_len).expand(N, seq_len).to(self.device)
 
         out = self.word_embedding(x) + self.position_embedding(positions) 
@@ -208,12 +208,12 @@ for episode in range(len(file_names)-1):
     plt.scatter(failure_eps, [0]*len(failure_eps), marker = 'x', color = 'r')
     #plt.legend()
     plt.title('Normalized Reward H=5')
-    #plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/reward_h=5.png')
+    plt.savefig('python_code/Data/Figures/Initial_Attention_Testing/TD3_2_Obstacles_CosSim_Loss/reward_h=5.png')
 
     plt.clf()
     plt.plot(loss_history)
     plt.title('Scalled Loss H=5')
-    #plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/loss_h=5.png')
+    plt.savefig('python_code/Data/Figures/Initial_Attention_Testing/TD3_2_Obstacles_CosSim_Loss/loss_h=5.png')
     if args.plot_prox:
         prox_values = [[] for _ in range(len(P_values[0]))]
         for i in range(len(P_values)):
@@ -222,7 +222,7 @@ for episode in range(len(file_names)-1):
         [plt.plot(prox_values[i]) for i in range(len(prox_values))]
         plt.ylim(0, 1)
         plt.title('Proximity Values for Episode ' + str(episode))
-        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/prox_charts/Proximity_EP_'+str(episode)+'.png')
+        plt.savefig('python_code/Data/Figures/Initial_Attention_Testing/TD3_2_Obstacles_CosSim_Loss/prox_charts/Proximity_EP_'+str(episode)+'.png')
         
     if args.plot_headings:
         plt.clf()
@@ -231,6 +231,6 @@ for episode in range(len(file_names)-1):
         plt.plot(Pred_history, label = 'Pred')   
         plt.legend()
         plt.title('Headings for Episode ' + str(episode)) 
-        plt.savefig('python_code/Data/Figures/Attention_Testing/DQN_2_Obstacles_1000_eps/heading_charts/Heading_EP_'+str(episode)+'.png')
+        plt.savefig('python_code/Data/Figures/Initial_Attention_Testing/TD3_2_Obstacles_CosSim_Loss/heading_charts/Heading_EP_'+str(episode)+'.png')
         
     
