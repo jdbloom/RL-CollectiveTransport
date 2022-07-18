@@ -119,7 +119,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
-      m_vecObjStats.resize(6, 0.0);
+      m_vecObjStats.resize(7, 0.0);
       m_vecGateStats.resize(4, 0.0);
       if (m_unNumObstacles > 0){
           m_vecObstacleStats.resize(m_unNumObstacles*2, 0.0);
@@ -626,6 +626,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
+      /* Adding cylinder angle to goal for MME*/
+      m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
       // Get the proximity sensor values
       const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
