@@ -265,7 +265,7 @@ class Actor(NetworkAids):
         if self.attention_intention:
             if self.intention_networks['learning_scheme'] == 'attention':
                 self.intention_networks['attention'].save_checkpoint(path)
-        if self.intention:
+        elif self.intention:
             self.intention_networks['actor'].save_checkpoint(path, self.intention)
             self.intention_networks['target_actor'].save_checkpoint(path, self.intention)
             if self.intention_networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
@@ -302,7 +302,7 @@ class Actor(NetworkAids):
         if self.attention_intention:
             if self.intention_networks['learning_scheme'] == 'attention':
                 self.intention_networks['attention'].load_checkpoint(path)
-        if self.intention:
+        elif self.intention:
             self.intention_networks['actor'].load_checkpoint(path, self.intention)
             self.intention_networks['target_actor'].load_checkpoint(path, self.intention)
             if self.intention_networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
