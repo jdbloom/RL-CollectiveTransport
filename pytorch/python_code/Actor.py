@@ -247,7 +247,7 @@ class Actor(NetworkAids):
 
     def save_model(self, path):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
-            self.networks['q_eval'].save_model(path)
+            self.networks['q_eval'].save_checkpoint(path)
 
         elif self.networks['learning_scheme'] == 'DDPG':
             self.networks['actor'].save_checkpoint(path)

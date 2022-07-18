@@ -234,7 +234,7 @@ while not exp_done:
                     stats = Utility.parse_stats(msgs[4])
                     robot_stats = Utility.parse_robot_stats(msgs[5])
                     obj_stats = Utility.parse_obj_stats(msgs[6])
-                    import ipdb; ipdb.set_trace()
+                    
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
