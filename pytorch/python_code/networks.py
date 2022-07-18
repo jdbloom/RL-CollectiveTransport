@@ -44,13 +44,19 @@ class DQN(nn.Module):
 
         return actions
 
-    def save_model(self, file_path):
-        print('... saving',self.name,'...')
-        T.save(self.state_dict(), file_path+'_'+self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_model(self, file_path):
-        print('... loading', self.name, '...')
-        self.load_state_dict(T.load(file_path+'_'+self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Communication Network for DDQN
@@ -84,13 +90,19 @@ class DDQNComms(nn.Module):
         raw_message = self.fc3(x1)
         return raw_message
 
-    def save_model(self, file_path):
-        print('... saving',self.name ,'...')
-        T.save(self.state_dict(), file_path+'_'+self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_model(self, file_path):
-        print('... loading',self.name,'...')
-        self.load_state_dict(T.load(file_path+'_'+self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Action Network for DDQN
@@ -136,13 +148,19 @@ class DDQN(nn.Module):
         actions = self.fc3(x1)
         return actions
 
-    def save_model(self, file_path):
-        print('... saving', self.name, '...')
-        T.save(self.state_dict(), file_path+'_'+self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_model(self, file_path):
-        print('... loading', self.name, ' ...')
-        self.load_state_dict(T.load(file_path+'_'+self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Actor Network for DDPG
@@ -192,13 +210,19 @@ class DDPGActorNetwork(nn.Module):
         mu = self.min_max_action*self.tanh(mu) # This is needed for continuous action space
         return mu
 
-    def save_checkpoint(self, path):
-        print('... saving', self.name,'...')
-        T.save(self.state_dict(), path + '_' + self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_checkpoint(self, path):
-        print('... loading', self.name, '...', path)
-        self.load_state_dict(T.load(path + '_' + self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Recurrent Layer for Environment Encoder
@@ -218,7 +242,7 @@ class EnvironmentEncoder(nn.Module):
         self.meta_layer = nn.Linear(hidden_size, meta_param_size)
 
         self.ee_optimizer = optim.Adam(self.ee.parameters(), lr=lr, weight_decay= 1e-4)
-
+        self.name = "Enviroment_Encoder"
         self.to(self.device)
 
     def forward(self, observation, choose_action = False):
@@ -231,13 +255,19 @@ class EnvironmentEncoder(nn.Module):
             meta_parameters = meta_parameters[-1]
         return meta_parameters
 
-    def save_checkpoint(self, path):
-        print('... saving', self.name,'...')
-        T.save(self.state_dict(), path + '_' + self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_checkpoint(self, path):
-        print('... loading', self.name, '...', path)
-        self.load_state_dict(T.load(path + '_' + self. name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
         
 ############################################################################
 # Critic Network for DDPG
@@ -276,13 +306,19 @@ class DDPGCriticNetwork(nn.Module):
         action_value = self.q(action_value)
         return action_value
 
-    def save_checkpoint(self, path):
-        print('... saving', self.name,'...')
-        T.save(self.state_dict(), path + '_' + self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_checkpoint(self, path):
-        print('... loading', self.name, '...', path)
-        self.load_state_dict(T.load(path + '_' + self. name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Actor Network for TD3
@@ -314,13 +350,19 @@ class TD3ActorNetwork(nn.Module):
 
         return mu
 
-    def save_checkpoint(self, path):
-        print('... saving', self.name,'...')
-        T.save(self.state_dict(), path + '_' + self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_checkpoint(self, path):
-        print('... loading', self.name, '...')
-        self.load_state_dict(T.load(path + '_' + self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 ############################################################################
 # Critic Network for TD3
@@ -352,13 +394,19 @@ class TD3CriticNetwork(nn.Module):
 
         return q1
 
-    def save_checkpoint(self, path):
-        print('... saving', self.name,'...')
-        T.save(self.state_dict(), path + '_' + self.name)
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
 
-    def load_checkpoint(self, path):
-        print('... loading', self.name, '...')
-        self.load_state_dict(T.load(path + '_' + self.name))
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
 
 
 class SelfAttention(nn.Module):

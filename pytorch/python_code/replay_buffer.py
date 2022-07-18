@@ -95,11 +95,11 @@ class SequenceReplayBuffer:
 
     def get_current_sequence(self):
         j = self.mem_ctr % self.mem_size
-        s = self.state_memory[j-self.seq_len+1:j+1]
-        s_ = self.new_state_memory[j-self.seq_len+1:j+1]
-        a = self.action_memory[j-self.seq_len+1:j+1]
-        r = self.reward_memory[j-self.seq_len+1:j+1]
-        d = self.terminal_memory[j-self.seq_len+1:j+1]
+        s = self.state_memory[j:j+self.seq_len]
+        s_ = self.new_state_memory[j:j+self.seq_len]
+        a = self.action_memory[j:j+self.seq_len]
+        r = self.reward_memory[j:j+self.seq_len]
+        d = self.terminal_memory[j:j+self.seq_len]
         return s,s_,a,r,d
 
     def sample_buffer(self, batch_size, replace=True):

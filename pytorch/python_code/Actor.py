@@ -152,7 +152,6 @@ class Actor(NetworkAids):
         ee_nn_args = {'observation_size': 18, 'hidden_size':self.meta_param_size, 'meta_param_size': self.meta_param_size, 'batch_size': self.batch_size, 'num_layers':1, 'lr': self.ee_lr}
         Networks = self.make_DDPG_networks(actor_nn_args, critic_nn_args)
         Networks['ee'] = self.make_EE_networks(ee_nn_args)
-
         return Networks
 
     def update_network_parameters(self, tau = None):
@@ -263,23 +262,22 @@ class Actor(NetworkAids):
             self.networks['target_critic_1'].save_checkpoint(path)
             self.networks['critic_2'].save_checkpoint(path)
             self.networks['target_critic_2'].save_checkpoint(path)
-        
-        if self.intention:
+        if self.attention_intention:
             if self.intention_networks['learning_scheme'] == 'attention':
                 self.intention_networks['attention'].save_checkpoint(path)
-            else:
-                self.intention_network['actor'].save_checkpoint(path)
-                self.intention_network['target_actor'].save_checkpoint(path)
-                if self.intention_network['learning_scheme'] in {'DDPG', 'RDDPG'}:
-                    self.intention_network['critic'].save_checkpoint(path)
-                    self.intention_network['target_critic'].save_checkpoint(path)
-                elif self.intention_network['learning_scheme'] in {'TD3', 'RTD3'}:
-                    self.intention_network['critic_1'].save_checkpoint(path)
-                    self.intention_network['target_critic_1'].save_checkpoint(path)
-                    self.intention_network['critic_2'].save_checkpoint(path)
-                    self.intention_network['target_critic_2'].save_checkpoint(path)
-                if self.intention_network['learning_scheme'] in {'RDDPG', 'RTD3'}:
-                    self.intention_network['ee'].save_checkpoint(path)
+        if self.intention:
+            self.intention_networks['actor'].save_checkpoint(path, self.intention)
+            self.intention_networks['target_actor'].save_checkpoint(path, self.intention)
+            if self.intention_networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
+                self.intention_networks['critic'].save_checkpoint(path, self.intention)
+                self.intention_networks['target_critic'].save_checkpoint(path, self.intention)
+            elif self.intention_networks['learning_scheme'] in {'TD3', 'RTD3'}:
+                self.intention_networks['critic_1'].save_checkpoint(path, self.intention)
+                self.intention_networks['target_critic_1'].save_checkpoint(path, self.intention)
+                self.intention_networks['critic_2'].save_checkpoint(path, self.intention)
+                self.intention_networks['target_critic_2'].save_checkpoint(path, self.intention)
+            if self.recurrent_intention:
+                self.intention_networks['ee'].save_checkpoint(path)
 
     def load_model(self, path):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
@@ -301,23 +299,23 @@ class Actor(NetworkAids):
             self.networks['critic_2'].load_checkpoint(path)
             self.networks['target_critic_2'].load_checkpoint(path)
         
-        if self.intention:
+        if self.attention_intention:
             if self.intention_networks['learning_scheme'] == 'attention':
                 self.intention_networks['attention'].load_checkpoint(path)
-            else:
-                self.intention_network['actor'].load_checkpoint(path)
-                self.intention_network['target_actor'].load_checkpoint(path)
-                if self.intention_network['learning_scheme'] in {'DDPG', 'RDDPG'}:
-                    self.intention_network['critic'].load_checkpoint(path)
-                    self.intention_network['target_critic'].load_checkpoint(path)
-                elif self.intention_network['learning_scheme'] in {'TD3', 'RTD3'}:
-                    self.intention_network['critic_1'].load_checkpoint(path)
-                    self.intention_network['target_critic_1'].load_checkpoint(path)
-                    self.intention_network['critic_2'].load_checkpoint(path)
-                    self.intention_network['target_critic_2'].load_checkpoint(path)
-                if self.intention_network['learning_scheme'] in {'RDDPG', 'RTD3'}:
-                    self.intention_network['ee'].load_checkpoint(path)
-            
+        if self.intention:
+            self.intention_networks['actor'].load_checkpoint(path, self.intention)
+            self.intention_networks['target_actor'].load_checkpoint(path, self.intention)
+            if self.intention_networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
+                self.intention_networks['critic'].load_checkpoint(path, self.intention)
+                self.intention_networks['target_critic'].load_checkpoint(path, self.intention)
+            elif self.intention_networks['learning_scheme'] in {'TD3', 'RTD3'}:
+                self.intention_networks['critic_1'].load_checkpoint(path, self.intention)
+                self.intention_networks['target_critic_1'].load_checkpoint(path, self.intention)
+                self.intention_networks['critic_2'].load_checkpoint(path, self.intention)
+                self.intention_networks['target_critic_2'].load_checkpoint(path, self.intention)
+            if self.recurrent_intention:
+                self.intention_networks['ee'].load_checkpoint(path)
+        
     
 if __name__=='__main__':
     agent_args = {'id':1, 'n_obs':32, 'n_actions':2, 'options_per_action':3, 'n_agents':1, 'n_chars':2, 'meta_param_size':2, 
