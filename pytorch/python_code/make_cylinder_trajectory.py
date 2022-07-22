@@ -132,7 +132,7 @@ for ep in range(len(df_list)):
     ax.add_patch(plt.Circle((4.5, 0), 2, color='black', fill = False, linestyle = '--', linewidth='3'))
     if args.heading:
         for i in range(len(plot_headings)):
-            plt.plot(plot_headings[i][0], plot_headings[i][1], c='b')
+            plt.plot(plot_headings[i][0], plot_headings[i][1], c='green')
     if args.orientation:
         for i in range(len(plot_cyl_angles)):
             plt.plot(plot_cyl_angles[i][0], plot_cyl_angles[i][1], c='k')
