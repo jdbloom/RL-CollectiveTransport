@@ -281,7 +281,7 @@ class Actor(NetworkAids):
 
     def load_model(self, path):
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
-            self.networks['q_eval'].load_model(path)
+            self.networks['q_eval'].load_checkpoint(path)
             #print('-------------------- Weights ------------------')
             #for param in self.q_eval.parameters():
             #    print(param.data)
