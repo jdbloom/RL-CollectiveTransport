@@ -15,6 +15,7 @@ parser.add_argument("--non_convex", default = False, action = "store_true")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--heading", default=False, action = 'store_true')
 parser.add_argument("--orientation", default=False, action='store_true')
+parser.add_argument("--intention", default=False, action='store_true')
 parser.add_argument("--label_1")
 parser.add_argument("--label_2")
 args = parser.parse_args()
@@ -58,6 +59,7 @@ for ep in range(len(df_list)):
     cyl_x_pos = []
     cyl_y_pos = []
     cyl_angle = []
+    intention = []
     cyl_x_pos_2 = []
     cyl_y_pos_2 = []
     pos_gate_x = 0
@@ -70,6 +72,8 @@ for ep in range(len(df_list)):
         cyl_y_pos.append(episode[1]['cyl_y_pos'][t])
         if args.orientation:
             cyl_angle.append(episode[1]['cyl_angle'][t])
+        if args.intention:
+            intention.append(episode[1]['intention_heading'][t])
     if episode_2 is not None:
         for t in range(len(episode_2[1])):
             cyl_x_pos_2.append(episode_2[1]['cyl_x_pos'][t])
@@ -110,6 +114,16 @@ for ep in range(len(df_list)):
             x1 = x0 + math.cos(math.radians(cyl_angle[cyl_angle_index[i]]))
             y1 = y0 + math.sin(math.radians(cyl_angle[cyl_angle_index[i]]))
             plot_cyl_angles.append(((x0, x1), (y0, y1)))
+    if args.intention:
+        intention_freq = 3 #seconds
+        intention_index = np.arange(0, len(intention)-1, intention_freq*10)
+        plot_intention = []
+        for i in range(len(intention_index)):
+            x0 = cyl_x_pos[intention_index[i]]
+            y0 = cyl_y_pos[intention_index[i]]
+            x1 = x0 + math.cos(intention[intention_index[i]]*math.pi + math.pi)
+            y1 = y0 + math.sin(intention[intention_index[i]]*math.pi + math.pi)
+            plot_intention.append(((x0, x1), (y0, y1)))
             
 
     if episode_2 is not None:
@@ -136,6 +150,9 @@ for ep in range(len(df_list)):
     if args.orientation:
         for i in range(len(plot_cyl_angles)):
             plt.plot(plot_cyl_angles[i][0], plot_cyl_angles[i][1], c='k')
+    if args.intention:
+        for i in range(len(plot_intention)):
+            plt.plot(plot_intention[i][0], plot_intention[i][1], c='green')
     plt.text(cyl_x_pos[0]-0.5, cyl_y_pos[0]+1, 'START', fontsize = 20)
     plt.text(4, -0.25, 'GOAL', fontsize=20)
     plt.xlim(-11, 11, 1)

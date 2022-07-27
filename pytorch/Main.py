@@ -32,8 +32,12 @@ parser.add_argument("--port", default = "55555")
 parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
+parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention", default= False, action= 'store_true')
+parser.add_argument("--attention-rl", default=False, action="store_true")
 parser.add_argument("--meta_param_size", default=0, type=int)
+parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
+
 args = parser.parse_args()
 
 recording_path = os.path.join(containing_folder, args.recording_path)
@@ -68,6 +72,9 @@ if not args.no_print:
 Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
+
+if args.share_prox_values:
+    Utility.params['num_obs'] += Utility.params['num_robots']   #need to account for num_robots extra observations
 
 agent_args = {'n_agents':Utility.params['num_robots'],
               'n_obs':Utility.params['num_obs'], 
@@ -128,7 +135,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions'])
 
         if not exp_done:
             time_steps = 0
@@ -171,9 +178,13 @@ while not exp_done:
                 running_reward = []
             else:
                 running_reward = 0
+            
+            for i in range(Utility.params['num_robots']):
+                prox_values = env_observations[i][7:]
+                prox_value = np.sum(prox_values)
+                agent_prox_flags.append(prox_value/24.0)
 
             for i in range(Utility.params['num_robots']):
-                # append env observations and messages in inbox to make agent state
                 if args.independent_learning:
                     running_reward.append(0)
                     if args.intention:
@@ -185,7 +196,10 @@ while not exp_done:
                     if args.intention:
                         agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
                     else: 
-                        agent_state = env_observations[i]
+                        if args.share_prox_values:
+                            agent_state = np.concatenate((env_observations[i], agent_prox_flags))
+                        else:
+                            agent_state = env_observations[i]
 
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
@@ -292,16 +306,13 @@ while not exp_done:
                     r = []
                     agent_prox_flags = []
                     next_object_heading = np.zeros(Utility.params['num_robots'])
-
-                    if args.intention:
-                        for i in range(Utility.params['num_robots']):
+                    
+                    for i in range(Utility.params['num_robots']):
                             prox_values = env_observations[i][7:]
                             prox_value = np.sum(prox_values)              
                             agent_prox_flags.append(prox_value/24.0)
-                            #if prox_value/24 > 0.5:
-                            #    agent_prox_flags.append(1)
-                            #else:
-                            #    agent_prox_flags.append(0)
+
+                    if args.intention:
                         if args.attention:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
@@ -363,7 +374,10 @@ while not exp_done:
                             if args.intention:
                                 new_agent_state= model.make_agent_state(env_observations[i], next_heading_intention[i])
                             else:
-                                new_agent_state = env_observations[i]
+                                if args.share_prox_values:
+                                    new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
+                                else:
+                                    new_agent_state = env_observations[i]
 
                         new_agent_states.append(new_agent_state)
                         if time_steps > 2:
@@ -438,8 +452,9 @@ while not exp_done:
 
                     writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
-                                    obj_stats[5], gate, obstacles, intention_reward, time.time() - episode_start_time, 
-                                    robot_x_pos, robot_y_pos, robot_angle, env_observations, actions_to_take])
+                                    obj_stats[5], gate, obstacles, intention_reward, next_heading_intention[0], 
+                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
+                                    env_observations, actions_to_take])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time
