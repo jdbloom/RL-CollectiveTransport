@@ -74,10 +74,12 @@ Utility.set_obstacles_fields()
 data_file_path = recording_path + '/Data/'
 
 if args.share_prox_values:
-    Utility.params['num_obs'] += Utility.params['num_robots']   #need to account for num_robots extra observations
+    num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
+else:
+    num_obs = Utility.params['num_obs']
 
 agent_args = {'n_agents':Utility.params['num_robots'],
-              'n_obs':Utility.params['num_obs'], 
+              'n_obs':num_obs, 
               'n_actions': Utility.params['num_actions']-1,
               'learning_scheme': args.learning_scheme,
               'options_per_action':3,
