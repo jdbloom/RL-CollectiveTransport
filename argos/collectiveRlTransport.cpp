@@ -78,6 +78,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
+      GetNodeAttribute(t_tree, "use_MME", m_unMME);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -628,6 +629,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
       /* Adding cylinder angle to goal for MME*/
       m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
+      CVector2 cVecCylinder2GoalRotated(cVecCylinder2Goal);
+      cVecCylinder2GoalRotated.Rotate(-cRobotZ);
       // Get the proximity sensor values
       const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
@@ -707,7 +710,153 @@ void CCollectiveRLTransport::PreStep() {
       vecAngleToGoal[i] = pfObs[1];
       vecBaseModel[i] = m_unBaseModel;
    }
+   if(m_unMME){
+      float toRadians = M_PI /180;
+      for (size_t i = 0; i < m_vecRobots.size(); ++i){
+         float rob2goal_mag = m_vecObs[i * m_unNumObs + 0];
+         float rob2goal_dir = (m_vecObs[i * m_unNumObs + 1]) * toRadians;
+         float fLWheel = m_vecObs[i * m_unNumObs + 2];
+         float fRWheel = m_vecObs[i * m_unNumObs + 3];
+         float rob2cyl_mag = m_vecObs[i * m_unNumObs + 4];
+         float rob2cyl_dir = (m_vecObs[i * m_unNumObs + 5]) * toRadians;
+         float cyl2goal_mag = m_vecObs[i * m_unNumObs + 6];  // Add the other one later
+         float cyl2goal_dir = m_vecObjStats[6] * toRadians;
+         float world_size[] = {20,10};
+         float world_size_mag = sqrt(pow(world_size[0], 2) + pow(world_size[1], 2));
+         
+         float rob2goal_vect[] = {rob2goal_mag * cos(rob2goal_dir),rob2goal_mag * sin(rob2goal_dir)};         
+         float rob2cyl_vect[]  = {rob2cyl_mag * cos(rob2cyl_dir),rob2cyl_mag * sin(rob2cyl_dir)};
+         float cyl2goal_vect[] = {cyl2goal_mag * cos(cyl2goal_dir),cyl2goal_mag * sin(cyl2goal_dir)};
+
+         float var0x = rob2goal_vect[0] / world_size[0];    // R2Gv
+         float var0y = rob2goal_vect[1] / world_size[1];    // R2Gv
+         float var1 = rob2goal_mag/world_size_mag;          // R2Gd
+         float var2 = 1/(rob2goal_mag/world_size_mag);      // R2Ginv
+         float var3x = rob2goal_vect[0]/rob2goal_mag;       // R2Gu
+         float var3y = rob2goal_vect[1]/rob2goal_mag;       // R2Gu
+         float var4x = cyl2goal_vect[0]/world_size[0];      // C2Gv
+         float var4y = cyl2goal_vect[1]/world_size[1];      // C2Gv
+         float var5 = (cyl2goal_mag/world_size_mag);        // C2Gd
+         float var6 = 1/(cyl2goal_mag/world_size_mag);      // C2Ginv
+         float var7x = cyl2goal_vect[0]/cyl2goal_mag;       // C2Gu
+         float var7y = cyl2goal_vect[1]/cyl2goal_mag;       // C2Gu
+         float var8x = rob2cyl_vect[0]/world_size[0];       // R2Cv
+         float var8y = rob2cyl_vect[1]/world_size[1];       // R2Cv
+         float var9 = rob2cyl_mag/world_size_mag;           // R2Cd
+         float var10 = 1/(rob2cyl_mag/world_size_mag);      // R2Cinv  
+         float var11x = rob2cyl_vect[0]/rob2cyl_mag;        // R2Cu
+         float var11y = rob2cyl_vect[1]/rob2cyl_mag;        // R2Cu
+         //MME EQN here
+
+         /** MME EQUATION **/
+         // -4.0*R2Cu - 4*R2Ginv+4*R2Gx+54.6
+         // var11 / (-11.27 + var6)
+         float deltaXforce = 2; //-4 * var11x - 4 * var2 + 4 *var3x + 54.6;
+         float deltaYforce = 0; //-4 * var11y - 4 * var2 + 4 *var3y + 54.6;
+         /**              **/
+
+
+         enum TurningMechanism{HARD_TURN,SOFT_TURN,NO_TURN};
+         TurningMechanism turningMechanism = SOFT_TURN;
+         CRadians HardTurnOnAngleThreshold = CRadians(90.0 * toRadians);
+         CRadians SoftTurnOnAngleThreshold = CRadians(15.0 * toRadians);
+         CRadians NoTurnAngleThreshold = CRadians(0.0 * toRadians);
+         float MaxSpeed = 5.0;
+
+         Real deltaRforce = sqrt(pow(deltaXforce,2) + pow(deltaYforce,2));
+         CRadians deltaAngleforce =  CRadians(atan2(deltaYforce,deltaXforce));
+         /* Get the length of the heading vector */
+         Real fHeadingLength = m_vecStats[i * m_unNumStats + 0];
+         CRadians fHeadingDirection = CRadians(m_vecStats[i * m_unNumStats + 1] * toRadians);
+         CVector2 fHeadingVector(fHeadingLength * Cos(fHeadingDirection), fHeadingLength * Sin(fHeadingDirection));
+         CVector2 deltaForce = CVector2(Real(deltaXforce),Real(deltaYforce));
+         // if(deltaForce.Length() < 0){
+         //    deltaForce.Rotate(CRadians(M_PI));
+         // }
+         CVector2 desiredForce = fHeadingVector.operator+(deltaForce);
+         // if(desiredForce.Length() < 0){
+         //    desiredForce.Rotate(CRadians(M_PI));
+         // }
+         printf("desiredForce for robot %ld: %f, %f\n",i,desiredForce.Length(),desiredForce.Angle().GetValue());
+         printf("fHeadingVector: %f, %f\n",fHeadingVector.Length(),fHeadingVector.Angle().GetValue());
+         // printf("rob2goal_vect: %f, %f\n",rob2goal_vect[0],rob2goal_vect[1]);
+         // printf("cyl2goal_vect: %f, %f\n",cyl2goal_vect[0],cyl2goal_vect[1]);
+         
+
+
+         CRadians cHeadingAngle = deltaAngleforce;
+         /* Clamp the speed so that it's not greater than MaxSpeed */
+         Real fBaseWheelSpeed = Min<Real>(desiredForce.Length(), MaxSpeed);
+         /* State transition logic */
+         if(turningMechanism == HARD_TURN) {
+            if(Abs(cHeadingAngle) <= SoftTurnOnAngleThreshold) {
+               turningMechanism = SOFT_TURN;
+            }
+         }
+         if(turningMechanism == SOFT_TURN) {
+            if(Abs(cHeadingAngle) > HardTurnOnAngleThreshold) {
+               turningMechanism = HARD_TURN;
+            }
+            else if(Abs(cHeadingAngle) <= NoTurnAngleThreshold) {
+               turningMechanism = NO_TURN;
+            }
+         }
+         if(turningMechanism == NO_TURN) {
+            if(Abs(cHeadingAngle) > HardTurnOnAngleThreshold) {
+               turningMechanism = HARD_TURN;
+            }
+            else if(Abs(cHeadingAngle) > NoTurnAngleThreshold) {
+               turningMechanism = SOFT_TURN;
+            }
+         }
+         /* Wheel speeds based on current turning state */
+         Real fSpeed1, fSpeed2;
+         switch(turningMechanism) {
+            case NO_TURN: {
+               /* Just go straight */
+               fSpeed1 = fBaseWheelSpeed;
+               fSpeed2 = fBaseWheelSpeed;
+               break;
+            }
+            case SOFT_TURN: {
+               /* Both wheels go straight, but one is faster than the other */
+               Real fSpeedFactor = (HardTurnOnAngleThreshold - Abs(cHeadingAngle)) / HardTurnOnAngleThreshold;
+               fSpeed1 = fBaseWheelSpeed - fBaseWheelSpeed * (1.0 - fSpeedFactor);
+               fSpeed2 = fBaseWheelSpeed + fBaseWheelSpeed * (1.0 - fSpeedFactor);
+               break;
+            }
+            case HARD_TURN: {
+               /* Opposite wheel speeds */
+               fSpeed1 = -MaxSpeed;
+               fSpeed2 =  MaxSpeed;
+               break;
+            }
+         }
+         /* Apply the calculated speeds to the appropriate wheels */
+         Real fLeftWheelSpeed, fRightWheelSpeed;
+         if(cHeadingAngle > CRadians::ZERO) {
+            /* Turn Left */
+            fLeftWheelSpeed  = fSpeed1;
+            fRightWheelSpeed = fSpeed2;
+         }
+         else {
+            /* Turn Right */
+            fLeftWheelSpeed  = fSpeed2;
+            fRightWheelSpeed = fSpeed1;
+         }
+
+         vecLIncrease[i] = fLeftWheelSpeed;
+         vecRIncrease[i] = fRightWheelSpeed;
+         printf("Robot %ld delta wheel speed: %f, %f\n",i,fLeftWheelSpeed,fRightWheelSpeed);
+
+         if(i==3){
+            printf("\n");
+         } 
+      }
+   }
    BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecGripper, vecAngleToGoal, vecBaseModel));
+   // the vecLIncrease and vecRIncrease are always the max speed (hard turn)
+
 }
 
 /****************************************/

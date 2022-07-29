@@ -128,7 +128,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'gate_stats', 'obstacle_stats', 'intention_reward', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions', 'cyl_angle2goal'])
 
         if not exp_done:
             time_steps = 0
@@ -234,7 +234,7 @@ while not exp_done:
                     stats = Utility.parse_stats(msgs[4])
                     robot_stats = Utility.parse_robot_stats(msgs[5])
                     obj_stats = Utility.parse_obj_stats(msgs[6])
-                    import ipdb; ipdb.set_trace()
+                    # import ipdb; ipdb.set_trace()
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
@@ -439,7 +439,7 @@ while not exp_done:
                     writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     gate, obstacles, intention_reward, time.time() - episode_start_time, robot_x_pos, 
-                                    robot_y_pos, robot_angle, env_observations, actions_to_take])
+                                    robot_y_pos, robot_angle, env_observations, actions_to_take, obj_stats[6]])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time

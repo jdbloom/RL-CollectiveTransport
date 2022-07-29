@@ -52,7 +52,9 @@ class Actor(NetworkAids):
             self.recurrent_intention_network_input = self.intention_network_input + self.meta_param_size
 
     def build_networks(self, learning_scheme):
-        if learning_scheme == 'DQN':
+        if learning_scheme == 'None':
+            self.networks = {'learning_scheme':None}
+        elif learning_scheme == 'DQN':
             nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                    'num_ops_per_action':self.options_per_action}
             self.networks = self.build_DQN(nn_args)
@@ -174,8 +176,10 @@ class Actor(NetworkAids):
         if self.networks['learn_step_counter'] % self.replace_target_ctr==0:
             self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
  
-    def choose_action(self, observation, networks, test=False):        
-        if networks['learning_scheme'] in {'DQN', 'DDQN'}:
+    def choose_action(self, observation, networks, test=False): 
+        if networks['learning_scheme'] is None:
+            return 0      
+        elif networks['learning_scheme'] in {'DQN', 'DDQN'}:
             if test or np.random.random()>self.epsilon:
                 actions = self.DQN_DDQN_choose_action(observation, networks)
             else:
@@ -199,6 +203,8 @@ class Actor(NetworkAids):
             raise Exception('[ERROR]: Learning scheme not recognised for action selection ' + networks['learning_scheme'])
     
     def learn(self):
+        if self.networks['learning_scheme'] is None:
+            return
         if self.networks['replay'].mem_ctr < (self.n_agents*self.batch_size + self.batch_size):
                 return
 
@@ -231,6 +237,8 @@ class Actor(NetworkAids):
             self.learn_attention(self.intention_networks)
 
     def store_agent_transition(self, s, a, r, s_, d):
+        if self.networks['learning_scheme'] is None:
+            return
         self.store_transition(s, a, r, s_, d, self.networks)
     
     def store_intention_transition(self, s, a, r, s_, d):
