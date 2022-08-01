@@ -28,7 +28,7 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
-parser.add_argument("--port", default = "55555")
+parser.add_argument("--port", default = "55557")
 parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
@@ -137,7 +137,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions', 'cyl_angle2goal'])
 
         if not exp_done:
             time_steps = 0
@@ -456,7 +456,7 @@ while not exp_done:
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, intention_reward, next_heading_intention[0], 
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
-                                    env_observations, actions_to_take])
+                                    env_observations, actions_to_take, obj_stats[6]])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time

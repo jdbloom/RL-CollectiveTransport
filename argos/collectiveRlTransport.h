@@ -262,6 +262,9 @@ private:
    /** Flag for whether or not to use learning or the base model*/
    UInt32 m_unBaseModel;
 
+   /** Flag for whether or not to use MME*/
+   UInt32 m_unMME;
+
 
 private:
 
