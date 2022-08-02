@@ -126,6 +126,6 @@
           </placements>
         </camera>
       </qt-opengl>
-      -->
+    -->
   </visualization>
 </argos-configuration>

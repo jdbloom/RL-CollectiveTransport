@@ -751,16 +751,16 @@ void CCollectiveRLTransport::PreStep() {
          /** MME EQUATION **/
          // -4.0*R2Cu - 4*R2Ginv+4*R2Gx+54.6
          // var11 / (-11.27 + var6)
-         float deltaXforce = 10; //-4 * var11x - 4 * var2 + 4 *var3x + 54.6;
-         float deltaYforce = 0.4; //-4 * var11y - 4 * var2 + 4 *var3y + 54.6;
+         float deltaXforce = 3; //-4 * var11x - 4 * var2 + 4 *var3x + 54.6;
+         float deltaYforce = 5; //-4 * var11y - 4 * var2 + 4 *var3y + 54.6;
          /**              **/
 
 
          enum TurningMechanism{HARD_TURN,SOFT_TURN,NO_TURN};
          TurningMechanism turningMechanism = SOFT_TURN;
          CRadians HardTurnOnAngleThreshold = CRadians(90.0 * toRadians);
-         CRadians SoftTurnOnAngleThreshold = CRadians(15.0 * toRadians);
-         CRadians NoTurnAngleThreshold = CRadians(0.0 * toRadians);
+         CRadians SoftTurnOnAngleThreshold = CRadians(35.0 * toRadians);
+         CRadians NoTurnAngleThreshold = CRadians(10.0 * toRadians);
          float MaxSpeed = 5.0;
 
          Real deltaRforce = sqrt(pow(deltaXforce,2) + pow(deltaYforce,2));
@@ -811,29 +811,39 @@ void CCollectiveRLTransport::PreStep() {
          }
          /* Wheel speeds based on current turning state */
          Real fSpeed1, fSpeed2;
+         Real fLeftWheelSpeed, fRightWheelSpeed;
          switch(turningMechanism) {
             case NO_TURN: {
-               /* Just go straight */
-               fSpeed1 = fBaseWheelSpeed;
-               fSpeed2 = fBaseWheelSpeed;
+               /* Check if we were turining */
+               if(fLWheel == fRWheel){               
+                  /* Just go straight */
+                  fSpeed1 = 0.1;
+                  fSpeed2 = 0.1;
+               }
+               else{
+                  /* Tell Buzz to set the wheel speeds to 0 by sending a value < -MAX_SPEED*/
+                  fSpeed1  = -20.0;
+                  fSpeed2 = -20.0;
+               }
+
                break;
             }
             case SOFT_TURN: {
                /* Both wheels go straight, but one is faster than the other */
                Real fSpeedFactor = (HardTurnOnAngleThreshold - Abs(cHeadingAngle)) / HardTurnOnAngleThreshold;
-               fSpeed1 = fBaseWheelSpeed - fBaseWheelSpeed * (1.0 - fSpeedFactor);
-               fSpeed2 = fBaseWheelSpeed + fBaseWheelSpeed * (1.0 - fSpeedFactor);
+               fSpeed1 = fBaseWheelSpeed - fBaseWheelSpeed * (1.0 - fSpeedFactor) /10.0;
+               fSpeed2 = fBaseWheelSpeed + fBaseWheelSpeed * (1.0 - fSpeedFactor) /10.0;
                break;
             }
             case HARD_TURN: {
                /* Opposite wheel speeds */
-               fSpeed1 = -MaxSpeed;
-               fSpeed2 =  MaxSpeed;
+               fSpeed1 = -MaxSpeed /10.0;
+               fSpeed2 =  MaxSpeed /10.0;
                break;
             }
          }
          /* Apply the calculated speeds to the appropriate wheels */
-         Real fLeftWheelSpeed, fRightWheelSpeed;
+         
          if(cHeadingAngle > CRadians::ZERO) {
             /* Turn Left */
             fLeftWheelSpeed  = fSpeed1;

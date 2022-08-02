@@ -45,19 +45,28 @@ function step(){
     else{
       #log(id, "Case = 0")
       # Grab R_increase and L_increase from PreStep() in the loopfunctions code.
-      # Make sure R_wheel and L_wheel are within bounds
-      L_wheel = L_wheel + L_increase
-      L_wheel = math.max(math.min(L_wheel, MAX_SPEED), MIN_SPEED)
-      R_wheel = R_wheel + R_increase
-      R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
-      # Set the wheel speeds
-			#log("setting case = 0")
-      set_wheels_debug(L_wheel, R_wheel)
+      # check if we need to set wheels to 0.0 and stop the robot:
+      if(L_increase < -MAX_SPEED){
+        log(id, "Setting Wheels to 0")
+        set_wheels_debug(0.0, 0.0)
+      }
+      else{
+        # Make sure R_wheel and L_wheel are within bounds
+        L_wheel = L_wheel + L_increase
+        L_wheel = math.max(math.min(L_wheel, MAX_SPEED), MIN_SPEED)
+        R_wheel = R_wheel + R_increase
+        R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
+        # Set the wheel speeds
+        #log("setting case = 0")
+        set_wheels_debug(L_wheel, R_wheel)
+      }
     }
   }
   else {
     if (proximity[0].value > 0.6){
-			#log("setting gripping")
+			log("setting gripping")
+			L_wheel = 0.0
+			R_wheel = 0.0
       set_wheels_debug(0.0, 0.0)
       gripper_lock()
       turret_disable()

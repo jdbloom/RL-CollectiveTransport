@@ -53,7 +53,7 @@ class Actor(NetworkAids):
 
     def build_networks(self, learning_scheme):
         if learning_scheme == 'None':
-            self.networks = {'learning_scheme':None}
+            self.networks = {'learning_scheme':None, 'learn_step_counter':0}
         elif learning_scheme == 'DQN':
             nn_args = {'id':self.id, 'lr':self.lr, 'num_actions':self.n_actions, 'observation_size':self.network_input_size,
                    'num_ops_per_action':self.options_per_action}
