@@ -719,7 +719,7 @@ void CCollectiveRLTransport::PreStep() {
          float fRWheel = m_vecObs[i * m_unNumObs + 3];
          float rob2cyl_mag = m_vecObs[i * m_unNumObs + 4];
          float rob2cyl_dir = (m_vecObs[i * m_unNumObs + 5]) * toRadians;
-         float cyl2goal_mag = m_vecObs[i * m_unNumObs + 6];  // Add the other one later
+         float cyl2goal_mag = m_vecObs[i * m_unNumObs + 6]; 
          float cyl2goal_dir = m_vecObjStats[6] * toRadians;
          float world_size[] = {20,10};
          float world_size_mag = sqrt(pow(world_size[0], 2) + pow(world_size[1], 2));
@@ -751,8 +751,8 @@ void CCollectiveRLTransport::PreStep() {
          /** MME EQUATION **/
          // -4.0*R2Cu - 4*R2Ginv+4*R2Gx+54.6
          // var11 / (-11.27 + var6)
-         float deltaXforce = 2; //-4 * var11x - 4 * var2 + 4 *var3x + 54.6;
-         float deltaYforce = 0; //-4 * var11y - 4 * var2 + 4 *var3y + 54.6;
+         float deltaXforce = 10; //-4 * var11x - 4 * var2 + 4 *var3x + 54.6;
+         float deltaYforce = 0.4; //-4 * var11y - 4 * var2 + 4 *var3y + 54.6;
          /**              **/
 
 
