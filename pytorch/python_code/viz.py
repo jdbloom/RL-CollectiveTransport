@@ -100,6 +100,7 @@ print('[STATISTICS] Failures:', len(episode_failure_reward[0]))
 print('[STATISTICS] Avg Exp Reward:', np.average(robot_exp_rewards))
 print('[STATISTICS] Avg Exp Intention Reward:', np.average(robot_exp_intentions))
 #print('[STATISTICS] Best Model:', last_10_axis[0][np.argmax(last_10_rewards[0])])
+print('\n[FAILING EPISODES]', episode_failure_index[0])
 
 
 print('. . . Plotting')
