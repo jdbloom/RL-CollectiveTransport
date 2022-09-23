@@ -44,9 +44,14 @@ class Agent(Actor):
         if self.intention:
             self.build_intention_network('DDPG')
 
-    def make_agent_state(self, env_obs, heading_intention):
-        if self.intention:
-            env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
+    def make_agent_state(self, env_obs, heading_intention=None, global_knowledge=None):
+        if heading_intention is not None:
+            if global_knowledge is not None:
+                env_obs = np.concatenate((env_obs, np.array([heading_intention]), global_knowledge)) 
+            else:
+                env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
+        elif global_knowledge is not None:
+            env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs   
 
     def angle_difference(self, a1, a2):

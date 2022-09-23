@@ -122,8 +122,6 @@ class NetworkAids(Hyperparameters):
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
             s,s_,a,r,d = networks['replay'].get_current_sequence()
-            if len(s) == 0:
-                import ipdb; ipdb.set_trace()
             s,a,s_,r = self.build_initial_ee_input(s,a,s_,r)
             obs_padded = self.build_ee_input(s,a,s_,r).to(networks['ee'].device)
             mp = networks['ee'](obs_padded, True)
