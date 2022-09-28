@@ -76,6 +76,8 @@ data_file_path = recording_path + '/Data/'
 
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
+elif args.global_knowledge:
+    num_obs = Utility.params['num_obs']+(Utility.params['num_robots']-1)*4  #need to account for the x and y positions and the x and y velocitis for each robot
 else:
     num_obs = Utility.params['num_obs']
 
@@ -168,8 +170,9 @@ while not exp_done:
 
             # Store the object stats in agent for learning later
             if args.independent_learning:
-                [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
-                [models[i].reset_intention_sequence()]
+                for i in range(Utility.params['num_robots']):
+                    [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
+                    [models[i].reset_intention_sequence()]
             else:
                 model.store_object_stats(obj_stats, time_steps>2)
                 model.reset_intention_sequence()
@@ -188,17 +191,23 @@ while not exp_done:
                 agent_prox_flags.append(prox_value/24.0)
             
             #Define Global Knowledge: [positions, velocities]
-            global_knowledge=[]
+            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
             for i in range(Utility.params['num_robots']):
-                global_knowledge.append(robot_stats[0:2])           #x,y positions
-                global_knowledge.append(stats[i][2])                #velocity X
-                global_knowledge.append(stats[i][3])                #velocity Y
+                global_knowledge[i*4] = robot_stats[i][0]           #x position
+                global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+                global_knowledge[i*4+2] = stats[i][2]               #velocity X
+                global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
             for i in range(Utility.params['num_robots']):
-                g_knowledge = []
+                g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+                counter = 0
                 for j in range(Utility.params['num_robots']):
                     if i != j:
-                        g_knowledge.append(global_knowledge[j*Utility.params['num_stats']:j*Utility.params['num_stats'] + Utility.params['num_stats']])
+                        g_knowledge[counter*4] = global_knowledge[j*4]
+                        g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                        g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                        g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                        counter+=1
                 if args.independent_learning:
                     running_reward.append(0)
                     if args.intention:
@@ -207,7 +216,7 @@ while not exp_done:
                         else:
                             agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i])
                     else:
-                        if global_knowledge:
+                        if args.global_knowledge:
                             agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
                         else:
                             agent_state = env_observations[i]
@@ -226,7 +235,6 @@ while not exp_done:
                                 agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
                             else:
                                 agent_state = env_observations[i]
-
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
@@ -380,19 +388,24 @@ while not exp_done:
 
 
                     #Define Global Knowledge: [positions, velocities]
-                    global_knowledge=[]
+                    global_knowledge=np.zeros((Utility.params['num_robots'])*4)
                     for i in range(Utility.params['num_robots']):
-                        global_knowledge.append(robot_stats[0:2])           #x,y positions
-                        global_knowledge.append(stats[i][2])                #velocity X
-                        global_knowledge.append(stats[i][3])                #velocity Y
+                        global_knowledge[i*4] = robot_stats[i][0]           #x position
+                        global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+                        global_knowledge[i*4+2] = stats[i][2]               #velocity X
+                        global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
 
                     for i in range(Utility.params['num_robots']):
-                        g_knowledge = []
+                        g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+                        counter = 0
                         for j in range(Utility.params['num_robots']):
                             if i != j:
-                                g_knowledge.append(global_knowledge[j*Utility.params['num_stats']:j*Utility.params['num_stats'] + Utility.params['num_stats']])
-
+                                g_knowledge[counter*4] = global_knowledge[j*4]
+                                g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                                g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                                g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                                counter+=1
                         #print('[DEBUG] ROBOT', i)
                         #reward = rewards[i]
                         #print('[DEBUG] OBS:', env_observations[i])
@@ -412,7 +425,7 @@ while not exp_done:
                                 else:
                                     new_agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i])
                             else:
-                                if global_knowledge:
+                                if args.global_knowledge:
                                     new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
                                 else:
                                     new_agent_state = env_observations[i]
