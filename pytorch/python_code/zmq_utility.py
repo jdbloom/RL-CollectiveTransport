@@ -22,8 +22,8 @@ class ZMQ_Utility:
         self.FAILURE_FMT = '1I'
         self.REWARDS_FIELDS = ['reward']
         self.REWARDS_FMT = '1f'
-        self.STATS_FIELDS = ['magnitude', 'angle']
-        self.STATS_FMT = '2f'
+        self.STATS_FIELDS = ['magnitude', 'angle', 'deltaX', 'deltaY']
+        self.STATS_FMT = '4f'
         self.ROBOT_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.ROBOT_STATS_FMT = '6f'
         self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'cyl_angle2goal']

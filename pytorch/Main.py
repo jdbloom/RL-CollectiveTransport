@@ -29,11 +29,12 @@ parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--port", default = "55555")
-parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
+parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
+parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
-parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention", default= False, action= 'store_true')
+parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention-rl", default=False, action="store_true")
 parser.add_argument("--meta_param_size", default=0, type=int)
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
@@ -75,6 +76,8 @@ data_file_path = recording_path + '/Data/'
 
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
+elif args.global_knowledge:
+    num_obs = Utility.params['num_obs']+(Utility.params['num_robots']-1)*4  #need to account for the x and y positions and the x and y velocitis for each robot
 else:
     num_obs = Utility.params['num_obs']
 
@@ -167,8 +170,9 @@ while not exp_done:
 
             # Store the object stats in agent for learning later
             if args.independent_learning:
-                [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
-                [models[i].reset_intention_sequence()]
+                for i in range(Utility.params['num_robots']):
+                    [models[i].store_object_stats(obj_stats, time_steps>2) for i in range(Utility.params['num_robots'])]
+                    [models[i].reset_intention_sequence()]
             else:
                 model.store_object_stats(obj_stats, time_steps>2)
                 model.reset_intention_sequence()
@@ -185,24 +189,52 @@ while not exp_done:
                 prox_values = env_observations[i][7:]
                 prox_value = np.sum(prox_values)
                 agent_prox_flags.append(prox_value/24.0)
+            
+            #Define Global Knowledge: [positions, velocities]
+            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
+            for i in range(Utility.params['num_robots']):
+                global_knowledge[i*4] = robot_stats[i][0]           #x position
+                global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+                global_knowledge[i*4+2] = stats[i][2]               #velocity X
+                global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
             for i in range(Utility.params['num_robots']):
+                g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+                counter = 0
+                for j in range(Utility.params['num_robots']):
+                    if i != j:
+                        g_knowledge[counter*4] = global_knowledge[j*4]
+                        g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                        g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                        g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                        counter+=1
                 if args.independent_learning:
                     running_reward.append(0)
                     if args.intention:
-                        agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
+                        if args.global_knowledge:
+                            agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i], global_knowledge=g_knowledge) 
+                        else:
+                            agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i])
                     else:
-                        agent_state = env_observations[i]
+                        if args.global_knowledge:
+                            agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                        else:
+                            agent_state = env_observations[i]
                         
                 else:
                     if args.intention:
-                        agent_state = model.make_agent_state(env_observations[i], next_heading_intention[i])
+                        if args.global_knowledge:
+                            agent_state = model.make_agent_state(env_observations[i], heading_intention=next_heading_intention[i], global_knowledge=g_knowledge)
+                        else:
+                            agent_state = model.make_agent_state(env_observations[i], heading_intention=next_heading_intention[i])
                     else: 
                         if args.share_prox_values:
                             agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                         else:
-                            agent_state = env_observations[i]
-
+                            if args.global_knowledge:
+                                agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
+                            else:
+                                agent_state = env_observations[i]
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
@@ -355,7 +387,25 @@ while not exp_done:
                                     model.store_intention_transition(state, action, reward, new_state, 0)
 
 
+                    #Define Global Knowledge: [positions, velocities]
+                    global_knowledge=np.zeros((Utility.params['num_robots'])*4)
                     for i in range(Utility.params['num_robots']):
+                        global_knowledge[i*4] = robot_stats[i][0]           #x position
+                        global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+                        global_knowledge[i*4+2] = stats[i][2]               #velocity X
+                        global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+
+
+                    for i in range(Utility.params['num_robots']):
+                        g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+                        counter = 0
+                        for j in range(Utility.params['num_robots']):
+                            if i != j:
+                                g_knowledge[counter*4] = global_knowledge[j*4]
+                                g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                                g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                                g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                                counter+=1
                         #print('[DEBUG] ROBOT', i)
                         #reward = rewards[i]
                         #print('[DEBUG] OBS:', env_observations[i])
@@ -367,19 +417,33 @@ while not exp_done:
                         rewards[i] += (-1)*prox_value
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
+
                         if args.independent_learning:
                             if args.intention:
-                                new_agent_state = models[i].make_agent_state(env_observations[i], next_heading_intention[i])
+                                if args.global_knowledge:
+                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i], global_knowledge=g_knowledge) 
+                                else:
+                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_intention = next_heading_intention[i])
                             else:
-                                new_agent_state = env_observations[i]
+                                if args.global_knowledge:
+                                    new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                                else:
+                                    new_agent_state = env_observations[i]
+                                
                         else:
                             if args.intention:
-                                new_agent_state= model.make_agent_state(env_observations[i], next_heading_intention[i])
-                            else:
+                                if args.global_knowledge:
+                                    new_agent_state = model.make_agent_state(env_observations[i], heading_intention=next_heading_intention[i], global_knowledge=g_knowledge)
+                                else:
+                                    new_agent_state = model.make_agent_state(env_observations[i], heading_intention=next_heading_intention[i])
+                            else: 
                                 if args.share_prox_values:
                                     new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                                 else:
-                                    new_agent_state = env_observations[i]
+                                    if args.global_knowledge:
+                                        new_agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
+                                    else:
+                                        new_agent_state = env_observations[i]
 
                         new_agent_states.append(new_agent_state)
                         if time_steps > 2:

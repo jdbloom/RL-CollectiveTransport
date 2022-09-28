@@ -84,7 +84,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_fFootbotWheelRadius = 0.029112741; // m
 
       /* Stats to be sent to Data: Force vector (direction and magnitude) for every robot*/
-      m_unNumStats = 2;
+      m_unNumStats = 4;
       /*
        * Connect to PyTorch
        */
@@ -852,6 +852,8 @@ void CCollectiveRLTransport::CalculateRobotStats(){
 
      m_vecStats[i * m_unNumStats + 0] = magnitude;
      m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
+     m_vecStats[i * m_unNumStats + 2] = deltaX;
+     m_vecStats[i * m_unNumStats + 3] = deltaY;
    }
 }
 

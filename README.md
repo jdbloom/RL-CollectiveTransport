@@ -119,4 +119,4 @@ To test using the gate, set `use_gate = "1"` and `gate_curriculum = "0"` this wi
     - Develop a working solution for the Cluster (optional)
 --------------------------------------------------------------------------------
 **Partially formed projects**
-- Explore Attention???
+- Explore Attention??
