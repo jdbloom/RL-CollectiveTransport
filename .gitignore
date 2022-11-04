@@ -2,6 +2,7 @@ build
 /pytorch/python_code/Data/*
 /pytorch/python_code/__pycache__/*
 pytorch/__pycache__
+pytorch/python_code/rec_dir/*
 #*~ excludes emacs auto-gen'd backup files
 *~
 # The below file is now auto generated

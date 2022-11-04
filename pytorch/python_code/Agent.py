@@ -145,7 +145,7 @@ class Agent(Actor):
         return np.array([l_wheel, r_wheel, 0])
         
 
-    def choose_object_intention(self, positions, agent_prox_flags, test = False):
-        observation = np.append(np.array(positions), np.array(agent_prox_flags))
+    def choose_object_intention(self, agent_prox_flags, test = False):
+        observation = np.array(agent_prox_flags)
         return self.choose_action(observation, self.intention_networks, test)        
 

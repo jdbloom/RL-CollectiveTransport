@@ -140,7 +140,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'w') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_actions'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'robot_failures', 'env_observations', 'agent_actions'])
 
         if not exp_done:
             time_steps = 0
@@ -162,6 +162,7 @@ while not exp_done:
             obj_stats = Utility.parse_obj_stats(msgs[6])
 
             object_positions.append([obj_stats[0], obj_stats[1]])
+            old_cyl_ang = obj_stats[5]
 
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
@@ -186,9 +187,12 @@ while not exp_done:
                 running_reward = 0
             
             for i in range(Utility.params['num_robots']):
-                prox_values = env_observations[i][7:]
-                prox_value = np.sum(prox_values)
-                agent_prox_flags.append(prox_value/24.0)
+                if failures[i][0]:
+                    agent_prox_flags.append(0)
+                else:
+                    prox_values = env_observations[i][7:]
+                    prox_value = np.sum(prox_values)
+                    agent_prox_flags.append(prox_value/24.0)
             
             #Define Global Knowledge: [positions, velocities]
             global_knowledge=np.zeros((Utility.params['num_robots'])*4)
@@ -259,6 +263,10 @@ while not exp_done:
                     actions = []
                     actions_to_take = []
                     time_steps += 1
+                    robot_failures = []
+
+                    if time_steps > 100:
+                        failures[1] = 1
 
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
@@ -302,27 +310,33 @@ while not exp_done:
                     label = 0
                     ############################## INTENTION REWARD ##############################################
                     if args.intention:
-                        if len(object_positions) > 2:
-                            object_positions.pop(0)
-
-                            last_object_heading = math.atan2((object_positions[0][1] - object_positions[1][1]), (object_positions[0][0] - object_positions[1][0]))
-                            x1 = math.cos(last_object_heading)
-                            y1 = math.sin(last_object_heading)
-                            label = last_object_heading
-                            for i in range(Utility.params['num_robots']):
+                        # shift to get between 0 and 2 Pi
+                        old_cyl_ang += math.pi
+                        new_cyl_ang = obj_stats[5] + math.pi
+                        # check edge wrap at 0
+                        if old_cyl_ang < math.pi and new_cyl_ang > math.pi:
+                            diff = old_cyl_ang - new_cyl_ang + 2*math.pi
+                        # check edge wrap at 2 pi
+                        elif old_cyl_ang < math.pi and new_cyl_ang < math.pi:
+                            diff = new_cyl_ang - old_cyl_ang + 2*math.pi
+                        # otherwise we are not wrapping
+                        else:
+                            diff = old_cyl_ang - new_cyl_ang
+                        label=diff
+                        x1 = math.cos(diff)
+                        y1 = math.sin(diff)                        
+                        for i in range(Utility.params['num_robots']):
                                 x2 = math.cos(next_heading_intention[i] * math.pi)
                                 y2 = math.sin(next_heading_intention[i] * math.pi)
 
-                                diff = np.dot([x1, y1], [x2, y2])
-                                intention_reward.append(-1 + diff)
+                                error = np.dot([x1, y1], [x2, y2])
+                                intention_reward.append(-1 + error)
                                 episode_intention_rewards[i] += intention_reward[i]
-
-                        else:
-                            intention_reward = [0 for i in range(Utility.params['num_robots'])]
 
                     else:
                         intention_reward = [0 for i in range(Utility.params['num_robots'])]
-
+                    
+                    old_cyl_ang = obj_stats[5]
 
                     # store object stats for learning later
                     if args.independent_learning:
@@ -333,6 +347,7 @@ while not exp_done:
 
                     # Store Transitions and Learn
                     old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
+                    old_heading_intention = copy.deepcopy(next_heading_intention)
 
                     new_agent_states = []
                     force_mags = []
@@ -342,6 +357,10 @@ while not exp_done:
                     next_object_heading = np.zeros(Utility.params['num_robots'])
                     
                     for i in range(Utility.params['num_robots']):
+                        robot_failures.append(failures[i][0])
+                        if failures[i][0]:
+                            agent_prox_flags.append(0)
+                        else:
                             prox_values = env_observations[i][7:]
                             prox_value = np.sum(prox_values)              
                             agent_prox_flags.append(prox_value/24.0)
@@ -350,41 +369,44 @@ while not exp_done:
                         if args.attention:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
-                                    import ipdb; ipdb.set_trace()
                                     # Check the syntax on object positions to make sure we are giving an X and Y
-                                    next_object_heading[i] = models[i].choose_object_intention(object_positions[-1], agent_prox_flags, test_mode)
+                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(object_positions[-1], agent_prox_flags, test_mode)
+                                ctde_intention = model.choose_object_intention(agent_prox_flags, test_mode)
                                 for i in range(Utility.params['num_robots']):
                                     next_heading_intention[i] = ctde_intention
 
-                        elif len(object_positions) == 2:
+                        else:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
-                                    next_object_heading[i] = models[i].choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(object_positions, agent_prox_flags, test_mode)
+                                ctde_intention = model.choose_object_intention(agent_prox_flags, test_mode)
                                 for i in range(Utility.params['num_robots']):
                                     next_heading_intention[i] = ctde_intention
                         #store transitions of intentions
                         if args.attention:
                             if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions[-1]).flatten(), agent_prox_flags), label, 0, 0, 0)
+                                    models[i].store_intention_transition(agent_prox_flags, label, 0, 0, 0)
                             else:
-                                model.store_intention_transition(np.append(np.array(old_object_positions[-1]).flatten(), agent_prox_flags), label, 0, 0, 0)
+                                model.store_intention_transition(agent_prox_flags, label, 0, 0, 0)
 
-                        elif len(old_object_positions) == 2:
-                            for i in range(Utility.params['num_robots']):
-                                if args.independent_learning:
-                                    models[i].store_intention_transition(np.append(np.array(old_object_positions).flatten(), agent_prox_flags), next_heading_intention[i], intention_reward[i], np.append(object_positions, old_agent_prox_flags),0)
-                                else:
-                                    state = np.append(np.array(old_object_positions).flatten(), agent_prox_flags)
-                                    action = next_heading_intention[i]
-                                    reward = intention_reward[i]
-                                    new_state = np.append(object_positions, old_agent_prox_flags)
-                                    model.store_intention_transition(state, action, reward, new_state, 0)
+                        
+                        for i in range(Utility.params['num_robots']):
+                            if args.independent_learning:
+                                state = np.array(old_agent_prox_flags)
+                                action = old_heading_intention[i]
+                                reward = intention_reward[i]
+                                new_state = np.array(agent_prox_flags)
+                                models[i].store_intention_transition(state, action, reward, new_state, 0)
+                            else:
+                                state = np.array(old_agent_prox_flags)
+                                action = old_heading_intention[i]
+                                reward = intention_reward[i]
+                                new_state = np.array(agent_prox_flags)
+                                model.store_intention_transition(state, action, reward, new_state, 0)
 
 
                     #Define Global Knowledge: [positions, velocities]
@@ -515,12 +537,11 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-
                     writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, intention_reward, next_heading_intention[0], 
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
-                                    env_observations, actions_to_take])
+                                    robot_failures, env_observations, actions_to_take])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time
