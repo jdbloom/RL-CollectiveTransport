@@ -22,8 +22,8 @@ Utility = zmq_utility.ZMQ_Utility()
 containing_folder = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("recording_path")
-parser.add_argument("--learning_scheme")
+parser.add_argument("--recording_path",default = "/home/amey/Downloads/RL-CollectiveTransport/pytorch/recording_folder")
+parser.add_argument("--learning_scheme",default = " ")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
@@ -116,6 +116,7 @@ socket.send(b"ok")
 #######################################################################
 #                           MAIN LOOP
 #######################################################################
+print("starting m loop")
 exp_done = False
 ep_counter = 0
 exp_rewards = []
@@ -136,9 +137,10 @@ obstacle_stats = 0
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
+    print("msgs",msgs)
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
-    with open(data_file_path+data_file_name, 'w') as output:
+    with open(data_file_path+data_file_name, 'a+') as output:
         writer = csv.writer(output, delimiter = ',')
         writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'robot_failures', 'env_observations', 'agent_actions'])
 
