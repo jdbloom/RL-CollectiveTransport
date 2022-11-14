@@ -163,6 +163,8 @@ while not exp_done:
             object_positions.append([obj_stats[0], obj_stats[1]])
             old_cyl_ang = obj_stats[5]
 
+            print('[ROBOT 0 DIST]: ', env_observations[0][4])
+
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
             elif Utility.params['use_gate'] == 1:
@@ -289,7 +291,7 @@ while not exp_done:
                     stats = Utility.parse_stats(msgs[4])
                     robot_stats = Utility.parse_robot_stats(msgs[5])
                     obj_stats = Utility.parse_obj_stats(msgs[6])
-                    
+                    print('[ROBOT 0 DIST]: ', env_observations[0][4])
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
