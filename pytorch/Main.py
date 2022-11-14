@@ -22,8 +22,8 @@ Utility = zmq_utility.ZMQ_Utility()
 containing_folder = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--recording_path",default = "/home/amey/Downloads/RL-CollectiveTransport/pytorch/recording_folder")
-parser.add_argument("--learning_scheme",default = " ")
+parser.add_argument("recording_path")
+parser.add_argument("--learning_scheme",default = 'None')
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
@@ -108,8 +108,6 @@ else:
         model.load_model(model_file_path)
 
 
-
-
 # Send acknowledgment
 socket.send(b"ok")
 
@@ -137,7 +135,6 @@ obstacle_stats = 0
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
-    print("msgs",msgs)
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'a+') as output:
@@ -494,7 +491,7 @@ while not exp_done:
                     #for i in range(Utility.params['num_robots']):
                     #    print('[DEBUG] robot %i memory:'%i, message_memory[i])
 
-                    if train_mode:
+                    if train_mode and args.learning_scheme != 'None':
                         if args.independent_learning:
                             for i in range(Utility.params['num_robots']):
                                 loss = models[i].learn()

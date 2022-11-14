@@ -25,7 +25,6 @@ class Agent(Actor):
         super().__init__(**args)
 
         self.learning_scheme = learning_scheme
-
         self.object_stats = []
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
         self.max_obj_stats = np.zeros(4)
