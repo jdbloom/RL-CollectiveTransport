@@ -136,7 +136,7 @@ class NetworkAids(Hyperparameters):
                                            size = (n_actions,))
                           ).to(networks['actor'].device)
         else:
-            state = T.tensor(observation, dtype = T.float).to(self.networks['actor'].device)
+            state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
             mu = networks['actor'].forward(state).to(networks['actor'].device)
         mu_prime = mu + T.tensor(np.random.normal(scale = self.noise), dtype = T.float).to(networks['actor'].device)
         mu_prime = T.clamp(mu_prime, -self.min_max_action, self.min_max_action)
