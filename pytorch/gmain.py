@@ -241,6 +241,7 @@ while not exp_done:
                         model_name = f"trained_gat_dqn_{current_time}.pth"
                         save_path = os.path.join(models_dir,model_name)
                         torch.save(agent.qnetwork_local.state_dict(), save_path)
+                    socket.send(b"ok")
 
 
 
