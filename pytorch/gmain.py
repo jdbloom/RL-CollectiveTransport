@@ -86,19 +86,19 @@ def build_sensorvalues(env_observations, edge_index):
 
 def build_sensorvalues1(env_observations,edge_index):
     agent_prox_flags = []
-    print("Utility.params['num_robots']",Utility.params['num_robots'])
+    #print("Utility.params['num_robots']",Utility.params['num_robots'])
     for i in range(Utility.params['num_robots']):
         prox_values = env_observations[i][7:]
         #print("prox_values",prox_values)
                             # Add logic to filter prox values that are observing the object
         prox_values, filtered_indeces = filter_prox_values(prox_values, env_observations[i][5])
-        print("filtered_indeces",np.shape(filtered_indeces))
-        print("prox_values",np.shape(prox_values))
+        #print("filtered_indeces",np.shape(filtered_indeces))
+        #print("prox_values",np.shape(prox_values))
         for j in range(len(filtered_indeces)):
             env_observations[i][7+filtered_indeces[j]] = 0.0
             prox_value = np.sum(prox_values)
             agent_prox_flags.append(prox_value)
-    print("agent_prox_flags",agent_prox_flags)
+    #print("agent_prox_flags",agent_prox_flags)
     proximity_values = torch.tensor(agent_prox_flags, dtype=torch.float).view(-1, 1)
     #print("proxvals",proximity_values)
     data = Data(x=proximity_values,edge_index=edge_index)
@@ -109,7 +109,7 @@ def build_sensorvalues1(env_observations,edge_index):
 
 Utility = zmq_utility.ZMQ_Utility()
 
-data_dir = "gdata"
+data_dir = "python_code/Data/GNN/GNN_Baseline/"
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
 
@@ -170,6 +170,7 @@ while not exp_done:
     current_time = time.strftime("%Y%m%d-%H%M%S")
     data_file_name = 'Data_Episode_'+str(current_time)+str(ep_counter)+'.csv'
     output_file = os.path.join(data_file_path, data_file_name)
+    exp_reward = []
     with open(output_file, 'w') as output:
         writer = csv.writer(output, delimiter=',')
         writer.writerow(['reward', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'run_time', 'robots_x_pos', 'robots_y_pos','robot_angle', 'env_observations', 'agent_actions'])
@@ -190,6 +191,7 @@ while not exp_done:
             gate_stats = Utility.parse_gate_stats(msgs[7])
         #env.reset
         time_step = 0
+        episode_reward = 0
      #start episode loop
         episode_start_time = time.time()
         while not episode_done:#episode loop
@@ -197,6 +199,7 @@ while not exp_done:
                 #print("x (node features) shape:\n", init_data.x.shape)
                 #print("edge_index shape before act:", edge_index.shape)
                 actions = agent.act(init_data.x, init_data.edge_index,0.1)
+ 
                 #print("actions in act ----", actions.shape)
                 action_numbers = np.argmax(actions ,axis=1)
                 wheel_speeds = [agent.parse_actions(action_num) for action_num in action_numbers]
@@ -225,6 +228,7 @@ while not exp_done:
                 #print("edge_index shape befire step:", edge_index.shape)
                 new_data = build_sensorvalues(env_observations,edge_index)
                 reward = agent.build_reward(cyl_dist_goal,prev_cyl_dist_goal,robot_positions, obstacle_stats, time_step,obj_pos,0.5)
+                episode_reward += reward
                 loss = agent.step(init_data.x,actions,reward,new_data.x,episode_done,edge_index)
                 init_data = new_data
                 prev_cyl_dist_goal = cyl_dist_goal
@@ -232,8 +236,12 @@ while not exp_done:
                 writer.writerow([reward, reached_goal, loss,obj_stats[0], obj_stats[1],obj_stats[5], time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, env_observations, actions])
             
                 if episode_done:
-                    print("episod_done,",ep_counter)
+                    print("episode",ep_counter, episode_reward)
+                    exp_reward.append(episode_reward)
+                    ep_counter+=1
                     if ep_counter % 10 == 0:
+                        print("------------------------------------------")
+                        print("last 10 episode reward", np.average(exp_reward[ep_counter-10:ep_counter]))
                         current_time = time.strftime("%Y%m%d-%H%M%S")
                         models_dir = "gmodels"
                         if not os.path.exists(models_dir):

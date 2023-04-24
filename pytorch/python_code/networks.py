@@ -613,10 +613,9 @@ class SharedGATDQNAgent:
     def act(self, joint_state, edge_index, eps=0.):
         #print("joint_state shape:", joint_state.shape)
         if random.random() > eps:
-            joint_state = T.tensor(joint_state, dtype=T.float).to(device)
             self.qnetwork_local.eval()
             with T.no_grad():
-                action_values = self.qnetwork_local(joint_state, edge_index)
+                action_values = self.qnetwork_local(joint_state.to(device), edge_index)
             self.qnetwork_local.train()
             return action_values.cpu().data.numpy()
         else:
@@ -630,7 +629,7 @@ class SharedGATDQNAgent:
 
     def learn(self, experiences):
         states, actions, rewards, next_states, dones, edge_indices = zip(*experiences)
-        
+
         #print("States tuple:", np.shape(states))
 
         # for idx, state in enumerate(states):
@@ -638,16 +637,15 @@ class SharedGATDQNAgent:
 
         # for idx, action in enumerate(actions):
         #     print(f"Action {idx} shape: {action.shape}, type: {action.dtype}")
-
-        states = T.stack([T.tensor(state, dtype=T.float).to(device) for state in states], dim=0)
-
+        states = T.stack([state.to(device) for state in states], dim=0)
+        
         #print("actionsbef", np.shape(actions))
-        actions = T.tensor(actions, dtype=T.long).view(-1, self.num_actions).to(device)
-
+        actions = np.argmax(np.reshape(np.array(actions),(-1, self.num_actions)), axis=1)
+        indices = T.LongTensor(np.arange(actions.shape[0]).astype(np.long))
 
         rewards = T.tensor(rewards, dtype=T.float).to(device)
-        next_states = T.stack([T.tensor(next_state, dtype=T.float).to(device) for next_state in next_states], dim=0)
-        dones = T.tensor(dones, dtype=T.float).to(device)
+        next_states = T.stack([next_state.to(device) for next_state in next_states], dim=0)
+        dones = T.tensor(dones, dtype=T.long).to(device)
         edge_indices = T.stack(edge_indices, dim=0).view(2, -1).to(device)
 
 
@@ -659,7 +657,7 @@ class SharedGATDQNAgent:
 
         Q_targets_next = self.qnetwork_target(next_states, edge_indices).detach().max(1)[0].unsqueeze(1)
 
-        print("Q_targets_next",Q_targets_next.shape)
+        #print("Q_targets_next",Q_targets_next.shape)
 
         # Compute Q targets for current states
         rewards = rewards.view(-1, 1).repeat(self.num_robots, 1)
@@ -674,14 +672,13 @@ class SharedGATDQNAgent:
         Q_targets = rewards + (self.gamma * Q_targets_next * (1 - dones))
 
         #print("Q_targets",Q_targets.shape)
-
-        Q_expected = self.qnetwork_local(states, edge_indices).gather(1, actions)
+        Q_expected = self.qnetwork_local(states, edge_indices)[indices, actions]
 
         #print("Q_expected",Q_expected.shape)
 
 
         # Compute loss
-        loss = F.mse_loss(Q_expected, Q_targets)
+        loss = F.mse_loss(Q_expected.unsqueeze(1), Q_targets)
 
         # Minimize the loss
         self.optimizer.zero_grad()
@@ -690,6 +687,8 @@ class SharedGATDQNAgent:
 
         # Update target network
         self.soft_update(self.qnetwork_local, self.qnetwork_target)
+
+        return loss.item()
 
 
     def soft_update(self,local_model,target_model,tau=1e-3):
