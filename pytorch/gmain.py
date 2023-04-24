@@ -154,6 +154,7 @@ edge_index = torch.tensor([
 
 edge_index = edge_index.to(device)
 
+exp_reward = []
 
 exp_done = False
 ep_counter = 0
@@ -168,9 +169,8 @@ while not exp_done:
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
     #print("episode no:",ep_counter)
     current_time = time.strftime("%Y%m%d-%H%M%S")
-    data_file_name = 'Data_Episode_'+str(current_time)+str(ep_counter)+'.csv'
+    data_file_name = 'Data/Data_Episode_'+str(ep_counter)+'.csv'
     output_file = os.path.join(data_file_path, data_file_name)
-    exp_reward = []
     with open(output_file, 'w') as output:
         writer = csv.writer(output, delimiter=',')
         writer.writerow(['reward', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'run_time', 'robots_x_pos', 'robots_y_pos','robot_angle', 'env_observations', 'agent_actions'])
@@ -239,6 +239,13 @@ while not exp_done:
                     print("episode",ep_counter, episode_reward)
                     exp_reward.append(episode_reward)
                     ep_counter+=1
+                    index = np.linspace(0, len(exp_reward), len(exp_reward))
+                    plt.clf()
+                    plt.scatter(index, exp_reward, c='b')
+                    plt.title('GNN Baseline')
+                    plt.xlabel('Episodes')
+                    plt.ylabel('Rewards')
+                    plt.savefig(data_dir+'Exp_Reward_Plot.png')
                     if ep_counter % 10 == 0:
                         print("------------------------------------------")
                         print("last 10 episode reward", np.average(exp_reward[ep_counter-10:ep_counter]))
