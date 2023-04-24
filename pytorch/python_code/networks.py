@@ -673,11 +673,11 @@ class SharedGATDQNAgent:
 
         Q_targets = rewards + (self.gamma * Q_targets_next * (1 - dones))
 
-        print("Q_targets",Q_targets.shape)
+        #print("Q_targets",Q_targets.shape)
 
         Q_expected = self.qnetwork_local(states, edge_indices).gather(1, actions)
 
-        print("Q_expected",Q_expected.shape)
+        #print("Q_expected",Q_expected.shape)
 
 
         # Compute loss
