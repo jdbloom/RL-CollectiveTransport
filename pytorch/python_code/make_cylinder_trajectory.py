@@ -192,7 +192,7 @@ for ep in range(len(df_list)):
     ax.add_patch(plt.Circle((cyl_x_pos[-1], cyl_y_pos[-1]), 0.5, facecolor = 'lightgray', edgecolor='black'))
     if episode_2 is not None:
         ax.add_patch(plt.Circle((cyl_x_pos_2[-1], cyl_y_pos_2[-1]), 0.5, facecolor = 'lightgray', edgecolor='black'))
-    ax.add_patch(plt.Circle((4.5, 0), 2, color='black', fill = False, linestyle = '--', linewidth='3'))
+    ax.add_patch(plt.Circle((4.5, 0), 2, color='black', fill = False, linestyle = '--', linewidth=3.0))
     if args.heading:
         for i in range(len(plot_headings)):
             plt.plot(plot_headings[i][0], plot_headings[i][1], c='k')

@@ -557,6 +557,13 @@ class SharedGATDQNAgent:
         self.gamma = gamma
         self.num_robots = num_robots
         self.num_actions = num_actions
+        self.epsilon = 1
+        self.epsilon_decay = 1e-5
+        self.epsilon_min = 0.01
+        self.options_per_action = 3
+        self.n_actions = 2
+        self.learn_step_counter = 0
+        self.replace_target_ctr = 1000
         #summary(self.qnetwork_local,(32,4,18))
 
 
@@ -571,20 +578,33 @@ class SharedGATDQNAgent:
             experiences = random.sample(self.memory,k=self.batch_size)
             loss = self.learn(experiences)
             return loss
+        return 0
 
-    def parse_actions(self,action_num):
-        options_per_action = 3
-        n_actions = 2
-        if action_num < 0 or action_num > options_per_action ** n_actions-1:
-            raise Exception('Action Number Out of Range:' + str(action_num))
-        l_wheel = round((math.floor(action_num / options_per_action) - 1) / 10.0, 1)
-        r_wheel = round((action_num % options_per_action - 1) / 10.0, 1)
+    def parse_actions(self, action_num):
+        '''
+        This function will parse the number action to
+        a set of wheel actions:
+
+        0 - (- 1,-1)
+        1 - (-1, 0)
+        2 - (-1, 1)
+        3 - (0, -1)
+        4 - (0, 0)
+        5 - (0, 1)
+        6 - (1, -1)
+        7 - (1, 0)
+        8 - (1, 1)
+        '''
+        if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
+            raise Exception('Action Number Out of Range:'+str(action_num))
+        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
+        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
+        # Trailing zero is hardcoded control for gripper
         return np.array([l_wheel, r_wheel, 0])
 
     def build_reward(self,cyl_dist_goal, prev_cyl_dist_goal, robot_positions, obstacle_positions, time_step,obj_pos,object_radius):
         threshold = 0.2
         object_threshold = 0.2
-        progress_reward = prev_cyl_dist_goal - cyl_dist_goal
 
         if obstacle_positions != 0:
             obstacle_penalty = 0
@@ -602,32 +622,33 @@ class SharedGATDQNAgent:
         time_penalty = -1
 
         if obstacle_positions == 0:
-            total_reward = progress_reward + time_penalty
+            total_reward = time_penalty
         else:
-            total_reward = progress_reward + obstacle_penalty + time_penalty
+            total_reward = obstacle_penalty + time_penalty
 
 
         #total_reward = progress_reward + obstacle_penalty + time_penalty
         return total_reward
 
-    def act(self, joint_state, edge_index, eps=0.):
+    def act(self, joint_state, edge_index):
         #print("joint_state shape:", joint_state.shape)
-        if random.random() > eps:
+        self.epsilon -= self.epsilon_decay
+        if self.epsilon < self.epsilon_min:
+            self.epsilon = self.epsilon_min
+        if random.random() > self.epsilon:
             self.qnetwork_local.eval()
             with T.no_grad():
                 action_values = self.qnetwork_local(joint_state.to(device), edge_index)
             self.qnetwork_local.train()
             return action_values.cpu().data.numpy()
         else:
-            random_action_numbers = np.random.randint(0, self.num_actions, size=self.num_robots)
-
-            # Convert random action numbers to one-hot encoded action_values
-            random_action_values = np.eye(self.num_actions)[random_action_numbers]
+            random_action_values = np.random.random((self.num_robots, self.num_actions))
             return random_action_values
 
     
 
     def learn(self, experiences):
+        self.learn_step_counter+=1
         states, actions, rewards, next_states, dones, edge_indices = zip(*experiences)
 
         #print("States tuple:", np.shape(states))
@@ -686,7 +707,8 @@ class SharedGATDQNAgent:
         self.optimizer.step()
 
         # Update target network
-        self.soft_update(self.qnetwork_local, self.qnetwork_target)
+        if self.learn_step_counter % self.replace_target_ctr==0:
+            self.qnetwork_target.load_state_dict(self.qnetwork_local.state_dict())
 
         return loss.item()
 
