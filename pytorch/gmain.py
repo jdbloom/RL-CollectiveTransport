@@ -137,6 +137,8 @@ print("  num_stats -----", Utility.params['num_stats'])
 
 socket.send(b"ok")
 
+TEST = False
+
 #num_robots = 4
 in_channels=31
 hidden_channels=32
@@ -159,6 +161,9 @@ exp_done = False
 ep_counter = 0
 num_actions=9
 agent = SharedGATDQNAgent(in_channels, hidden_channels, num_actions, num_heads, Utility.params['num_robots'])
+
+# agent.load_model(model_file_path)
+
 #num_episodes = 1000
 robot_positions = []
 #for episode in range(num_episodes):
@@ -200,7 +205,7 @@ while not exp_done:
                 t_rewards = []
                 #print("x (node features) shape:\n", init_data.x.shape)
                 #print("edge_index shape before act:", edge_index.shape)
-                actions = agent.act(init_data.x, init_data.edge_index)
+                actions = agent.act(init_data.x, init_data.edge_index, TEST)
  
                 #print("actions in act ----", actions.shape)
                 action_numbers = np.argmax(actions ,axis=1)
