@@ -73,9 +73,10 @@ def build_sensorvalues(env_observations, edge_index):
         #print("prox_values",np.shape(prox_values))
         for j in range(len(filtered_indeces)):
             env_observations[i][7+filtered_indeces[j]] = 0.0
-        agent_prox_flags.append(env_observations[i][7:])
+        agent_prox_flags.append(env_observations[i])
     proximity_values = torch.stack([torch.tensor(prox_vals, dtype=torch.float) for prox_vals in agent_prox_flags], dim=0)
     #print("proxvals",proximity_values)
+
     data = Data(x=proximity_values,edge_index=edge_index)
 
     return data
@@ -106,7 +107,7 @@ def build_sensorvalues1(env_observations,edge_index):
 
 Utility = zmq_utility.ZMQ_Utility()
 
-data_dir = "python_code/Data/GNN/GNN_Baseline_with_hard_replace/"
+data_dir = "python_code/Data/GNN/GNN_Baseline_with_updated_obs/"
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
 
@@ -137,7 +138,7 @@ print("  num_stats -----", Utility.params['num_stats'])
 socket.send(b"ok")
 
 #num_robots = 4
-in_channels=24
+in_channels=31
 hidden_channels=32
 out_channels =32
 num_heads=4

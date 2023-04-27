@@ -538,9 +538,9 @@ class GAT_QNetwork(nn.Module):
     def forward(self,x ,edge_index):
         x = x.view(-1, x.shape[-1])  # Flatten the first two dimensions
         x = F.relu(self.gat1(x,edge_index))
-        x = F.dropout(x,p=0.6,training=self.training)
+        #x = F.dropout(x,p=0.6,training=self.training)
         x= F.relu(self.gat2(x,edge_index))
-        x = F.dropout(x,p=0.6,training=self.training)
+        #x = F.dropout(x,p=0.6,training=self.training)
         x = self.fc(x)
         #print("xxx shapelast:", x.shape)
         return x
