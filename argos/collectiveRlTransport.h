@@ -5,10 +5,12 @@
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/simulator/entities/box_entity.h>
-#include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
+//#include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
+#include <argos3/plugins/robots/kheperaiv/simulator/kheperaiv_entity.h> // TODO : Change this to khepera's entity correctly and update argos3 library
 #include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
 #include <argos3/core/control_interface/ci_controller.h>
-#include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
+//#include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
+#include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_proximity_sensor.h> // TODO: Change to kheperaiv correctly
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
@@ -177,7 +179,8 @@ private:
    CTCPSocket* socket;
 
    /** List of robots */
-   std::vector<CFootBotEntity*> m_vecRobots;
+   // Chandler : Robot is now KheperaIV, not FootBot
+   std::vector<CKheperaIVEntity*> m_vecRobots;
 
    /** The vector of observations */
    std::vector<float> m_vecObs;
@@ -188,11 +191,13 @@ private:
    /** The vector of rewards */
    std::vector<float> m_vecRewards;
 
-   /** The axel length of the footbot*/
-   Real m_fFootbotAxelLength;
+   /** The axel length of the kheperaiv*/
+   // Chandler : Changed m_fFootbotAxelLength to m_fKheperaIVAxelLength
+   Real m_fKheperaIVAxelLength;
 
-   /** The radius of the wheel of the footbot*/
-   Real m_fFootbotWheelRadius;
+   /** The radius of the wheel of the kheperaiv*/
+   // Chandler : Changed m_fFootbotWheelRadius to m_fKheperaIVWheelRadius
+   Real m_fKheperaIVWheelRadius;
 
    /** Number of stats per robot */
    UInt32 m_unNumStats;

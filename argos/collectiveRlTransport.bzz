@@ -26,7 +26,7 @@ function step(){
 	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
   if(gripped){
     # Should we use the base model to control the robots or the learned model
-    #log(id, BaseModel)
+    #log(id," Gripped ", BaseModel)
     if (BaseModel == 1){
       #log(id, " Case = 1")
       AngleToGoal = AngleToGoal + 180.0
@@ -57,7 +57,7 @@ function step(){
   }
   else {
     if (proximity[0].value > 0.6){
-			#log("setting gripping")
+			log("setting gripping")
       set_wheels_debug(0.0, 0.0)
       L_wheel = 0.0
       R_wheel = 0.0
@@ -69,7 +69,7 @@ function step(){
   # If the robot fails, open the gripper and set the wheel speeds to 0.
   if(failure){
     gripper_unlock()
-		#log("setting failure")
+		log("setting failure")
     set_wheels_debug(0.0, 0.0)
   }
 }

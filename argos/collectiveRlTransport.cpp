@@ -8,17 +8,23 @@ using namespace argos;
 /****************************************/
 /****************************************/
 
-static const std::string FB_CONTROLLER = "fgc";
+//static const std::string FB_CONTROLLER = "fgc";
+static const std::string KIV_CONTROLLER = "kivc"; // Chandler : swapped FB_CONTROLLER with KIV_CONTROLLER, unsure if correct name
+// TODO : fihure out what goes here for khepera
 static const Real WALL_THICKNESS            = 0.2;  // m
-static const Real CYLINDER_RADIUS           = 0.5;  // m
+static const Real CYLINDER_RADIUS           = 0.09855;  // m Previously 0.5 for footbot
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
 static const Real OBSTACLE_RADIUS           = 0.5;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
-static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
-static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
-static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
+// Chandler : Changed FOOTBOT_RADIUS to KHEPERAIV_RADIUS
+//static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
+static const Real KHEPERAIV_RADIUS          = 0.09855f; // m // TODO : Get the real radius WITH gripper
+static const Real CYLINDER_OFFSET           = 0.0;
+static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;  // m Previously 0.6
+// Adding an offset just makes the robots start slightly farther away
+static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
    "robot2goal_dist",
@@ -40,7 +46,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(7+24),
+   m_unNumObs(7+8), // Was m_unNumObs(7+24) but kheperaiv has 8 proximity sensors, not 24
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -80,8 +86,11 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
-      m_fFootbotAxelLength = 0.14; // m
-      m_fFootbotWheelRadius = 0.029112741; // m
+      // TODO : Grap the actual values for khepera
+      // Chandler : Changed m_fFootbotAxelLength to m_fKheperaIVAxelLength
+      m_fKheperaIVAxelLength = 0.14; // m
+      // Chandler : Changed m_fFootbotWheelRadius to m_fKheperaIVWheelRadius and all instances of its use
+      m_fKheperaIVWheelRadius = 0.029112741; // m
 
       /* Stats to be sent to Data: Force vector (direction and magnitude) for every robot*/
       m_unNumStats = 4;
@@ -162,29 +171,30 @@ void CCollectiveRLTransport::CreateEntities() {
    AddEntity(*m_pcCylinder);
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
-   std::ostringstream cFBId;
-   CFootBotEntity* pcFB;
+   std::ostringstream cKIVId; // Chandler : changed cFBId to cKIVId
+//   CFootBotEntity* pcFB; // Chandler : Changed all instances of CFootBotEntity and pcFB with Khepera and pcKIV
+   CKheperaIVEntity* pcKIV;
    CVector3 cPos;
    for(size_t i = 0; i < m_unNumRobots; ++i) {
-      cFBId.str("");
-      cFBId << "fb" << i;
+      cKIVId.str("");
+      cKIVId << "kiv" << i; // Changed "fb" to kiv
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
-      pcFB = new CFootBotEntity(
-         cFBId.str(),
-         FB_CONTROLLER,
+      pcKIV = new CKheperaIVEntity(
+         cKIVId.str(),
+         KIV_CONTROLLER,
          cPos,
          CQuaternion(-cSlice, CVector3::Z)
          );
-      m_vecRobots.push_back(pcFB);
+      m_vecRobots.push_back(pcKIV);
       /** Need to chage the range of the proximity sensor
           If m_fProximityRange = 0 then the sensor range will
           stay at default */
-      AddEntity(*pcFB);
+      AddEntity(*pcKIV);
       if(m_fProximityRange > 0.0){
-        CProximitySensorEquippedEntity& cPSEE = pcFB->GetProximitySensorEquippedEntity();
+        CProximitySensorEquippedEntity& cPSEE = pcKIV->GetProximitySensorEquippedEntity();
         CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
         for(auto itSensor = listPS.begin(); itSensor != listPS.end(); ++itSensor){
           (*itSensor)->Direction.Normalize();
@@ -515,7 +525,6 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
    std::vector<float> RWheels;
 };
 
-
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
    CVector3& cCylinderPos =
@@ -629,8 +638,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Adding cylinder angle to goal for MME*/
       m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
       // Get the proximity sensor values
-      const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
-        m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
+      // Chandler : changed CCI_FootBotProximitySensor to CCI_KheperaIVProximitySensor
+      const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
+        m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVProximitySensor> ("kheperaiv_proximity")->GetReadings(); // Chandler : Edited footbot_proximity to kheperaiv_proximity
       for(size_t t = 0; t < tReadings.size(); t++){
         m_vecObs[i * m_unNumObs + 7 + t] = tReadings[t].Value;
       }
@@ -844,8 +854,8 @@ void CCollectiveRLTransport::CalculateRobotStats(){
      Real fRWheel = cGWS.RWheels[i];
 
      /*Calculate force vector*/
-     Real deltaX = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
-     Real deltaY = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
+     Real deltaX = (m_fKheperaIVWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
+     Real deltaY = (m_fKheperaIVWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
 
      Real magnitude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
                             + (cRobotPos.GetY() - deltaY)*(cRobotPos.GetY() - deltaY));
