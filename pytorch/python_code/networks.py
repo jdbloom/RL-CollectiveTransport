@@ -630,12 +630,12 @@ class SharedGATDQNAgent:
         #total_reward = progress_reward + obstacle_penalty + time_penalty
         return total_reward
 
-    def act(self, joint_state, edge_index):
+    def act(self, joint_state, edge_index, test=False):
         #print("joint_state shape:", joint_state.shape)
         self.epsilon -= self.epsilon_decay
         if self.epsilon < self.epsilon_min:
             self.epsilon = self.epsilon_min
-        if random.random() > self.epsilon:
+        if random.random() > self.epsilon or test:
             self.qnetwork_local.eval()
             with T.no_grad():
                 action_values = self.qnetwork_local(joint_state.to(device), edge_index)
