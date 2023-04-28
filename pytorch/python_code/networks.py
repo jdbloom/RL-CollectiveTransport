@@ -681,8 +681,7 @@ class SharedGATDQNAgent:
         #print("Q_targets_next",Q_targets_next.shape)
 
         # Compute Q targets for current states
-        rewards = rewards.view(-1, 1).repeat(self.num_robots, 1)
-        #print("rewards",rewards.shape)
+        rewards = rewards.view(-1, 1)
 
         dones = dones.view(-1, 1).repeat(self.num_robots, 1) 
 

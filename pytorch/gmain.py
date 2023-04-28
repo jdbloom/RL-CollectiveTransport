@@ -107,7 +107,7 @@ def build_sensorvalues1(env_observations,edge_index):
 
 Utility = zmq_utility.ZMQ_Utility()
 
-data_dir = "python_code/Data/GNN/GNN_Baseline_with_updated_obs/"
+data_dir = "python_code/Data/GNN/GNN_Baseline_passing_reward/"
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
 
@@ -147,11 +147,13 @@ num_heads=4
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # edge_index for connectivity using a circular topology
+#edge_index = torch.tensor([
+#    [0, 1, 2, 3, 0, 1, 2, 3],
+#    [1, 2, 3, 0, 3, 0, 1, 2]
 edge_index = torch.tensor([
-    [0, 1, 2, 3, 0, 1, 2, 3],
-    [1, 2, 3, 0, 3, 0, 1, 2]
+    [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+    [1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2]
 ], dtype=torch.long)
-
 edge_index = edge_index.to(device)
 
 exp_reward = []
@@ -243,7 +245,7 @@ while not exp_done:
                 for i in range(Utility.params['num_robots']):
                     t_rewards.append(rewards[i].item()+reward)
                 episode_reward += np.average(t_rewards)
-                loss = agent.step(init_data.x,actions,reward,new_data.x,episode_done,edge_index)
+                loss = agent.step(init_data.x,actions,t_rewards,new_data.x,episode_done,edge_index)
                 episode_loss += loss
                 init_data = new_data
                 prev_cyl_dist_goal = cyl_dist_goal
