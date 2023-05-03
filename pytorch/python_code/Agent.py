@@ -16,8 +16,7 @@ class Agent(Actor):
     def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
                  n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
                  use_recurrent=False, attention=False, gnn=False, meta_param_size = 1, seq_len=5,
-                 edge_index = None):
-
+                 edge_index = None, prox_filter_angle = 45):
 
         args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
                 'n_chars':n_chars, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
@@ -39,6 +38,11 @@ class Agent(Actor):
         self.obj_state = None
         self.edge_index = edge_index
         
+        self.ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
+                                       112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
+                                       -157.5, -142.5, -127.5, -112.5, -97.5, 
+                                       -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
+        self.prox_filter_angle = prox_filter_angle
         
         self.build_networks(learning_scheme)
 
@@ -149,5 +153,52 @@ class Agent(Actor):
     def choose_object_intention(self, agent_prox_flags, edge_index = None, test = False):
         observation = np.array(agent_prox_flags)
         observation = observation.reshape(1, observation.shape[0]).repeat(self.n_agents, axis = 0)
-        return self.choose_action(observation, self.intention_networks, edge_index, test)        
+        return self.choose_action(observation, self.intention_networks, edge_index, test) 
+
+    def filter_prox_values(self, prox_values, angle_to_cyl):
+        if angle_to_cyl > 0:
+            if angle_to_cyl > 180-self.prox_filter_angle:
+                cw_lim = angle_to_cyl + self.prox_filter_angle - 360
+            else:
+                cw_lim = angle_to_cyl+self.prox_filter_angle
+            ccw_lim = angle_to_cyl - self.prox_filter_angle
+        elif angle_to_cyl < 0:
+            if angle_to_cyl < -180 +self.prox_filter_angle:
+                ccw_lim = angle_to_cyl-self.prox_filter_angle+360
+            else:
+                ccw_lim = angle_to_cyl - self.prox_filter_angle
+            cw_lim = angle_to_cyl + self.prox_filter_angle
+        else:
+            cw_lim = self.prox_filter_angle
+            ccw_lim = -self.prox_filter_angle
+
+        index = []
+        filtered_prox_values = []
+        if angle_to_cyl > 180 - self.prox_filter_angle:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
+                    index.append(i)
+                elif self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i])
+        elif angle_to_cyl < -180+self.prox_filter_angle:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                elif self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i]) 
+        else:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim and self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i])
+        return filtered_prox_values, index
+
+
+
+
 

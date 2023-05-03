@@ -99,7 +99,8 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'attention':args.attention,
               'gnn': args.gnn,
               'intention_look_back':2,
-              'edge_index': edge_index}
+              'edge_index': edge_index,
+              'prox_filter_angle':60}
 
 
 if args.independent_learning:
@@ -199,8 +200,12 @@ while not exp_done:
                     agent_prox_flags.append(0)
                 else:
                     prox_values = env_observations[i][7:]
+                    # Add logic to filter prox values that are observing the object
+                    prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                    for j in range(len(filtered_indeces)):
+                        env_observations[i][7+filtered_indeces[j]] = 0.0
                     prox_value = np.sum(prox_values)
-                    agent_prox_flags.append(prox_value/24.0)
+                    agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
             
             #Define Global Knowledge: [positions, velocities]
             global_knowledge=np.zeros((Utility.params['num_robots'])*4)
@@ -369,8 +374,11 @@ while not exp_done:
                             agent_prox_flags.append(0)
                         else:
                             prox_values = env_observations[i][7:]
+                            prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                            for j in range(len(filtered_indeces)):
+                                env_observations[i][7+filtered_indeces[j]] = 0.0
                             prox_value = np.sum(prox_values)              
-                            agent_prox_flags.append(prox_value/24.0)
+                            agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                     if args.intention:
                         if args.attention:

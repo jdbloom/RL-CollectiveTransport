@@ -11,6 +11,7 @@ parser.add_argument("data_path")
 parser.add_argument("figure_path")
 parser.add_argument("figure_name")
 parser.add_argument("--IL", default = False, action = "store_true")
+parser.add_argument("--gate", default = False, action = "store_true")
 
 args = parser.parse_args()
 
@@ -110,7 +111,7 @@ for j in range(len(episode_rewards[0])):
             episode_failure_reward[j].append(episode_rewards[i][j])
             episode_failure_index[j].append(i)
     last_10_axis.append(np.arange(10, len(episode_rewards), 10))
-    last_10_rewards.append([np.average(robot_exp_rewards[j][i:i+10]) for i in last_10_axis[j]])
+    last_10_rewards.append([np.average(robot_exp_rewards[j][i-10:i]) for i in last_10_axis[j]])
 cumulative_episode_run_times.pop(0)
 
 print('. . . Statistics')
@@ -137,7 +138,9 @@ for i in range(len(episode_success_reward)):
     plt.scatter(episode_success_index[i], episode_success_reward[i], c = success_colors[i])#, label = 'Reached Goal')
     plt.scatter(episode_failure_index[i], episode_failure_reward[i], c = fail_colors[i], marker = 'x')#, label = 'Failure')
     plt.plot(last_10_axis[i], last_10_rewards[i], c=avg_colors[i], label = 'Robot '+str(i))
-plt.ylim(-40000, 500)
+if args.gate:
+    plt.plot((599, 599), (-14000, 4000), c = 'salmon')
+plt.ylim(-15000, 3000)
 plt.legend(loc = 1)
 plt.title(args.figure_name)
 plt.savefig(args.figure_path+args.figure_name+".png")
