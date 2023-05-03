@@ -71,10 +71,9 @@ for ep in range(len(df_list)):
     pos_gate_length = 0
     neg_gate_x = 0
     neg_gate_length = 0
-
     for t in range(len(episode[1])):
-        cyl_x_pos.append(episode[1]['cyl_x_pos'][t])
-        cyl_y_pos.append(episode[1]['cyl_y_pos'][t])
+        cyl_x_pos.append(float(episode[1]['cyl_x_pos'][t]))
+        cyl_y_pos.append(float(episode[1]['cyl_y_pos'][t]))
         if args.failures:
             robot_failures.append(episode[1]['robot_failures'][t].strip('][').split(','))
         robot_x_pos.append(episode[1]['robots_x_pos'][t].strip('][').split(','))
@@ -172,7 +171,6 @@ for ep in range(len(df_list)):
             x1 = x0 + math.cos(intention[intention_index[i]]*math.pi+math.radians(cyl_angle[intention_index[i]]))
             y1 = y0 + math.sin(intention[intention_index[i]]*math.pi+math.radians(cyl_angle[intention_index[i]]))
             plot_intention.append(((x0, x1), (y0, y1)))
-            
 
     if episode_2 is not None:
         plt.plot(cyl_x_pos, cyl_y_pos, 'r--', linewidth = '5', label = args.label_1)
@@ -181,10 +179,10 @@ for ep in range(len(df_list)):
         plt.plot(cyl_x_pos, cyl_y_pos, 'r', linewidth = '5', label = args.label_1)
     if args.non_convex:
         plt.plot((-2, 0, -2), (2, 0, -2), c = 'k', linewidth = 10)
-    if gate != 0:
-        plt.plot((np.float64(gate[0]), np.float64(gate[0])), (-5, (-5 + np.float64(gate[1]))), c='k', linewidth = 5)
-        plt.plot((np.float64(gate[0]), np.float64(gate[0])), (5, (5-np.float64(gate[3]))), c='k', linewidth = 5)
-        plt.plot((-10, 10), (0, 0), c='r', linestyle='--')
+    #if gate[0] != 0:
+    #    plt.plot((np.float64(gate[0]), np.float64(gate[0])), (-5, (-5 + np.float64(gate[1]))), c='k', linewidth = 5)
+    #    plt.plot((np.float64(gate[0]), np.float64(gate[0])), (5, (5-np.float64(gate[3]))), c='k', linewidth = 5)
+    #    plt.plot((-10, 10), (0, 0), c='r', linestyle='--')
     if obstacles != 0:
         for i in range(int(len(obstacles)/2)):
             ax.add_patch(plt.Circle((np.float64(obstacles[i*2]), np.float64(obstacles[i*2+1])), 0.5, color = 'black'))
@@ -217,7 +215,6 @@ for ep in range(len(df_list)):
             ax.add_patch(plt.Circle((cylinder_robot_plot_pos_x[i], cylinder_robot_plot_pos_y[i]), 0.5, facecolor = 'lightgray', edgecolor='black'))
     if args.failures:
         plt.scatter(robot_failure_x_pos, robot_failure_y_pos, marker='x', c = 'b')
-
     plt.text(cyl_x_pos[0]-0.5, cyl_y_pos[0]+1, 'START', fontsize = 20)
     plt.text(4, -0.25, 'GOAL', fontsize=20)
     plt.xlim(-11, 11, 1)
@@ -227,6 +224,7 @@ for ep in range(len(df_list)):
     plt.axis('off')
     if args.label_1 is not None:
         plt.legend(loc = 'upper right')
+    print('saving', args.figure_path+args.figure_name+'_'+str(ep)+'.png')
     plt.savefig(args.figure_path+args.figure_name+'_'+str(ep)+'.png')
     plt.close()
     ep += 1

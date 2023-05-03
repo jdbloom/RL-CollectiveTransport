@@ -107,7 +107,7 @@ def build_sensorvalues1(env_observations,edge_index):
 
 Utility = zmq_utility.ZMQ_Utility()
 
-data_dir = "python_code/Data/GNN/GNN_Baseline_passing_reward/"
+data_dir = "python_code/Data/GNN/tmp/"
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
 

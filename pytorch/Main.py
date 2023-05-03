@@ -34,6 +34,7 @@ parser.add_argument("--global_knowledge", default = False, action = "store_true"
 parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
 parser.add_argument("--attention", default= False, action= 'store_true')
+parser.add_argument("--gnn", default=False, action = 'store_true')
 parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention-rl", default=False, action="store_true")
 parser.add_argument("--meta_param_size", default=0, type=int)
@@ -81,6 +82,11 @@ elif args.global_knowledge:
 else:
     num_obs = Utility.params['num_obs']
 
+edge_index = np.array([
+    [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+    [1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2]
+], dtype=np.int64)
+
 agent_args = {'n_agents':Utility.params['num_robots'],
               'n_obs':num_obs, 
               'n_actions': Utility.params['num_actions']-1,
@@ -90,8 +96,10 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'meta_param_size':1, 
               'use_intention':args.intention, 
               'use_recurrent':args.recurrent,
-              'attention':args.attention, 
-              'intention_look_back':2}
+              'attention':args.attention,
+              'gnn': args.gnn,
+              'intention_look_back':2,
+              'edge_index': edge_index}
 
 
 if args.independent_learning:
@@ -114,7 +122,6 @@ socket.send(b"ok")
 #######################################################################
 #                           MAIN LOOP
 #######################################################################
-print("starting m loop")
 exp_done = False
 ep_counter = 0
 exp_rewards = []
@@ -163,7 +170,7 @@ while not exp_done:
             object_positions.append([obj_stats[0], obj_stats[1]])
             old_cyl_ang = obj_stats[5]
 
-            print('[ROBOT 0 DIST]: ', env_observations[0][4])
+            #print('[ROBOT 0 DIST]: ', env_observations[0][4])
 
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
@@ -291,7 +298,6 @@ while not exp_done:
                     stats = Utility.parse_stats(msgs[4])
                     robot_stats = Utility.parse_robot_stats(msgs[5])
                     obj_stats = Utility.parse_obj_stats(msgs[6])
-                    print('[ROBOT 0 DIST]: ', env_observations[0][4])
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
@@ -371,22 +377,22 @@ while not exp_done:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
                                     # Check the syntax on object positions to make sure we are giving an X and Y
-                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, test_mode)
+                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(agent_prox_flags, test_mode)
+                                ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                 for i in range(Utility.params['num_robots']):
                                     next_heading_intention[i] = ctde_intention
 
                         else:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
-                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, test_mode)
+                                    next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(agent_prox_flags, test_mode)
+                                ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                 for i in range(Utility.params['num_robots']):
-                                    next_heading_intention[i] = ctde_intention
+                                    next_heading_intention[i] = ctde_intention[i]
                         #store transitions of intentions
                         if args.attention:
                             if args.independent_learning:
@@ -498,7 +504,7 @@ while not exp_done:
                             for i in range(Utility.params['num_robots']):
                                 loss = models[i].learn()
                         else:
-                            loss = model.learn()
+                            loss = model.learn(edge_index)
                     else:
                         loss = 0
 

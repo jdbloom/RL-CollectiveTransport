@@ -1,5 +1,5 @@
 from .networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder, AttentionEncoder
-
+from .networks import DDPGGATActor, DDPGGATCritic
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
@@ -39,6 +39,10 @@ class Hyperparameters:
 
         self.min_max_action = 1
 
+        #GNN
+        self.hidden_channels = 32
+        self.num_heads = 4
+
 class NetworkAids(Hyperparameters):
     def __init__(self):
         super().__init__()
@@ -48,12 +52,19 @@ class NetworkAids(Hyperparameters):
     def make_DDQN_networks(self, nn_args):
         return {'q_eval':DDQN(**nn_args), 'q_next':DDQN(**nn_args)}
     
-    def make_DDPG_networks(self, actor_nn_args, critic_nn_args):
-        DDPG_networks = {
-                        'actor': DDPGActorNetwork(**actor_nn_args, name = 'actor'),
-                        'target_actor': DDPGActorNetwork(**actor_nn_args, name = 'target_actor'),
-                        'critic': DDPGCriticNetwork(**critic_nn_args, name = 'critic_1'),
-                        'target_critic': DDPGCriticNetwork(**critic_nn_args, name = 'target_critic_1')}
+    def make_DDPG_networks(self, actor_nn_args, critic_nn_args, gnn=False):
+        if gnn:
+            DDPG_networks = {
+                        'actor': DDPGGATActor(**actor_nn_args, name = 'actor'),
+                        'target_actor': DDPGGATActor(**actor_nn_args, name = 'target_actor'),
+                        'critic': DDPGGATCritic(**critic_nn_args, name = 'critic_1'),
+                        'target_critic': DDPGGATCritic(**critic_nn_args, name = 'target_critic_1')}
+        else:
+            DDPG_networks = {
+                            'actor': DDPGActorNetwork(**actor_nn_args, name = 'actor'),
+                            'target_actor': DDPGActorNetwork(**actor_nn_args, name = 'target_actor'),
+                            'critic': DDPGCriticNetwork(**critic_nn_args, name = 'critic_1'),
+                            'target_critic': DDPGCriticNetwork(**critic_nn_args, name = 'target_critic_1')}
         return DDPG_networks
 
     def make_TD3_networks(self, actor_nn_args, critic_nn_args):
@@ -118,7 +129,8 @@ class NetworkAids(Hyperparameters):
         action_values = networks['q_eval'].forward(state)
         return T.argmax(action_values).item()
     
-    def DDPG_choose_action(self, observation, networks):
+    def DDPG_choose_action(self, observation, networks, edge_index=None):
+        edge_index = T.tensor(edge_index, dtype=T.long).to(networks['actor'].device)
         state = T.tensor(observation, dtype = T.float).to(networks['actor'].device)
         if networks['learning_scheme'] == 'RDDPG':
             s,s_,a,r,d = networks['replay'].get_current_sequence()
@@ -127,7 +139,7 @@ class NetworkAids(Hyperparameters):
             mp = networks['ee'](obs_padded, True)
             state = T.cat((state, mp))
             return networks['actor'].forward(state).unsqueeze(0)
-        return networks['actor'].forward(state).unsqueeze(0)
+        return networks['actor'].forward(state, edge_index).unsqueeze(0)
         
     
     def TD3_choose_action(self, observation, networks, n_actions):
@@ -203,8 +215,11 @@ class NetworkAids(Hyperparameters):
 
         return loss.item()
 
-    def learn_DDPG(self, networks, intention = False, recurrent = False):
+    def learn_DDPG(self, networks, intention = False, recurrent = False, edge_index = None):
         states, actions, rewards, states_, dones = self.sample_memory(networks)
+        if edge_index is not None:
+            indices = [T.tensor(edge_index, dtype = T.int64) for _ in range(self.batch_size)]
+            indices = T.stack(indices, dim=0).view(2, -1).to(networks['actor'].device)
         if not intention:
             actions = actions[:,:2]
         elif not recurrent:
@@ -221,9 +236,8 @@ class NetworkAids(Hyperparameters):
             actions = actions[:,-1,:]
             rewards = rewards[:,-1]
 
-            
-        target_actions = networks['target_actor'](states_)
-        q_value_ = networks['target_critic']([states_, target_actions])
+        target_actions = networks['target_actor'](states_, indices)
+        q_value_ = networks['target_critic']([states_, target_actions], indices)
         # import ipdb; ipdb.set_trace()
         #TODO what is dones doing ?
         # q_value_[dones] = 0.0
@@ -231,7 +245,7 @@ class NetworkAids(Hyperparameters):
 
         #Critic Update
         networks['critic'].zero_grad()
-        q_value = networks['critic']([states, actions])
+        q_value = networks['critic']([states, actions], indices)
         value_loss = Loss(q_value, target)
         value_loss.backward()
         networks['critic'].optimizer.step()
@@ -242,8 +256,8 @@ class NetworkAids(Hyperparameters):
             new_policy_actions = networks['actor'](states_clone)
             actor_loss = -networks['critic']([states_clone, new_policy_actions])
         else:
-            new_policy_actions = networks['actor'](states)
-            actor_loss = -networks['critic']([states, new_policy_actions])
+            new_policy_actions = networks['actor'](states, indices)
+            actor_loss = -networks['critic']([states, new_policy_actions], indices)
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         networks['actor'].optimizer.step()

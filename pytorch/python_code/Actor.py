@@ -16,7 +16,7 @@ class Actor(NetworkAids):
     This class will be the foundation class for Agent and will hold all specific functions
     '''
     def __init__(self, id, n_obs, n_actions, options_per_action, n_agents, n_chars, meta_param_size, 
-                 intention = False, recurrent_intention = False, attention = False, intention_look_back = 2, seq_len=5):
+                 intention = False, recurrent_intention = False, attention = False, gnn=False, intention_look_back = 2, seq_len=5):
 
         super().__init__()
 
@@ -35,21 +35,20 @@ class Actor(NetworkAids):
         self.intention = intention
         self.recurrent_intention = recurrent_intention
         self.attention_intention = attention
+        self.gnn_intention = gnn
         self.intention_look_back = intention_look_back
         self.seq_len = seq_len
 
         self.network_input_size = self.n_obs
         if self.intention:
             self.network_input_size += 1  
-        # attention will only take sequences with (Cx, Cy, P)
+
+        self.intention_network_input = self.n_agents*self.n_chars
         if self.attention_intention:  
-            self.intention_network_input = self.n_agents*self.n_chars
             self.attention_observation = [[0 for _ in range(2+self.n_agents*self.n_chars)] for _ in range(self.seq_len)]
-        else:
-            # intention takes(P)
-            self.intention_network_input = self.n_agents*self.n_chars
-        if self.recurrent_intention and not self.attention_intention:
+        elif self.recurrent_intention:
             self.recurrent_intention_network_input = self.intention_network_input + self.meta_param_size
+            
 
     def build_networks(self, learning_scheme):
         if learning_scheme == 'None':
@@ -145,8 +144,12 @@ class Actor(NetworkAids):
         actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.intention_network_input,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
         critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.intention_network_input}
-
-        return self.make_DDPG_networks(actor_nn_args, critic_nn_args)
+        if self.gnn_intention:
+            actor_nn_args['hidden_channels'] = self.hidden_channels
+            actor_nn_args['num_heads'] = self.num_heads
+            critic_nn_args['hidden_channels'] = self.hidden_channels
+            critic_nn_args['num_heads'] = self.num_heads
+        return self.make_DDPG_networks(actor_nn_args, critic_nn_args, self.gnn_intention)
     
     def build_RDDPG_intention(self):
         actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.recurrent_intention_network_input,
@@ -176,7 +179,7 @@ class Actor(NetworkAids):
         if self.networks['learn_step_counter'] % self.replace_target_ctr==0:
             self.networks['q_next'].load_state_dict(self.networks['q_eval'].state_dict())
  
-    def choose_action(self, observation, networks, test=False):        
+    def choose_action(self, observation, networks, edge_index = None, test=False):        
         if networks['learning_scheme'] in {'DQN', 'DDQN'}:
             if test or np.random.random()>self.epsilon:
                 actions = self.DQN_DDQN_choose_action(observation, networks)
@@ -184,7 +187,7 @@ class Actor(NetworkAids):
                 actions = np.random.choice(self.action_space)
             return actions
         elif networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
-            actions = self.DDPG_choose_action(observation, networks)
+            actions = self.DDPG_choose_action(observation, networks, edge_index)
             if not test:
                 actions+=T.normal(0.0, self.noise, size = (1, networks['n_actions'])).to(networks['actor'].device)
             actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
@@ -200,12 +203,12 @@ class Actor(NetworkAids):
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection ' + networks['learning_scheme'])
     
-    def learn(self):
+    def learn(self, edge_index=None):
         if self.networks['replay'].mem_ctr < (self.n_agents*self.batch_size + self.batch_size):
                 return
 
         if self.intention:
-            self.learn_intention()
+            self.learn_intention(edge_index)
 
         if self.networks['learning_scheme'] == 'DQN':
             self.replace_target_network()
@@ -224,9 +227,9 @@ class Actor(NetworkAids):
             self.update_network_parameters()
             return self.learn_TD3(self.networks)
 
-    def learn_intention(self):
+    def learn_intention(self, edge_index=None):
         if self.intention_networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
-            self.learn_DDPG(self.intention_networks, self.intention, self.recurrent_intention)
+            self.learn_DDPG(self.intention_networks, self.intention, self.recurrent_intention, edge_index)
         elif self.intention_networks['learning_scheme'] == 'TD3':
             self.learn_TD3(self.intention_networks, self.intention, self.recurrent_intention)
         elif self.intention_networks['learning_scheme'] == 'attention':

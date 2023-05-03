@@ -204,7 +204,7 @@ class DDPGActorNetwork(nn.Module):
         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.mu.weight.data.uniform_(-init_w, init_w)
 
-    def forward(self, x):
+    def forward(self, x, edge_index = None):
         prob = self.fc1(x)
         prob = self.relu(prob)
         prob = self.fc2(prob)
@@ -300,7 +300,7 @@ class DDPGCriticNetwork(nn.Module):
         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.q.weight.data.uniform_(-init_w, init_w)
 
-    def forward(self, X):
+    def forward(self, X, edge_index = None):
         state, action = X
         action_value = self.fc1(T.cat([state, action], 1))
         action_value = self.relu(action_value)
@@ -526,6 +526,113 @@ class AttentionEncoder(nn.Module):
 ############################################################################
 # Graph Attention
 ############################################################################
+class DDPGGATActor(nn.Module):
+    def __init__(self, id, num_actions, observation_size, lr, name,
+                 hidden_channels, num_heads, min_max_action = 1):
+        super().__init__()
+
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        #output_dims = (num_ops_per_action**num_actions) # For discrete action space
+        output_dims = num_actions
+
+        # allows for us to change the range of the action from (-min_max_action, min_max_action)
+        self.min_max_action = min_max_action
+        self.gat1 = GATConv(observation_size,hidden_channels,heads=num_heads)
+        self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
+        self.mu = nn.Linear(hidden_channels, output_dims)
+
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
+
+        #need to find how to access the weights of the network
+        #self.init_weights(3e-3) #find where this comes from and maybe find the purpose of this line???
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
+
+        self.name = name+'_'+str(id)+'_GNN_DDPG'
+
+        self.to(self.device)
+
+
+    def init_weights(self, init_w):
+        self.gat1.weight.data = fanin_init(self.gat1.weight.data.size())
+        self.gat2.weight.data = fanin_init(self.gat2.weight.data.size())
+        self.mu.weight.data.uniform_(-init_w, init_w)
+
+    def forward(self, x, edge_index):
+        prob = self.gat1(x, edge_index)
+        prob = self.relu(prob)
+        prob = self.gat2(prob, edge_index)
+        prob = self.relu(prob)
+        mu = self.mu(prob)
+        mu = self.min_max_action*self.tanh(mu) # This is needed for continuous action space
+        return mu
+
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
+
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
+
+class DDPGGATCritic(nn.Module):
+    def __init__(self, id, num_actions, observation_size, lr, name,
+                 hidden_channels, num_heads):
+        super().__init__()
+
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        self.gat1 = GATConv(observation_size+num_actions,hidden_channels,heads=num_heads)
+        self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
+        self.q = nn.Linear(hidden_channels, 1)
+
+        self.relu = nn.ReLU()
+
+        #self.init_weights(3e-3)
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
+
+        self.name = name+'_'+str(id)+'_GNN_DDPG'
+        self.to(self.device)
+
+    def init_weights(self, init_w):
+        self.gat1.weight.data = fanin_init(self.gat1.weight.data.size())
+        self.gat2.weight.data = fanin_init(self.gat2.weight.data.size())
+        self.q.weight.data.uniform_(-init_w, init_w)
+
+    def forward(self, X, edge_index):
+        state, action = X
+        action_value = self.gat1(T.cat([state, action], 1), edge_index)
+        action_value = self.relu(action_value)
+        action_value = self.gat2(action_value, edge_index)
+        action_value = self.relu(action_value)
+        action_value = self.q(action_value)
+        return action_value
+
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
+
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
+
+
+
 device = T.device('cuda' if T.cuda.is_available() else 'cpu')
 
 class GAT_QNetwork(nn.Module):
@@ -534,6 +641,7 @@ class GAT_QNetwork(nn.Module):
         self.gat1 = GATConv(in_channels,hidden_channels,heads=num_heads)
         self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
         self.fc = nn.Linear(hidden_channels,num_actions)
+        
 
     def forward(self,x ,edge_index):
         x = x.view(-1, x.shape[-1])  # Flatten the first two dimensions
@@ -546,10 +654,8 @@ class GAT_QNetwork(nn.Module):
         return x
 
 class SharedGATDQNAgent:
-    def __init__(self,in_channels,hidden_channels,num_actions,num_heads,num_robots,learning_rate=0.001, gamma=0.99, buffer_size=10000, batch_size=32):
+    def __init__(self,in_channels,hidden_channels,num_actions,num_heads,num_robots,learning_rate=0.0001, gamma=0.99997, buffer_size=100000, batch_size=100):
         self.qnetwork_local = GAT_QNetwork(in_channels,hidden_channels,num_actions,num_heads,num_robots).to(device)
-        #print("self.qnetwork_local",self.qnetwork_local.summary())
-        from torchsummary import summary
         self.qnetwork_target= GAT_QNetwork(in_channels,hidden_channels,num_actions,num_heads,num_robots).to(device)
         self.optimizer = T.optim.Adam(self.qnetwork_local.parameters(),lr=learning_rate)
         self.memory = deque(maxlen = buffer_size)
@@ -635,7 +741,7 @@ class SharedGATDQNAgent:
         self.epsilon -= self.epsilon_decay
         if self.epsilon < self.epsilon_min:
             self.epsilon = self.epsilon_min
-        if random.random() > self.epsilon or test:
+        if random.random() > 0 or test:
             self.qnetwork_local.eval()
             with T.no_grad():
                 action_values = self.qnetwork_local(joint_state.to(device), edge_index)
@@ -716,14 +822,3 @@ class SharedGATDQNAgent:
         for target_param, local_param in zip(target_model.parameters(),local_model.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
 
-
-
-
-
-
-
-
-
-
-
-    

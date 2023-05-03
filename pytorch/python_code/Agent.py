@@ -15,15 +15,16 @@ Loss = nn.MSELoss()
 class Agent(Actor):
     def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
                  n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
-                 use_recurrent=False, attention=False, meta_param_size = 1, seq_len=5):
+                 use_recurrent=False, attention=False, gnn=False, meta_param_size = 1, seq_len=5,
+                 edge_index = None):
 
 
         args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
                 'n_chars':n_chars, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
-                'attention':attention, 'intention_look_back':intention_look_back, 'seq_len':seq_len}
+                'attention':attention, 'gnn':gnn, 'intention_look_back':intention_look_back, 'seq_len':seq_len}
 
         super().__init__(**args)
-
+        self.n_agents = n_agents
         self.learning_scheme = learning_scheme
         self.object_stats = []
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
@@ -36,6 +37,7 @@ class Agent(Actor):
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
+        self.edge_index = edge_index
         
         
         self.build_networks(learning_scheme)
@@ -144,7 +146,8 @@ class Agent(Actor):
         return np.array([l_wheel, r_wheel, 0])
         
 
-    def choose_object_intention(self, agent_prox_flags, test = False):
+    def choose_object_intention(self, agent_prox_flags, edge_index = None, test = False):
         observation = np.array(agent_prox_flags)
-        return self.choose_action(observation, self.intention_networks, test)        
+        observation = observation.reshape(1, observation.shape[0]).repeat(self.n_agents, axis = 0)
+        return self.choose_action(observation, self.intention_networks, edge_index, test)        
 

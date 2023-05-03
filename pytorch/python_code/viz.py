@@ -60,7 +60,7 @@ for episode in df_list:
         terminal+=1
         run_t = episode[1]['run_time'][t]
     episode_run_times.append(run_t)
-    cumulative_episode_run_times.append(cumulative_episode_run_times[-1] + run_t)
+    #cumulative_episode_run_times.append(cumulative_episode_run_times[-1] + run_t)
     terminals.append(terminal)
 
     robot_rewards = []
@@ -72,8 +72,9 @@ for episode in df_list:
         tmp_r = 0
         tmp_i = 0
         for j in range(len(rewards)):
-            tmp_r += float(rewards[j][i])
-            tmp_i += float(intention_reward[j][i])
+                if rewards[j][0] != 'reward':
+                    tmp_r += float(rewards[j][i])
+                    tmp_i += float(intention_reward[j][i])
 
 
         robot_rewards.append(tmp_r)
@@ -177,7 +178,7 @@ plt.title(args.figure_name + ' Average Time Step Intention Reward ')
 plt.savefig(args.figure_path+args.figure_name+"_average_time_step_intention.png")
 
 plt.close()
-
+'''
 plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.rcParams.update({'font.size': 22})
 plt.xlabel('Run Time (s)')
@@ -201,3 +202,4 @@ plt.scatter(np.arange(0, len(episode_run_times), 1), episode_run_times, c = succ
 #plt.legend(loc = 1)
 plt.title(args.figure_name+' Episode Run Time')
 plt.savefig(args.figure_path+args.figure_name+"_Episode_Run_Time.png")
+'''
