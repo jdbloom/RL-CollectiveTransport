@@ -4,8 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-from torch_geometric.nn import MessagePassing
-from torch_geometric.nn import GATConv
+#from torch_geometric.nn import MessagePassing
+#from torch_geometric.nn import GATConv
 import random
 from collections import deque
 import math
@@ -522,7 +522,7 @@ class AttentionEncoder(nn.Module):
         print('... loading', self.name, '...')
         self.load_state_dict(T.load(path + '_' + self.name))
 
-
+'''
 ############################################################################
 # Graph Attention
 ############################################################################
@@ -687,7 +687,7 @@ class SharedGATDQNAgent:
         return 0
 
     def parse_actions(self, action_num):
-        '''
+        ''''''
         This function will parse the number action to
         a set of wheel actions:
 
@@ -700,7 +700,7 @@ class SharedGATDQNAgent:
         6 - (1, -1)
         7 - (1, 0)
         8 - (1, 1)
-        '''
+        ''''''
         if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
             raise Exception('Action Number Out of Range:'+str(action_num))
         l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
@@ -817,8 +817,7 @@ class SharedGATDQNAgent:
 
         return loss.item()
 
-
     def soft_update(self,local_model,target_model,tau=1e-3):
         for target_param, local_param in zip(target_model.parameters(),local_model.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
-
+'''

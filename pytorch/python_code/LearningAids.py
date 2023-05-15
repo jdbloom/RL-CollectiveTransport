@@ -1,5 +1,5 @@
 from .networks import DQN, DDQN, DDPGActorNetwork, DDPGCriticNetwork, TD3ActorNetwork, TD3CriticNetwork, EnvironmentEncoder, AttentionEncoder
-from .networks import DDPGGATActor, DDPGGATCritic
+#from .networks import DDPGGATActor, DDPGGATCritic
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F

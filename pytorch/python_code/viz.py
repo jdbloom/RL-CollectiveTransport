@@ -98,7 +98,6 @@ for j in range(len(episode_rewards[0])):
     episode_success_index.append([])
     episode_failure_reward.append([])
     episode_failure_index.append([])
-
     for i in range(len(episode_rewards)):
         robot_exp_rewards[j].append(episode_rewards[i][j])
         robot_exp_rewards_avg[j].append(episode_rewards[i][j]/episode_time_steps[i])
@@ -153,7 +152,7 @@ plt.xlabel('Episodes')
 plt.ylabel('Reward')
 for i in range(len(robot_exp_intentions)):
     plt.plot(robot_exp_intentions[i], c=avg_colors[i], label = 'Robot '+str(i))
-#plt.legend(loc = 1)
+plt.legend(loc = 1)
 plt.title(args.figure_name + ' Intention Reward')
 plt.savefig(args.figure_path+args.figure_name+"_Intention.png")
 

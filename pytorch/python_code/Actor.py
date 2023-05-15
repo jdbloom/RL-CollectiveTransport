@@ -16,7 +16,8 @@ class Actor(NetworkAids):
     This class will be the foundation class for Agent and will hold all specific functions
     '''
     def __init__(self, id, n_obs, n_actions, options_per_action, n_agents, n_chars, meta_param_size, 
-                 intention = False, recurrent_intention = False, attention = False, gnn=False, intention_look_back = 2, seq_len=5):
+                 intention = False, recurrent_intention = False, attention = False, gnn=False, 
+                 intention_neighbors = False, intention_look_back = 2, seq_len=5):
 
         super().__init__()
 
@@ -36,18 +37,22 @@ class Actor(NetworkAids):
         self.recurrent_intention = recurrent_intention
         self.attention_intention = attention
         self.gnn_intention = gnn
+        self.intention_neighbors = intention_neighbors
         self.intention_look_back = intention_look_back
         self.seq_len = seq_len
 
         self.network_input_size = self.n_obs
         if self.intention:
             self.network_input_size += 1  
-
-        self.intention_network_input = self.n_agents*self.n_chars
-        if self.attention_intention:  
-            self.attention_observation = [[0 for _ in range(2+self.n_agents*self.n_chars)] for _ in range(self.seq_len)]
-        elif self.recurrent_intention:
-            self.recurrent_intention_network_input = self.intention_network_input + self.meta_param_size
+        if self.intention_neighbors:
+            self.intention_network_input = 2+2*2  # [own prox, neighbors prox, own prev gsp, neighbors prev gsp]
+            #TODO write logic for recurrent and attention
+        else:
+            self.intention_network_input = self.n_agents*self.n_chars
+            if self.attention_intention:  
+                self.attention_observation = [[0 for _ in range(2+self.n_agents*self.n_chars)] for _ in range(self.seq_len)]
+            elif self.recurrent_intention:
+                self.recurrent_intention_network_input = self.intention_network_input + self.meta_param_size
             
 
     def build_networks(self, learning_scheme):

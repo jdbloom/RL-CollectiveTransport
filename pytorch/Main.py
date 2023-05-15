@@ -35,6 +35,7 @@ parser.add_argument("--intention", default=False, action = "store_true")
 parser.add_argument("--recurrent", default= False, action= 'store_true')
 parser.add_argument("--attention", default= False, action= 'store_true')
 parser.add_argument("--gnn", default=False, action = 'store_true')
+parser.add_argument("--neighbors", default=False, action = 'store_true')
 parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention-rl", default=False, action="store_true")
 parser.add_argument("--meta_param_size", default=0, type=int)
@@ -98,6 +99,7 @@ agent_args = {'n_agents':Utility.params['num_robots'],
               'use_recurrent':args.recurrent,
               'attention':args.attention,
               'gnn': args.gnn,
+              'intention_neighbors':args.neighbors,
               'intention_look_back':2,
               'edge_index': edge_index,
               'prox_filter_angle':60}
@@ -138,8 +140,6 @@ gate_stats = 0
 obstacles = 0
 obstacle_stats = 0
 
-
-
 while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
@@ -157,7 +157,7 @@ while not exp_done:
             last_object_heading = None
 
             next_heading_intention = np.zeros(Utility.params['num_robots'])
-
+            old_heading_intention = np.zeros(Utility.params['num_robots'])
             episode_intention_rewards = np.zeros(Utility.params['num_robots'])
 
             # Receive initial observations from the environment
@@ -359,6 +359,7 @@ while not exp_done:
 
                     # Store Transitions and Learn
                     old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
+                    neighbors_old_heading_intention = copy.deepcopy(old_heading_intention)
                     old_heading_intention = copy.deepcopy(next_heading_intention)
 
                     new_agent_states = []
@@ -398,29 +399,43 @@ while not exp_done:
                                     next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
+                                if model.intention_neighbors:
+                                    agent_intention_states = model.build_intention_states(agent_prox_flags, old_heading_intention)
+                                    ctde_intention = model.choose_object_intention(agent_intention_states, edge_index, test_mode)
+                                else:
+                                    ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                 for i in range(Utility.params['num_robots']):
                                     next_heading_intention[i] = ctde_intention[i]
                         #store transitions of intentions
                         if args.attention:
                             if args.independent_learning:
-                                    models[i].store_intention_transition(agent_prox_flags, label, 0, 0, 0)
+                                    for i in range(Utility.params['num_robots']):
+                                        models[i].store_intention_transition(agent_prox_flags, label, 0, 0, 0)
                             else:
                                 model.store_intention_transition(agent_prox_flags, label, 0, 0, 0)
 
-                        
-                        for i in range(Utility.params['num_robots']):
-                            if args.independent_learning:
-                                state = np.array(old_agent_prox_flags)
+                        if args.neighbors:
+                            states = model.build_intention_states(old_agent_prox_flags, neighbors_old_heading_intention)
+                            new_states = model.build_intention_states(agent_prox_flags, old_heading_intention)
+                            for i in range(Utility.params['num_robots']):
+                                state = states[i]
                                 action = old_heading_intention[i]
                                 reward = intention_reward[i]
-                                new_state = np.array(agent_prox_flags)
-                                models[i].store_intention_transition(state, action, reward, new_state, 0)
-                            else:
-                                state = np.array(old_agent_prox_flags)
-                                action = old_heading_intention[i]
-                                reward = intention_reward[i]
-                                new_state = np.array(agent_prox_flags)
+                                new_state = new_states[i]
+                                model.store_intention_transition(state, action, reward, new_state, 0)
+                        else:
+                            for i in range(Utility.params['num_robots']):
+                                if args.independent_learning:
+                                    state = np.array(old_agent_prox_flags)
+                                    action = old_heading_intention[i]
+                                    reward = intention_reward[i]
+                                    new_state = np.array(agent_prox_flags)
+                                    models[i].store_intention_transition(state, action, reward, new_state, 0)
+                                else:
+                                    state = np.array(old_agent_prox_flags)
+                                    action = old_heading_intention[i]
+                                    reward = intention_reward[i]
+                                    new_state = np.array(agent_prox_flags)
                                 model.store_intention_transition(state, action, reward, new_state, 0)
 
 
