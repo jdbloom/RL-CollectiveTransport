@@ -43,11 +43,11 @@ class Actor(NetworkAids):
             self.network_input_size += 1  
         # attention will only take sequences with (Cx, Cy, P)
         if self.attention_intention:  
-            self.intention_network_input = 2+self.n_agents*self.n_chars
+            self.intention_network_input = self.n_agents*self.n_chars
             self.attention_observation = [[0 for _ in range(2+self.n_agents*self.n_chars)] for _ in range(self.seq_len)]
         else:
-            # intention takes((Cx, Cy)*intention_look_back + P)
-            self.intention_network_input = self.intention_look_back*2+self.n_agents*self.n_chars
+            # intention takes(P)
+            self.intention_network_input = self.n_agents*self.n_chars
         if self.recurrent_intention and not self.attention_intention:
             self.recurrent_intention_network_input = self.intention_network_input + self.meta_param_size
 

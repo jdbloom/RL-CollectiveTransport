@@ -16,6 +16,8 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--heading", default=False, action = 'store_true')
 parser.add_argument("--orientation", default=False, action='store_true')
 parser.add_argument("--intention", default=False, action='store_true')
+parser.add_argument("--failures", default=False, action='store_true')
+parser.add_argument("--plot_robots", default=False, action = 'store_true')
 parser.add_argument("--label_1")
 parser.add_argument("--label_2")
 args = parser.parse_args()
@@ -62,6 +64,9 @@ for ep in range(len(df_list)):
     intention = []
     cyl_x_pos_2 = []
     cyl_y_pos_2 = []
+    robot_failures = []
+    robot_x_pos = []
+    robot_y_pos = []
     pos_gate_x = 0
     pos_gate_length = 0
     neg_gate_x = 0
@@ -70,6 +75,10 @@ for ep in range(len(df_list)):
     for t in range(len(episode[1])):
         cyl_x_pos.append(episode[1]['cyl_x_pos'][t])
         cyl_y_pos.append(episode[1]['cyl_y_pos'][t])
+        if args.failures:
+            robot_failures.append(episode[1]['robot_failures'][t].strip('][').split(','))
+        robot_x_pos.append(episode[1]['robots_x_pos'][t].strip('][').split(','))
+        robot_y_pos.append(episode[1]['robots_y_pos'][t].strip('][').split(','))
         if args.orientation:
             cyl_angle.append(episode[1]['cyl_angle'][t])
         if args.intention:
@@ -85,10 +94,49 @@ for ep in range(len(df_list)):
         gate = gate.strip('][').split(',')
     if obstacles != 0:
         obstacles = obstacles.strip('][').split(',')
+    robot_plot_pos_x = [[] for i in range(len(robot_x_pos[0]))]
+    robot_plot_pos_y = [[] for i in range(len(robot_y_pos[0]))]
+    cylinder_robot_plot_pos_x = []
+    cylinder_robot_plot_pos_y = []
+    if args.plot_robots:
+        for i in range(len(robot_x_pos)):
+            if (i+1)%500==0:
+                for j in range(len(robot_x_pos[i])):
+                    robot_plot_pos_x[j].append(float(robot_x_pos[i][j]))
+                    robot_plot_pos_y[j].append(float(robot_y_pos[i][j]))
+                cylinder_robot_plot_pos_x.append(cyl_x_pos[i])
+                cylinder_robot_plot_pos_y.append(cyl_y_pos[i])
+        for j in range(len(robot_x_pos[0])):
+            robot_plot_pos_x[j].append(float(robot_x_pos[0][j]))
+            robot_plot_pos_y[j].append(float(robot_y_pos[0][j]))
+            robot_plot_pos_x[j].append(float(robot_x_pos[-1][j]))
+            robot_plot_pos_y[j].append(float(robot_y_pos[-1][j]))
+               
+
+
+
+    if args.failures:
+        failures = np.zeros(len(robot_failures[0]))
+        failure_x_pos = np.zeros(len(robot_failures[0]))
+        failure_y_pos = np.zeros(len(robot_failures[0]))
+        for i in range(len(robot_failures[0])):
+            for j in range(len(episode[1])):
+                if int(robot_failures[j][i]) == 1 and failures[i] == 0:
+                    failures[i] = j
+                    failure_x_pos[i] = float(robot_x_pos[j][i])
+                    failure_y_pos[i] = float(robot_y_pos[j][i])
+
+        robot_failure_x_pos = []
+        robot_failure_y_pos = []
+        for i in range(failure_x_pos.shape[0]):
+            if failure_x_pos[i] != 0.0:
+                robot_failure_x_pos.append(failure_x_pos[i])
+                robot_failure_y_pos.append(failure_y_pos[i])
 
     fig, ax = plt.subplots(figsize=(20, 10))
     plt.rcParams.update({'font.size': 22})
     plt.plot((-10, 10, 10, -10, -10), (-5, -5, 5, 5, -5), c= 'k')
+
 
     if args.heading:
         headings = []
@@ -121,8 +169,8 @@ for ep in range(len(df_list)):
         for i in range(len(intention_index)):
             x0 = cyl_x_pos[intention_index[i]]
             y0 = cyl_y_pos[intention_index[i]]
-            x1 = x0 + math.cos(intention[intention_index[i]]*math.pi + math.pi)
-            y1 = y0 + math.sin(intention[intention_index[i]]*math.pi + math.pi)
+            x1 = x0 + math.cos(intention[intention_index[i]]*math.pi+math.radians(cyl_angle[intention_index[i]]))
+            y1 = y0 + math.sin(intention[intention_index[i]]*math.pi+math.radians(cyl_angle[intention_index[i]]))
             plot_intention.append(((x0, x1), (y0, y1)))
             
 
@@ -136,6 +184,7 @@ for ep in range(len(df_list)):
     if gate != 0:
         plt.plot((np.float64(gate[0]), np.float64(gate[0])), (-5, (-5 + np.float64(gate[1]))), c='k', linewidth = 5)
         plt.plot((np.float64(gate[0]), np.float64(gate[0])), (5, (5-np.float64(gate[3]))), c='k', linewidth = 5)
+        plt.plot((-10, 10), (0, 0), c='r', linestyle='--')
     if obstacles != 0:
         for i in range(int(len(obstacles)/2)):
             ax.add_patch(plt.Circle((np.float64(obstacles[i*2]), np.float64(obstacles[i*2+1])), 0.5, color = 'black'))
@@ -153,6 +202,22 @@ for ep in range(len(df_list)):
     if args.intention:
         for i in range(len(plot_intention)):
             plt.plot(plot_intention[i][0], plot_intention[i][1], c='green')
+    if args.plot_robots:
+        colors = ['#377eb8', '#ff7f00', '#4daf4a','#f781bf', '#a65628', '#984ea3','#999999', '#dede00']
+        labels = [f"Robot {i}" for i in range(len(robot_plot_pos_x))]
+        x_pos = [7.5 for i in range(len(robot_plot_pos_x))]
+        y_pos = [4-(i*.5) for i in range(len(robot_plot_pos_x))]
+        for j in range(len(x_pos)):
+            ax.add_patch(plt.Circle((x_pos[j], y_pos[j]), 0.1, facecolor = colors[j], edgecolor='black'))
+            ax.text(x_pos[j]+0.25, y_pos[j]-0.15, labels[j])
+        for i in range(len(robot_plot_pos_x)):
+            for j in range(len(robot_plot_pos_x[i])):
+                ax.add_patch(plt.Circle((robot_plot_pos_x[i][j], robot_plot_pos_y[i][j]), 0.1, facecolor = colors[i], edgecolor='black'))
+        for i in range(len(cylinder_robot_plot_pos_x)):
+            ax.add_patch(plt.Circle((cylinder_robot_plot_pos_x[i], cylinder_robot_plot_pos_y[i]), 0.5, facecolor = 'lightgray', edgecolor='black'))
+    if args.failures:
+        plt.scatter(robot_failure_x_pos, robot_failure_y_pos, marker='x', c = 'b')
+
     plt.text(cyl_x_pos[0]-0.5, cyl_y_pos[0]+1, 'START', fontsize = 20)
     plt.text(4, -0.25, 'GOAL', fontsize=20)
     plt.xlim(-11, 11, 1)

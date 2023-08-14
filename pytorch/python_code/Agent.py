@@ -37,7 +37,10 @@ class Agent(Actor):
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
-        
+        self.ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
+                                       112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
+                                       -157.5, -142.5, -127.5, -112.5, -97.5, 
+                                       -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
         
         self.build_networks(learning_scheme)
 
@@ -145,7 +148,7 @@ class Agent(Actor):
         return np.array([l_wheel, r_wheel, 0])
         
 
-    def choose_object_intention(self, positions, agent_prox_flags, test = False):
-        observation = np.append(np.array(positions), np.array(agent_prox_flags))
+    def choose_object_intention(self, agent_prox_flags, test = False):
+        observation = np.array(agent_prox_flags)
         return self.choose_action(observation, self.intention_networks, test)        
 
