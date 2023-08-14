@@ -1,11 +1,14 @@
 import os
-
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-
+#from torch_geometric.nn import MessagePassing
+#from torch_geometric.nn import GATConv
+import random
+from collections import deque
+import math
 
 def fanin_init(size, fanin = None):
     fanin = fanin or size[0]
@@ -201,7 +204,7 @@ class DDPGActorNetwork(nn.Module):
         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.mu.weight.data.uniform_(-init_w, init_w)
 
-    def forward(self, x):
+    def forward(self, x, edge_index = None):
         prob = self.fc1(x)
         prob = self.relu(prob)
         prob = self.fc2(prob)
@@ -297,7 +300,7 @@ class DDPGCriticNetwork(nn.Module):
         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.q.weight.data.uniform_(-init_w, init_w)
 
-    def forward(self, X):
+    def forward(self, X, edge_index = None):
         state, action = X
         action_value = self.fc1(T.cat([state, action], 1))
         action_value = self.relu(action_value)
@@ -518,3 +521,303 @@ class AttentionEncoder(nn.Module):
     def load_checkpoint(self, path):
         print('... loading', self.name, '...')
         self.load_state_dict(T.load(path + '_' + self.name))
+
+'''
+############################################################################
+# Graph Attention
+############################################################################
+class DDPGGATActor(nn.Module):
+    def __init__(self, id, num_actions, observation_size, lr, name,
+                 hidden_channels, num_heads, min_max_action = 1):
+        super().__init__()
+
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        #output_dims = (num_ops_per_action**num_actions) # For discrete action space
+        output_dims = num_actions
+
+        # allows for us to change the range of the action from (-min_max_action, min_max_action)
+        self.min_max_action = min_max_action
+        self.gat1 = GATConv(observation_size,hidden_channels,heads=num_heads)
+        self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
+        self.mu = nn.Linear(hidden_channels, output_dims)
+
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
+
+        #need to find how to access the weights of the network
+        #self.init_weights(3e-3) #find where this comes from and maybe find the purpose of this line???
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
+
+        self.name = name+'_'+str(id)+'_GNN_DDPG'
+
+        self.to(self.device)
+
+
+    def init_weights(self, init_w):
+        self.gat1.weight.data = fanin_init(self.gat1.weight.data.size())
+        self.gat2.weight.data = fanin_init(self.gat2.weight.data.size())
+        self.mu.weight.data.uniform_(-init_w, init_w)
+
+    def forward(self, x, edge_index):
+        prob = self.gat1(x, edge_index)
+        prob = self.relu(prob)
+        prob = self.gat2(prob, edge_index)
+        prob = self.relu(prob)
+        mu = self.mu(prob)
+        mu = self.min_max_action*self.tanh(mu) # This is needed for continuous action space
+        return mu
+
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
+
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
+
+class DDPGGATCritic(nn.Module):
+    def __init__(self, id, num_actions, observation_size, lr, name,
+                 hidden_channels, num_heads):
+        super().__init__()
+
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        self.gat1 = GATConv(observation_size+num_actions,hidden_channels,heads=num_heads)
+        self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
+        self.q = nn.Linear(hidden_channels, 1)
+
+        self.relu = nn.ReLU()
+
+        #self.init_weights(3e-3)
+
+        self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 1e-4)
+
+        self.name = name+'_'+str(id)+'_GNN_DDPG'
+        self.to(self.device)
+
+    def init_weights(self, init_w):
+        self.gat1.weight.data = fanin_init(self.gat1.weight.data.size())
+        self.gat2.weight.data = fanin_init(self.gat2.weight.data.size())
+        self.q.weight.data.uniform_(-init_w, init_w)
+
+    def forward(self, X, edge_index):
+        state, action = X
+        action_value = self.gat1(T.cat([state, action], 1), edge_index)
+        action_value = self.relu(action_value)
+        action_value = self.gat2(action_value, edge_index)
+        action_value = self.relu(action_value)
+        action_value = self.q(action_value)
+        return action_value
+
+    def save_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... saving', network_name,'...')
+        T.save(self.state_dict(), path + '_' + network_name)
+
+    def load_checkpoint(self, path, intention=False):
+        network_name = self.name
+        if intention:
+            network_name += "_intention"
+        print('... loading', network_name, '...')
+        self.load_state_dict(T.load(path + '_' + network_name))
+
+
+
+device = T.device('cuda' if T.cuda.is_available() else 'cpu')
+
+class GAT_QNetwork(nn.Module):
+    def __init__(self,in_channels,hidden_channels,num_actions,num_heads,num_robots):
+        super(GAT_QNetwork,self).__init__()
+        self.gat1 = GATConv(in_channels,hidden_channels,heads=num_heads)
+        self.gat2 = GATConv(hidden_channels*num_heads,hidden_channels)
+        self.fc = nn.Linear(hidden_channels,num_actions)
+        
+
+    def forward(self,x ,edge_index):
+        x = x.view(-1, x.shape[-1])  # Flatten the first two dimensions
+        x = F.relu(self.gat1(x,edge_index))
+        #x = F.dropout(x,p=0.6,training=self.training)
+        x= F.relu(self.gat2(x,edge_index))
+        #x = F.dropout(x,p=0.6,training=self.training)
+        x = self.fc(x)
+        #print("xxx shapelast:", x.shape)
+        return x
+
+class SharedGATDQNAgent:
+    def __init__(self,in_channels,hidden_channels,num_actions,num_heads,num_robots,learning_rate=0.0001, gamma=0.99997, buffer_size=100000, batch_size=100):
+        self.qnetwork_local = GAT_QNetwork(in_channels,hidden_channels,num_actions,num_heads,num_robots).to(device)
+        self.qnetwork_target= GAT_QNetwork(in_channels,hidden_channels,num_actions,num_heads,num_robots).to(device)
+        self.optimizer = T.optim.Adam(self.qnetwork_local.parameters(),lr=learning_rate)
+        self.memory = deque(maxlen = buffer_size)
+        self.batch_size = batch_size
+        self.gamma = gamma
+        self.num_robots = num_robots
+        self.num_actions = num_actions
+        self.epsilon = 1
+        self.epsilon_decay = 1e-5
+        self.epsilon_min = 0.01
+        self.options_per_action = 3
+        self.n_actions = 2
+        self.learn_step_counter = 0
+        self.replace_target_ctr = 1000
+        #summary(self.qnetwork_local,(32,4,18))
+
+
+
+
+
+    def step(self,joint_state,actions,rewards,next_joint_state,dones,edge_index):
+        #print("actions in step",actions.shape)
+        #actions = actions.view(-1, 1)
+        self.memory.append((joint_state,actions,rewards,next_joint_state,dones,edge_index))
+        if len(self.memory)>= self.batch_size:
+            experiences = random.sample(self.memory,k=self.batch_size)
+            loss = self.learn(experiences)
+            return loss
+        return 0
+
+    def parse_actions(self, action_num):
+        ''''''
+        This function will parse the number action to
+        a set of wheel actions:
+
+        0 - (- 1,-1)
+        1 - (-1, 0)
+        2 - (-1, 1)
+        3 - (0, -1)
+        4 - (0, 0)
+        5 - (0, 1)
+        6 - (1, -1)
+        7 - (1, 0)
+        8 - (1, 1)
+        ''''''
+        if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
+            raise Exception('Action Number Out of Range:'+str(action_num))
+        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
+        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
+        # Trailing zero is hardcoded control for gripper
+        return np.array([l_wheel, r_wheel, 0])
+
+    def build_reward(self,cyl_dist_goal, prev_cyl_dist_goal, robot_positions, obstacle_positions, time_step,obj_pos,object_radius):
+        threshold = 0.2
+        object_threshold = 0.2
+
+        if obstacle_positions != 0:
+            obstacle_penalty = 0
+            for position in robot_positions:
+                for obstacle_position in obstacle_positions:
+                    distance_to_obstacle = np.linalg.norm(position - obstacle_position)
+                    if distance_to_obstacle < threshold:
+                        obstacle_penalty -= (threshold - distance_to_obstacle)
+
+            for obstacle_position in obstacle_positions:
+                distance_to_obstacle = np.linalg.norm(obj_pos - obstacle_position) - object_radius
+                if distance_to_obstacle < object_threshold:
+                    obstacle_penalty -= (object_threshold - distance_to_obstacle)
+
+        time_penalty = -1
+
+        if obstacle_positions == 0:
+            total_reward = time_penalty
+        else:
+            total_reward = obstacle_penalty + time_penalty
+
+
+        #total_reward = progress_reward + obstacle_penalty + time_penalty
+        return total_reward
+
+    def act(self, joint_state, edge_index, test=False):
+        #print("joint_state shape:", joint_state.shape)
+        self.epsilon -= self.epsilon_decay
+        if self.epsilon < self.epsilon_min:
+            self.epsilon = self.epsilon_min
+        if random.random() > 0 or test:
+            self.qnetwork_local.eval()
+            with T.no_grad():
+                action_values = self.qnetwork_local(joint_state.to(device), edge_index)
+            self.qnetwork_local.train()
+            return action_values.cpu().data.numpy()
+        else:
+            random_action_values = np.random.random((self.num_robots, self.num_actions))
+            return random_action_values
+
+    
+
+    def learn(self, experiences):
+        self.learn_step_counter+=1
+        states, actions, rewards, next_states, dones, edge_indices = zip(*experiences)
+
+        #print("States tuple:", np.shape(states))
+
+        # for idx, state in enumerate(states):
+        #     print(f"State {idx} shape: {state.shape}, type: {state.dtype}")
+
+        # for idx, action in enumerate(actions):
+        #     print(f"Action {idx} shape: {action.shape}, type: {action.dtype}")
+        states = T.stack([state.to(device) for state in states], dim=0)
+        
+        #print("actionsbef", np.shape(actions))
+        actions = np.argmax(np.reshape(np.array(actions),(-1, self.num_actions)), axis=1)
+        indices = T.LongTensor(np.arange(actions.shape[0]).astype(np.long))
+
+        rewards = T.tensor(rewards, dtype=T.float).to(device)
+        next_states = T.stack([next_state.to(device) for next_state in next_states], dim=0)
+        dones = T.tensor(dones, dtype=T.long).to(device)
+        edge_indices = T.stack(edge_indices, dim=0).view(2, -1).to(device)
+
+
+        #print("edge_indicesss", edge_indices.shape)
+        #print("statesss", states.shape)
+        #print("actions", actions.shape)
+
+        # Get max predicted Q values (for next states) from target model
+
+        Q_targets_next = self.qnetwork_target(next_states, edge_indices).detach().max(1)[0].unsqueeze(1)
+
+        #print("Q_targets_next",Q_targets_next.shape)
+
+        # Compute Q targets for current states
+        rewards = rewards.view(-1, 1)
+
+        dones = dones.view(-1, 1).repeat(self.num_robots, 1) 
+
+        # print("rewards",rewards.shape)
+
+        # print("dones",dones.shape)
+
+        Q_targets = rewards + (self.gamma * Q_targets_next * (1 - dones))
+
+        #print("Q_targets",Q_targets.shape)
+        Q_expected = self.qnetwork_local(states, edge_indices)[indices, actions]
+
+        #print("Q_expected",Q_expected.shape)
+
+
+        # Compute loss
+        loss = F.mse_loss(Q_expected.unsqueeze(1), Q_targets)
+
+        # Minimize the loss
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # Update target network
+        if self.learn_step_counter % self.replace_target_ctr==0:
+            self.qnetwork_target.load_state_dict(self.qnetwork_local.state_dict())
+
+        return loss.item()
+
+    def soft_update(self,local_model,target_model,tau=1e-3):
+        for target_param, local_param in zip(target_model.parameters(),local_model.parameters()):
+            target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
+'''

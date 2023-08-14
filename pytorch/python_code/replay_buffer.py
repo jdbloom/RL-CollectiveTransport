@@ -137,7 +137,6 @@ class AttentionSequenceReplayBuffer:
 
     def store_transition(self, s, y):
         mem_index = self.mem_ctr % self.mem_size
-        #import ipdb; ipdb.set_trace()
         self.seq_state_memory[self.seq_mem_cntr] = s
         self.seq_mem_cntr += 1
         if self.seq_mem_cntr == self.seq_len:

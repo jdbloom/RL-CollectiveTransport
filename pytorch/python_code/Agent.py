@@ -15,18 +15,19 @@ Loss = nn.MSELoss()
 class Agent(Actor):
     def __init__(self, n_agents, n_obs, n_actions, options_per_action, id, learning_scheme,
                  n_chars=4, intention_look_back = 2, min_max_action = 1, use_intention=False, 
-                 use_recurrent=False, attention=False, meta_param_size = 1, seq_len=5):
-
+                 use_recurrent=False, attention=False, gnn=False, intention_neighbors=False,
+                 meta_param_size = 1, seq_len=5, edge_index = None, prox_filter_angle = 45):
 
         args = {'id':id, 'n_obs':n_obs, 'n_actions':n_actions, 'options_per_action':options_per_action, 'n_agents':n_agents,
                 'n_chars':n_chars, 'meta_param_size':meta_param_size, 'intention':use_intention, 'recurrent_intention':use_recurrent,
-                'attention':attention, 'intention_look_back':intention_look_back, 'seq_len':seq_len}
+                'attention':attention, 'gnn':gnn, 'intention_neighbors':intention_neighbors, 'intention_look_back':intention_look_back,
+                'seq_len':seq_len}
 
         super().__init__(**args)
-
+        self.n_agents = n_agents
         self.learning_scheme = learning_scheme
-
         self.object_stats = []
+        self.neighbors = {}
         self.min_obj_stats = np.zeros(4) # vel, accel, ang_vel, ang_accel
         self.max_obj_stats = np.zeros(4)
         self.decimals = 2
@@ -37,15 +38,20 @@ class Agent(Actor):
         self.binned_angle = None
         self.binned_acceleration = None
         self.obj_state = None
+        self.edge_index = edge_index
+        
         self.ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
                                        112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
                                        -157.5, -142.5, -127.5, -112.5, -97.5, 
                                        -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
+        self.prox_filter_angle = prox_filter_angle
         
         self.build_networks(learning_scheme)
 
         if self.intention:
             self.build_intention_network('DDPG')
+            if self.intention_neighbors:
+                self.build_neighbors()
 
     def make_agent_state(self, env_obs, heading_intention=None, global_knowledge=None):
         if heading_intention is not None:
@@ -148,7 +154,79 @@ class Agent(Actor):
         return np.array([l_wheel, r_wheel, 0])
         
 
-    def choose_object_intention(self, agent_prox_flags, test = False):
-        observation = np.array(agent_prox_flags)
-        return self.choose_action(observation, self.intention_networks, test)        
+    def choose_object_intention(self, agent_intention_states, edge_index = None, test = False):
+        if self.intention_neighbors:
+            return [self.choose_action(agent_intention_states[i], self.intention_networks, edge_index, test) for i in range(len(agent_intention_states))]
+        else:
+            observation = np.array(agent_intention_states)
+            if edge_index is not None:
+                observation = observation.reshape(1, observation.shape[0]).repeat(self.n_agents, axis = 0)
+            return self.choose_action(observation, self.intention_networks, edge_index, test) 
+
+    def filter_prox_values(self, prox_values, angle_to_cyl):
+        if angle_to_cyl > 0:
+            if angle_to_cyl > 180-self.prox_filter_angle:
+                cw_lim = angle_to_cyl + self.prox_filter_angle - 360
+            else:
+                cw_lim = angle_to_cyl+self.prox_filter_angle
+            ccw_lim = angle_to_cyl - self.prox_filter_angle
+        elif angle_to_cyl < 0:
+            if angle_to_cyl < -180 +self.prox_filter_angle:
+                ccw_lim = angle_to_cyl-self.prox_filter_angle+360
+            else:
+                ccw_lim = angle_to_cyl - self.prox_filter_angle
+            cw_lim = angle_to_cyl + self.prox_filter_angle
+        else:
+            cw_lim = self.prox_filter_angle
+            ccw_lim = -self.prox_filter_angle
+
+        index = []
+        filtered_prox_values = []
+        if angle_to_cyl > 180 - self.prox_filter_angle:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
+                    index.append(i)
+                elif self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i])
+        elif angle_to_cyl < -180+self.prox_filter_angle:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                elif self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i]) 
+        else:
+            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
+                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim and self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
+                    index.append(i)
+                else:
+                    filtered_prox_values.append(prox_values[i])
+        return filtered_prox_values, index
+
+    def build_neighbors(self):
+        agents_available = np.arange(self.n_agents)
+        for agent in range(self.n_agents):
+            self.neighbors[agent] = [agents_available[agent-1], agents_available[(agent+1)%self.n_agents]]
+    
+    def build_intention_states(self, agent_prox_values, agent_prev_intention):
+        states = []
+        for agent in self.neighbors.keys():
+            agent_state = np.zeros(self.intention_network_input)
+            n1, n2 = self.neighbors[agent]
+            agent_state[0] = agent_prox_values[agent]
+            agent_state[1] = agent_prox_values[n1]
+            agent_state[2] = agent_prox_values[n2]
+            agent_state[3] = agent_prev_intention[agent]
+            agent_state[4] = agent_prev_intention[n1]
+            agent_state[5] = agent_prev_intention[n2]
+            states.append(agent_state)
+        return states
+
+            
+
+
+
 
