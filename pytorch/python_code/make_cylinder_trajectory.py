@@ -78,10 +78,11 @@ for ep in range(len(df_list)):
             robot_failures.append(episode[1]['robot_failures'][t].strip('][').split(','))
         robot_x_pos.append(episode[1]['robots_x_pos'][t].strip('][').split(','))
         robot_y_pos.append(episode[1]['robots_y_pos'][t].strip('][').split(','))
-        if args.orientation:
+        if args.orientation and not args.intention:
             cyl_angle.append(episode[1]['cyl_angle'][t])
         if args.intention:
             intention.append(episode[1]['intention_heading'][t])
+            cyl_angle.append(episode[1]['cyl_angle'][t])
     if episode_2 is not None:
         for t in range(len(episode_2[1])):
             cyl_x_pos_2.append(episode_2[1]['cyl_x_pos'][t])

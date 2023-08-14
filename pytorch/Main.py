@@ -389,9 +389,13 @@ while not exp_done:
                                     next_object_heading[i] = models[i].choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                     next_heading_intention[i] = next_object_heading[i]
                             else:
-                                ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
+                                if model.intention_neighbors:
+                                    agent_intention_states = model.build_intention_states(agent_prox_flags, old_heading_intention)
+                                    ctde_intention = model.choose_object_intention(agent_intention_states, edge_index, test_mode)
+                                else:
+                                    ctde_intention = model.choose_object_intention(agent_prox_flags, edge_index, test_mode)
                                 for i in range(Utility.params['num_robots']):
-                                    next_heading_intention[i] = ctde_intention
+                                    next_heading_intention[i] = ctde_intention[i]
 
                         else:
                             if args.independent_learning:
@@ -412,7 +416,17 @@ while not exp_done:
                                     for i in range(Utility.params['num_robots']):
                                         models[i].store_intention_transition(agent_prox_flags, label, 0, 0, 0)
                             else:
-                                model.store_intention_transition(agent_prox_flags, label, 0, 0, 0)
+                                if args.neighbors:
+                                    states = model.build_intention_states(old_agent_prox_flags, neighbors_old_heading_intention)
+                                    new_states = model.build_intention_states(agent_prox_flags, old_heading_intention)
+                                    for i in range(Utility.params['num_robots']):
+                                        state = states[i]
+                                        action = old_heading_intention[i]
+                                        reward = intention_reward[i]
+                                        new_state = new_states[i]
+                                        model.store_intention_transition(state, action, reward, new_state, 0)
+                                else:
+                                    model.store_intention_transition(agent_prox_flags, label, 0, 0, 0)
 
                         if args.neighbors:
                             states = model.build_intention_states(old_agent_prox_flags, neighbors_old_heading_intention)

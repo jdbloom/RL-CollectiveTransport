@@ -46,6 +46,8 @@ class Actor(NetworkAids):
             self.network_input_size += 1  
         if self.intention_neighbors:
             self.intention_network_input = 2+2*2  # [own prox, neighbors prox, own prev gsp, neighbors prev gsp]
+            if self.attention_intention:
+                self.attention_observation = [[0 for _ in range(self.intention_network_input)] for _ in range(self.seq_len)]
             #TODO write logic for recurrent and attention
         else:
             self.intention_network_input = self.n_agents*self.n_chars
@@ -202,8 +204,11 @@ class Actor(NetworkAids):
         elif networks['learning_scheme'] == 'attention':
             self.attention_observation.append(observation)
             self.attention_observation.pop(0)
+            #print(type(observation))
             observation = np.array(self.attention_observation)
+            #print(type(observation))
             observation = T.Tensor(observation).to(networks['attention'].device)
+            #print(type(observation))
             return self.Attention_choose_action(observation.unsqueeze(0), networks)
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection ' + networks['learning_scheme'])
@@ -213,7 +218,9 @@ class Actor(NetworkAids):
                 return
 
         if self.intention:
-            self.learn_intention(edge_index)
+            if self.networks['learn_step_counter'] % self.intn_learning_offset == 0:
+                #print('[DEBUG] Learning Attention', self.networks['learn_step_counter'])
+                self.learn_intention(edge_index)
 
         if self.networks['learning_scheme'] == 'DQN':
             self.replace_target_network()

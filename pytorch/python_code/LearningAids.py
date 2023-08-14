@@ -25,6 +25,7 @@ class Hyperparameters:
         self.intn_epsilon = 1.0
         self.intn_eps_min = 0.01
         self.intn_eps_dec = 1e-5
+        self.intn_learning_offset = 100 #learn after every 1000 action network learning steps
 
         self.batch_size = 100
         self.mem_size = 100000
@@ -235,9 +236,12 @@ class NetworkAids(Hyperparameters):
             #reformatting inputs
             actions = actions[:,-1,:]
             rewards = rewards[:,-1]
-
-        target_actions = networks['target_actor'](states_, indices)
-        q_value_ = networks['target_critic']([states_, target_actions], indices)
+        if edge_index is not None:
+            target_actions = networks['target_actor'](states_, indices)
+            q_value_ = networks['target_critic']([states_, target_actions], indices)
+        else:
+            target_actions = networks['target_actor'](states_)
+            q_value_ = networks['target_critic']([states_, target_actions])
         # import ipdb; ipdb.set_trace()
         #TODO what is dones doing ?
         # q_value_[dones] = 0.0
@@ -245,7 +249,10 @@ class NetworkAids(Hyperparameters):
 
         #Critic Update
         networks['critic'].zero_grad()
-        q_value = networks['critic']([states, actions], indices)
+        if edge_index is not None:
+            q_value = networks['critic']([states, actions], indices)
+        else:
+            q_value = networks['critic']([states, actions])
         value_loss = Loss(q_value, target)
         value_loss.backward()
         networks['critic'].optimizer.step()
@@ -256,8 +263,12 @@ class NetworkAids(Hyperparameters):
             new_policy_actions = networks['actor'](states_clone)
             actor_loss = -networks['critic']([states_clone, new_policy_actions])
         else:
-            new_policy_actions = networks['actor'](states, indices)
-            actor_loss = -networks['critic']([states, new_policy_actions], indices)
+            if edge_index is not None:
+                new_policy_actions = networks['actor'](states, indices)
+                actor_loss = -networks['critic']([states, new_policy_actions], indices)
+            else:
+                new_policy_actions = networks['actor'](states)
+                actor_loss = -networks['critic']([states, new_policy_actions])
         actor_loss = actor_loss.mean()
         actor_loss.backward()
         networks['actor'].optimizer.step()
