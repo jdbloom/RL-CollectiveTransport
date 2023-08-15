@@ -40,10 +40,11 @@ class Agent(Actor):
         self.obj_state = None
         self.edge_index = edge_index
         
-        self.ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
-                                       112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
-                                       -157.5, -142.5, -127.5, -112.5, -97.5, 
-                                       -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
+        self.ROBOT_PROXIMITY_ANGLES = [0.0, 45.0, 90.0, 135.0, 180.0, -135.0, -90.0, -45.0]
+        # [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
+        #                                112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
+        #                                -157.5, -142.5, -127.5, -112.5, -97.5, 
+        #                                -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
         self.prox_filter_angle = prox_filter_angle
         
         self.build_networks(learning_scheme)
