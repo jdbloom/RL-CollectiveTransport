@@ -279,9 +279,6 @@ while not exp_done:
                     time_steps += 1
                     robot_failures = []
 
-                    if time_steps > 100:
-                        failures[1] = 1
-
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         if args.independent_learning:
