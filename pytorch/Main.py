@@ -284,7 +284,6 @@ while not exp_done:
                         if args.independent_learning:
                             action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
                         else:
-                            print(i, failures[i])
                             action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
