@@ -497,12 +497,12 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
+      /**DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
             RIncrease[t_vm->robot],
-            Failure[t_vm->robot]);
+            Failure[t_vm->robot]);*/
    }
 
    std::vector<Real> LIncrease;
