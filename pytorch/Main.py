@@ -36,6 +36,7 @@ parser.add_argument("--recurrent", default= False, action= 'store_true')
 parser.add_argument("--attention", default= False, action= 'store_true')
 parser.add_argument("--gnn", default=False, action = 'store_true')
 parser.add_argument("--neighbors", default=False, action = 'store_true')
+parser.add_argument("--intention_offset", default=1, type=int)
 parser.add_argument("--recurrent-rl", default=False, action = 'store_true')
 parser.add_argument("--attention-rl", default=False, action="store_true")
 parser.add_argument("--meta_param_size", default=0, type=int)
@@ -50,7 +51,7 @@ learning_scheme = args.learning_scheme
 port = args.port
 test_mode = args.test
 train_mode = not test_mode
-
+intention_offset = args.intention_offset
 #
 # Initialize zmq
 #
@@ -541,7 +542,7 @@ while not exp_done:
                             for i in range(Utility.params['num_robots']):
                                 loss = models[i].learn()
                         else:
-                            loss = model.learn(edge_index)
+                            loss = model.learn(edge_index, intention_offset)
                     else:
                         loss = 0
 

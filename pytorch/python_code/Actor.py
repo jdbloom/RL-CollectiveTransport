@@ -213,14 +213,15 @@ class Actor(NetworkAids):
         else:
             raise Exception('[ERROR]: Learning scheme not recognised for action selection ' + networks['learning_scheme'])
     
-    def learn(self, edge_index=None):
+    def learn(self, edge_index=None, intention_offset=1000):
         if self.networks['replay'].mem_ctr < (self.n_agents*self.batch_size + self.batch_size):
                 return
 
         if self.intention:
             if self.networks['learn_step_counter'] % self.intn_learning_offset == 0:
                 #print('[DEBUG] Learning Attention', self.networks['learn_step_counter'])
-                self.learn_intention(edge_index)
+                if self.networks['learn_step_counter'] % intention_offset:
+                    self.learn_intention(edge_index)
 
         if self.networks['learning_scheme'] == 'DQN':
             self.replace_target_network()
