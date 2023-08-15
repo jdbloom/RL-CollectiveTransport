@@ -481,12 +481,12 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase,
-                std::vector<UInt32>& vec_faiulure,
+                std::vector<UInt32>& vec_failure,
                 std::vector<Real>& vec_angle_to_goal,
                 std::vector<UInt32>& vec_base_model) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
-      Failure(vec_faiulure),
+      Failure(vec_failure),
       AngleToGoal(vec_angle_to_goal),
       BaseModel(vec_base_model) {}
 
@@ -497,12 +497,12 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
+      DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
             RIncrease[t_vm->robot],
-            Failure[t_vm->robot]);*/
+            Failure[t_vm->robot]);
    }
 
    std::vector<Real> LIncrease;
@@ -595,7 +595,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
       if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
-	       hasFailed = 1;
+          hasFailed = 1;
       }
 
 
