@@ -216,9 +216,9 @@ void CCollectiveRLTransport::CreateEntities() {
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
-//   DEBUG("cXCylinderRange = (%f,%f)\n",
+   /*DEBUG("cXCylinderRange = (%f,%f)\n",
     GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-    GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);
+    GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);*/
    CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
