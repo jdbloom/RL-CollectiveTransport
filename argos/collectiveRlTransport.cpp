@@ -8,21 +8,17 @@ using namespace argos;
 /****************************************/
 /****************************************/
 
-//static const std::string FB_CONTROLLER = "fgc";
-static const std::string KIV_CONTROLLER = "kivc"; // Chandler : swapped FB_CONTROLLER with KIV_CONTROLLER, unsure if correct name
-// TODO : fihure out what goes here for khepera
-static const Real WALL_THICKNESS            = 0.2;  // m
-static const Real CYLINDER_RADIUS           = 0.09855;  // m Previously 0.5 for footbot
+static const std::string KIV_CONTROLLER = "kivc";
+static const Real WALL_THICKNESS            = 0.05;  // m
+static const Real CYLINDER_RADIUS           = 0.12;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
-static const Real OBSTACLE_RADIUS           = 0.5;  // m
+static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
-// Chandler : Changed FOOTBOT_RADIUS to KHEPERAIV_RADIUS
-//static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
-static const Real KHEPERAIV_RADIUS          = 0.09855f; // m // TODO : Get the real radius WITH gripper
+static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
 static const Real CYLINDER_OFFSET           = 0.0;
-static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;  // m Previously 0.6
+static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
 
@@ -171,13 +167,12 @@ void CCollectiveRLTransport::CreateEntities() {
    AddEntity(*m_pcCylinder);
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
-   std::ostringstream cKIVId; // Chandler : changed cFBId to cKIVId
-//   CFootBotEntity* pcFB; // Chandler : Changed all instances of CFootBotEntity and pcFB with Khepera and pcKIV
+   std::ostringstream cKIVId;
    CKheperaIVEntity* pcKIV;
    CVector3 cPos;
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cKIVId.str("");
-      cKIVId << "kiv" << i; // Changed "fb" to kiv
+      cKIVId << "kiv" << i;
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
@@ -221,6 +216,9 @@ void CCollectiveRLTransport::CreateEntities() {
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
+   DEBUG("cXCylinderRange = (%f,%f)\n",
+    GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
+    GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);
    CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
