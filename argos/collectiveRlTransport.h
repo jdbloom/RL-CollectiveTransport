@@ -267,12 +267,28 @@ private:
    /** Flag for whether or not to use learning or the base model*/
    UInt32 m_unBaseModel;
 
+   /** Are we simulating the robots or taking them from the real field*/
+   bool m_bSimulateRobots;
+
+   /** Are we simulating the obstacles or taking them from the real field*/
+   bool m_bSimulateObstacles;
+
+   /** Are we simulating the gate or taking it from the real field*/
+   bool m_bSimulateGate;
+
 
 private:
+   void SimulateRobots();
+   void SimulateObstacles();
+   void SimulateGate();
 
-   void CreateEntities();
+   void ScanRobots();
+   void ScanObstacles();
+   void ScanGate();
 
-   void PlaceEntities(UInt32 un_episode);
+   void PlaceRobots(UInt32 un_episode);
+   void PlaceObstacles(UInt32 un_episode);
+   void PlaceGate(UInt32 un_episode);
 
    std::vector<SInt32> GenerateRobotFailure();
 
