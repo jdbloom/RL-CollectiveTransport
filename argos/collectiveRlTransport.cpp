@@ -84,6 +84,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttributeOrDefault(t_tree, "simulate_obstacles", m_bSimulateObstacles, true);
       GetNodeAttributeOrDefault(t_tree, "simulate_gate", m_bSimulateGate, true);
 
+      GetNodeAttributeOrDefault(t_tree, "robots_used", m_strRobotsUsed, m_strRobotsUsed); // Defaults are these because these are the robots we initially tested on
+
       /* Footbot dynamic equation parameters*/
       // TODO : Grap the actual values for khepera
       // Chandler : Changed m_fFootbotAxelLength to m_fKheperaIVAxelLength
@@ -145,15 +147,15 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
         SimulateGate();
         LOG<<"Gate Simulated"<<std::endl;
       } else {
-        ScanRobots();
+        SimulateRobots();
+        LOG<<"Robots taken from field"<<std::endl;
         if(m_bSimulateObstacles){
           SimulateObstacles();
-          LOG<<"Simulated Obstacles\n";}
+          LOG<<"Simulated Obstacles"<<std::endl;}
         if(m_bSimulateGate){
           SimulateGate();
-          LOG<<"Simulated Gate\n";}
+          LOG<<"Simulated Gate"<<std::endl;}
       }
-      LOG<<"Added Entities\n";
       //Print first failure set
       for(size_t i = 0; i < m_unNumRobots; i++){
         LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
@@ -161,19 +163,19 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       LOG<<std::endl;
 
       if(m_bSimulateRobots){
-       PlaceRobots(0);
+        PlaceRobots(0);
         PlaceObstacles(0);
         PlaceGate(0);
-        LOG<<"Placed Entities\n";
+        LOG<<"Placed Entities"<<std::endl;
       } else{
-        LOG<<"Robots are Placed in Field\n";
+        LOG<<"Robots are Placed in Field"<<std::endl;
         if(m_bSimulateObstacles){
           PlaceObstacles(0);
-          LOG<<"Placed Obstacles\n";
+          LOG<<"Placed Obstacles"<<std::endl;
         }
         if(m_bSimulateGate){
           PlaceGate(0);
-          LOG<<"Placed Gate\n";
+          LOG<<"Placed Gate"<<std::endl;
         }
       }
 
@@ -212,9 +214,19 @@ void CCollectiveRLTransport::SimulateRobots() {
     GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);*/
 
    /* Create the robots in simulation*/
+   std::vector<int> vect;
+   std::stringstream ss(m_strRobotsUsed);
+
+   for (int i; ss >> i;) {
+       vect.push_back(i);
+       if (ss.peek() == ',')
+           ss.ignore();
+   }
+
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cKIVId.str("");
-      cKIVId << "Khepera_" << i;
+      cKIVId << "Khepera_" << vect[i];
+      LOG<<"Placing "<<cKIVId.str()<<std::endl;
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
@@ -425,9 +437,19 @@ void CCollectiveRLTransport::ScanRobots(){
    CEntity& cEntity = GetSpace().GetEntity("Cylinder_1");
    m_pcCylinder = dynamic_cast<CCylinderEntity*>(&cEntity);
 
+   std::vector<int> vect;
+   std::stringstream ss(m_strRobotsUsed);
+
+   for (int i; ss >> i;) {
+       vect.push_back(i);
+       if (ss.peek() == ',')
+           ss.ignore();
+   }
+
    for(size_t i = 0; i < m_unNumRobots; ++i) {
+
       cKIVId.str("");
-      cKIVId << "Khepera_" << i;
+      cKIVId << "Khepera_" << vect[i];
 
       /* Search for the robot entities using their controller ID's */
       cEntity = GetSpace().GetEntity(cKIVId.str());
@@ -446,6 +468,8 @@ void CCollectiveRLTransport::ScanRobots(){
         }
       }
    }
+
+   m_vecRobotFailures.push_back(GenerateRobotFailure());
 }
 
 /****************************************/
