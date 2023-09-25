@@ -286,8 +286,6 @@ private:
    void SimulateObstacles();
    void SimulateGate();
 
-   void ScanRobots();
-   void ScanObstacles();
    void ScanGate();
 
    void PlaceRobots(UInt32 un_episode);
