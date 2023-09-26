@@ -166,8 +166,13 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       PlaceObstacles(0);
       PlaceGate(0);
 
-      /* Call buzz Init() (HAS TO BE THE LAST LINE) */
-      CBuzzLoopFunctions::Init(t_tree);
+      if(m_bSimulateRobots){
+        LOG<<"Calling CBuzzLoopFunctions::Init for some reason"<<std::endl;
+        /* Call buzz Init() (HAS TO BE THE LAST LINE) */
+        CBuzzLoopFunctions::Init(t_tree);
+      } else {
+        LOG<<"Maybe it doesn't have anything to do with the CBuzzLoopFunctions call?"<<std::endl;
+      }
    }
    catch(CARGoSException& ex) {
       THROW_ARGOSEXCEPTION_NESTED("while initializing the loop functions", ex);

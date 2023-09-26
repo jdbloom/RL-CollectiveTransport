@@ -98,26 +98,6 @@
       <body position="0,0.7,0" orientation="45,0,0" />
     </box>-->
 
-    <kheperaiv id="Khepera_1" rab_data_size="1000">
-      <body position="0,0,0" orientation="0,0,0" />
-      <controller config="kivc" />
-    </kheperaiv>
-
-    <kheperaiv id="Khepera_3" rab_data_size="1000">
-      <body position="0,0,0" orientation="0,0,0" />
-      <controller config="kivc" />
-    </kheperaiv>
-
-    <kheperaiv id="Khepera_5" rab_data_size="1000">
-      <body position="0,0,0" orientation="0,0,0" />
-      <controller config="kivc" />
-    </kheperaiv>
-
-    <kheperaiv id="Khepera_10" rab_data_size="1000">
-      <body position="0,0,0" orientation="0,0,0" />
-      <controller config="kivc" />
-    </kheperaiv>
-
   </arena>
 
 
