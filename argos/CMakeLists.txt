@@ -1,7 +1,11 @@
 #
 # Loop functions
 #
-set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
+if(VICON)
+    set(LIBRARY_FILES collectiveRlTransportNetworking.h collectiveRlTransportNetworking.cpp)
+else()
+    set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
+endif(VICON)
 
 if(NOT CLUSTER)
     set(LIBRARY_FILES ${LIBRARY_FILES} collectiveRlTransport_qtuser_functions.h collectiveRlTransport_qtuser_functions.cpp)
@@ -26,6 +30,11 @@ add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
     target_link_libraries(collectiveRlTransport
       argos3plugin_simulator_qtopengl)
   endif(NOT CLUSTER)
+  if(VICON)
+    target_link_libraries(collectiveRlTransport
+      argos3plugins_simulator_moveable_tcp_socket
+      argos3plugins_simulator_tracking)
+  endif(VICON)
 
 #
 # Buzz code

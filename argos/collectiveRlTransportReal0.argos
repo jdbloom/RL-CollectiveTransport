@@ -42,7 +42,7 @@
   <!-- Setting proximity_range = 0 will keep it at default -->
   <loop_functions label="MasterLoopFunctions">
     <sub_loop_function label="BaseNetworking" />
-    <sub_loop_functions label="collective_rl_transport"
+    <sub_loop_function label="collective_rl_transport"
             library="build/argos/libcollectiveRlTransport"
             data_file = "data.csv"
             num_robots = "4"
@@ -54,7 +54,7 @@
             threshold_freq = "100"
             threshold_dec = "0.1"
             min_threshold = "2"
-            num_episodes = "1000"
+            num_episodes = "1"
             episode_time = "4500"
             time_out_reward = "0"
             goal_reward = "0"
