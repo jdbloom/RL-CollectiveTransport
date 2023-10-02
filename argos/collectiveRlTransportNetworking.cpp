@@ -144,7 +144,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       // start callback thread
       m_bRun = true;
       m_cListenThread = std::thread(ThreadCallback, this);
-      LOG << "Finished Init basic networking" << std::endl;
+
+      LOG<<"[INFO] Finished Init basic networking"<<std::endl;
 
       /* Create and place stuff */
       if(m_bSimulateRobots){
@@ -168,11 +169,12 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       for(size_t i = 0; i < m_unNumRobots; i++){
         LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
       }
-      LOG<<std::endl;
 
       PlaceRobots(0);
       PlaceObstacles(0);
       PlaceGate(0);
+
+      LOG<<"Finished all robot initializations"<<std::endl;
 
 //      if(m_bSimulateRobots){
         /* Call buzz Init() (HAS TO BE THE LAST LINE) */

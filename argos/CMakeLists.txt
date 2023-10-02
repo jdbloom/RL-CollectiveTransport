@@ -1,9 +1,13 @@
 #
 # Loop functions
 #
+
+message("VICON is set to : ${VICON}")
 if(VICON)
+    message("collectiveRLTransportNetworking.cpp is being selected to run")
     set(LIBRARY_FILES collectiveRlTransportNetworking.h collectiveRlTransportNetworking.cpp)
 else()
+    message("collectiveRLTransport.cpp is being selected to run")
     set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
 endif(VICON)
 

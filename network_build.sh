@@ -5,5 +5,5 @@ set -e
 rm -rf build
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -VICON=ON ..
+cmake -DVICON=ON ..
 make -j8
