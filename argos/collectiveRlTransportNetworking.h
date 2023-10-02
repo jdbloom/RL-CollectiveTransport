@@ -295,6 +295,9 @@ private:
    /** What robots are we simulating, please put them in clockwise order around the object or I will die */
    std::string m_strRobotsUsed = "0,1,2,3";
 
+   /** What robots we are simulating in a way that we won't have to do any fancy conversions for*/
+   std::vector<int> m_vecRobotNumbers;
+
 
 
 private:

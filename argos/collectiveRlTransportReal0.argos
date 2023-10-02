@@ -30,8 +30,8 @@
         <range_and_bearing implementation="medium" medium="rab" show_rays="false" />
         <kheperaiv_proximity implementation = "default" show_rays = "true" />
       </sensors>
-      <params bytecode_file = "build/argos/collectiveRlTransport.bo"
-                         debug_file = "build/argos/collectiveRlTransport.bdb" />
+      <params bytecode_file = "build/argos/collectiveRlTransportNetworking.bo"
+                         debug_file = "build/argos/collectiveRlTransportNetworking.bdb" />
     </buzz_controller_kheperaiv>
 
   </controllers>

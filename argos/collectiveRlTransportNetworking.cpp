@@ -277,18 +277,17 @@ void CCollectiveRLTransport::SimulateRobots() {
     GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);*/
 
    /* Create the robots in simulation*/
-   std::vector<int> vect;
    std::stringstream ss(m_strRobotsUsed);
 
    for (int i; ss >> i;) {
-       vect.push_back(i);
+       m_vecRobotNumbers.push_back(i);
        if (ss.peek() == ',')
            ss.ignore();
    }
 
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cKIVId.str("");
-      cKIVId << "Khepera_" << vect[i];
+      cKIVId << "Khepera_" << m_vecRobotNumbers[i];
       LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
@@ -546,6 +545,7 @@ void CCollectiveRLTransport::PlaceObstacles(UInt32 un_episode){
                     CQuaternion(),                          // orientation
                     false,                                  // not a check
                     true);                                  // ignore collisions
+         LOG<<"Placed Obstacle in Simulation at location "<<m_vecObstaclePos[un_episode][i]<<std::endl;
        }
        LOG<<"Placed Obstacles in Simulation"<<std::endl;
     } else{
@@ -670,16 +670,19 @@ void CCollectiveRLTransport::Destroy() {
 /****************************************/
 /****************************************/
 
+/** TODO : PutIncreases seems to be the thing that is faulty, Robots 1 and 3 work fine, robots 5 and 10 have WILD numbers*/
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase,
                 std::vector<UInt32>& vec_failure,
+                std::vector<UInt32>& vec_gripper,
                 std::vector<Real>& vec_angle_to_goal,
                 std::vector<UInt32>& vec_base_model) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
       Failure(vec_failure),
+      Gripper(vec_gripper),
       AngleToGoal(vec_angle_to_goal),
       BaseModel(vec_base_model) {}
 
@@ -688,19 +691,21 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
+      BuzzPut(t_vm, "gripper_fault", static_cast<int>(Gripper[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      /**DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
-            CSimulator::GetInstance().GetSpace().GetSimulationClock(),
+      DEBUG("[Ex] [R=%u] A = %f,%f F = %u BM = %u\n",
             t_vm->robot,
             LIncrease[t_vm->robot],
             RIncrease[t_vm->robot],
-            Failure[t_vm->robot]);*/
+            Failure[t_vm->robot],
+            BaseModel[t_vm->robot]);
    }
 
    std::vector<Real> LIncrease;
    std::vector<Real> RIncrease;
    std::vector<UInt32> Failure;
+   std::vector<UInt32> Gripper;
    std::vector<Real> AngleToGoal;
    std::vector<UInt32> BaseModel;
 };
@@ -766,6 +771,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       CVector2 cVecRobot2Goal(
          m_cGoal.GetX() - cRobotPos.GetX(),
          m_cGoal.GetY() - cRobotPos.GetY());
+//      LOG<<"The vector of robot to goal is "<<cVecRobot2Goal<<std::endl;
+//      LOG<<"The robot position is : "<<cRobotPos.GetX()<<", "<<cRobotPos.GetY()<<std::endl;
       cVecRobot2Goal.Rotate(-cRobotZ);
       /* Get vector from robot to cylinder (robot-local) */
       CVector2 cVecRobot2Cylinder(
@@ -831,7 +838,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Adding cylinder angle to goal for MME*/
       m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
       // Get the proximity sensor values
-      // Chandler : changed CCI_FootBotProximitySensor to CCI_KheperaIVProximitySensor
+
+      LOG<<"Angle relative to the game field from robot to the goal : "<<ToDegrees(cVecRobot2Goal.Angle()).GetValue()<<std::endl;
+
       const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVProximitySensor> ("kheperaiv_proximity")->GetReadings(); // Chandler : Edited footbot_proximity to kheperaiv_proximity
       for(size_t t = 0; t < tReadings.size(); t++){
@@ -952,7 +961,9 @@ void CCollectiveRLTransport::PreStep() {
       vecAngleToGoal[i] = pfObs[1];
       vecBaseModel[i] = m_unBaseModel;
    }
-   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecGripper, vecAngleToGoal, vecBaseModel));
+   LOG<<"The vecBaseModel vector is b r o k e n along with the failure vector and gripper, no idea why"<<
+        vecBaseModel[0]<<", "<<vecBaseModel[1]<<", "<<vecBaseModel[2]<<", "<<vecBaseModel[3]<<std::endl;
+   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure, vecGripper, vecAngleToGoal, vecBaseModel));
 }
 
 /****************************************/
@@ -994,6 +1005,7 @@ void CCollectiveRLTransport::PostStep() {
    /* Check if the cylinder reached the goal */
    m_bReachedGoal = CylinderAtTarget();
    EEpisodeState eState = EPISODE_RUNNING;
+
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
       LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;

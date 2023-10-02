@@ -17,20 +17,28 @@ function init(){
   gripped = 0
   failure = 0
 	angle_buffer = 5.0 # degrees
+  log("setting gripping") # TODO : Autonomously allow the robots to grab object somehow
+  set_wheels_debug(0.0, 0.0)
+  L_wheel = 0.0
+  R_wheel = 0.0
+  gripper_lock() # For now we are the ones who set up the environment.
+  turret_disable()
+  gripped = 1
 }
 
 function step(){
-	#log("failure ", failure)
+    log("failure ", failure)
 	vec_to_goal = math.vec2.newp(1.0, AngleToGoal/180.0*math.pi)
 	debug.rays.add(255, 0, 0, vec_to_goal.x, vec_to_goal.y, 0.1)
 	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
   if(gripped){
     # Should we use the base model to control the robots or the learned model
-    #log(id," Gripped ", BaseModel)
+    log(id," Gripped ", BaseModel)
     if (BaseModel == 1){
       #log(id, " Case = 1")
+      log(id, " And the goal is ", AngleToGoal)
       if(180 - math.abs(AngleToGoal) < angle_buffer){ # Drive to it
-      		#log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
+      	log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
         set_wheels_debug(-MAX_SPEED, -MAX_SPEED)
       } else{ # Rotate
         if(AngleToGoal < 0){
@@ -53,23 +61,13 @@ function step(){
       set_wheels_debug(L_wheel, R_wheel)
     }
   }
-  else {
-    if (proximity[0].value > 0.6){
-			log("setting gripping")
-      set_wheels_debug(0.0, 0.0)
-      L_wheel = 0.0
-      R_wheel = 0.0
-      gripper_lock()
-      turret_disable()
-      gripped = 1
-    }
-  }
   # If the robot fails, open the gripper and set the wheel speeds to 0.
-  if(failure){
-    gripper_unlock()
-		log("setting failure")
-    set_wheels_debug(0.0, 0.0)
-  }
+  # TODO : Fix failure code because it is b r o k e n!!!
+  #if(failure){
+  # gripper_unlock()
+  # log("setting failure")
+  # set_wheels_debug(0.0, 0.0)
+  #}
 }
 
 function reset() {

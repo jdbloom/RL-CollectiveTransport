@@ -44,4 +44,8 @@ add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
 # Buzz code
 #
 
-buzz_make(collectiveRlTransport.bzz)
+if(VICON)
+  buzz_make(collectiveRlTransportNetworking.bzz)
+else()
+  buzz_make(collectiveRLTransport.bzz)
+endif(VICON)
