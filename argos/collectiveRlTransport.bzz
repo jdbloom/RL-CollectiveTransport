@@ -16,7 +16,8 @@ function init(){
   set_wheels_debug(L_wheel, R_wheel)
   gripped = 0
   failure = 0
-	angle_buffer = 5.0 # degrees
+	angle_buffer = 6.0 # degrees
+
 }
 
 function step(){
@@ -28,16 +29,12 @@ function step(){
     # Should we use the base model to control the robots or the learned model
     #log(id," Gripped ", BaseModel)
     if (BaseModel == 1){
-      #log(id, " Case = 1")
-      if(180 - math.abs(AngleToGoal) < angle_buffer){ # Drive to it
-      		#log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
-        set_wheels_debug(-MAX_SPEED, -MAX_SPEED)
+      #log(id, " Case = 1, error = ", math.abs(AngleToGoal))
+      if(math.abs(AngleToGoal) < angle_buffer){ # Drive to it
+        set_wheels_debug(MAX_SPEED, MAX_SPEED)
       } else{ # Rotate
-        if(AngleToGoal < 0){
-            set_wheels_debug(-MAX_SPEED/2, MAX_SPEED/2)
-        } else{
-            set_wheels_debug(MAX_SPEED/2, -MAX_SPEED/2)
-        }
+        error = AngleToGoal / 180
+        set_wheels_debug(-error * MAX_SPEED + 1/8 * MAX_SPEED, error * MAX_SPEED + 1/8 * MAX_SPEED)
       }
     }
     else{

@@ -694,12 +694,12 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "gripper_fault", static_cast<int>(Gripper[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      DEBUG("[Ex] [R=%u] A = %f,%f F = %u BM = %u\n",
-            t_vm->robot,
-            LIncrease[t_vm->robot],
-            RIncrease[t_vm->robot],
-            Failure[t_vm->robot],
-            BaseModel[t_vm->robot]);
+//      DEBUG("[Ex] [R=%u] A = %f,%f F = %u BM = %u\n",
+//            t_vm->robot,
+//            LIncrease[t_vm->robot],
+//            RIncrease[t_vm->robot],
+//            Failure[t_vm->robot],
+//            BaseModel[t_vm->robot]);
    }
 
    std::vector<Real> LIncrease;
@@ -961,6 +961,11 @@ void CCollectiveRLTransport::PreStep() {
       vecAngleToGoal[i] = pfObs[1];
       vecBaseModel[i] = m_unBaseModel;
    }
+   LOG<<"vecLIncrease : "<<vecLIncrease[0]<<", "<<vecLIncrease[1]<<", "<<vecLIncrease[2]<<", "<<vecLIncrease[3]<<std::endl;
+   LOG<<"vecRIncrease : "<<vecRIncrease[0]<<", "<<vecRIncrease[1]<<", "<<vecRIncrease[2]<<", "<<vecRIncrease[3]<<std::endl;
+   LOG<<"vecGripper : "<<vecGripper[0]<<", "<<vecGripper[1]<<", "<<vecGripper[2]<<", "<<vecGripper[3]<<std::endl;
+   LOG<<"vecFailure : "<<vecFailure[0]<<", "<<vecFailure[1]<<", "<<vecFailure[2]<<", "<<vecFailure[3]<<std::endl;
+   LOG<<"vecAngleToGoal : "<<vecAngleToGoal[0]<<", "<<vecAngleToGoal[1]<<", "<<vecAngleToGoal[2]<<", "<<vecAngleToGoal[3]<<std::endl;
    LOG<<"The vecBaseModel vector is b r o k e n along with the failure vector and gripper, no idea why"<<
         vecBaseModel[0]<<", "<<vecBaseModel[1]<<", "<<vecBaseModel[2]<<", "<<vecBaseModel[3]<<std::endl;
    BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecFailure, vecGripper, vecAngleToGoal, vecBaseModel));

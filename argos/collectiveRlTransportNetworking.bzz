@@ -1,10 +1,10 @@
 include "vec2.bzz"
 
-MAX_SPEED = 20.0
+MAX_SPEED = 10.0
 MIN_SPEED = -MAX_SPEED
 
 function set_wheels_debug(Left, Right){
-	#log(id, " speeds: ", Left, " " , Right)
+	log(id, " speeds: ", Left, " " , Right)
 	set_wheels(Left, Right)
 	#debug.print("i: ", L_increase, " ", R_increase, "; s: ", Left, " ", Right, "; a: ", AngleToGoal)
 }
@@ -17,17 +17,11 @@ function init(){
   gripped = 0
   failure = 0
 	angle_buffer = 5.0 # degrees
-  log("setting gripping") # TODO : Autonomously allow the robots to grab object somehow
-  set_wheels_debug(0.0, 0.0)
-  L_wheel = 0.0
-  R_wheel = 0.0
-  gripper_lock() # For now we are the ones who set up the environment.
-  turret_disable()
-  gripped = 1
+	counter = 0
 }
 
 function step(){
-    log("failure ", failure)
+    #log("failure ", failure)
 	vec_to_goal = math.vec2.newp(1.0, AngleToGoal/180.0*math.pi)
 	debug.rays.add(255, 0, 0, vec_to_goal.x, vec_to_goal.y, 0.1)
 	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
@@ -35,17 +29,12 @@ function step(){
     # Should we use the base model to control the robots or the learned model
     log(id," Gripped ", BaseModel)
     if (BaseModel == 1){
-      #log(id, " Case = 1")
-      log(id, " And the goal is ", AngleToGoal)
-      if(180 - math.abs(AngleToGoal) < angle_buffer){ # Drive to it
-      	log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
-        set_wheels_debug(-MAX_SPEED, -MAX_SPEED)
+      log(id, " Case = 1, error = ", math.abs(AngleToGoal))
+      if(math.abs(AngleToGoal) < angle_buffer){ # Drive to it
+        set_wheels_debug(MAX_SPEED, MAX_SPEED)
       } else{ # Rotate
-        if(AngleToGoal < 0){
-            set_wheels_debug(-MAX_SPEED/2, MAX_SPEED/2)
-        } else{
-            set_wheels_debug(MAX_SPEED/2, -MAX_SPEED/2)
-        }
+        error = AngleToGoal / 180
+        set_wheels_debug(-error * MAX_SPEED + MAX_SPEED/4, error * MAX_SPEED + MAX_SPEED/4)
       }
     }
     else{
@@ -60,6 +49,17 @@ function step(){
 			#log("setting case = 0")
       set_wheels_debug(L_wheel, R_wheel)
     }
+  } else {
+      log("setting gripping") # TODO : Autonomously allow the robots to grab object somehow
+      set_wheels_debug(0.0, 0.0)
+      L_wheel = 0.0
+      R_wheel = 0.0
+      gripper_lock() # For now we are the ones who set up the environment.
+      turret_disable()
+      counter = counter + 1
+      if(counter > 10){
+      gripped = 1
+      }
   }
   # If the robot fails, open the gripper and set the wheel speeds to 0.
   # TODO : Fix failure code because it is b r o k e n!!!
@@ -71,9 +71,15 @@ function step(){
 }
 
 function reset() {
+  gripper_unlock()
+  set_wheels_debug(0.0, 0.0)
+  turret_disable()
   log(id , " reset")
 }
 
 function destroy() {
+  gripper_unlock()
+  set_wheels_debug(0.0, 0.0)
+  turret_disable()
   log(id , " destroy")
 }
