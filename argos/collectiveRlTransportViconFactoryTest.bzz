@@ -1,0 +1,53 @@
+include "vec2.bzz"
+
+function init(){
+    set_wheels(0.0, 0.0)
+    disabled = 0
+    counter = 0
+}
+
+function step(){
+    if(disabled){
+        if(counter < 150){
+            log("Turning Turret pi")
+            turret_set(3.14)
+        } else{
+            log("Turning Turret home")
+            turret_set(0.0)
+        }
+        if(counter > 200){
+            counter = 0
+            disabled = 0
+            turret_disable()
+            log("Turret Disabled")
+        }
+    } else{
+        if(counter < 50){
+            log("Locking Gripper")
+            gripper_lock()
+        } else{
+            log("Unlocking Gripper")
+            gripper_unlock()
+        }
+        if(counter > 100){
+            log("Turret Enabled")
+            disabled = 1
+            turret_enable()
+        }
+    }
+    counter = counter + 1
+}
+
+function reset() {
+  log(id , " reset")
+  gripper_unlock()
+  turret_disable()
+  set_wheels(0.0, 0.0)
+}
+
+function destroy() {
+  log(id , " destroy")
+  gripper_unlock()
+  turret_disable()
+  set_wheels(0.0, 0.0)
+}

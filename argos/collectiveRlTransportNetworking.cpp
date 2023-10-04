@@ -673,12 +673,12 @@ void CCollectiveRLTransport::Destroy() {
 /** TODO : PutIncreases seems to be the thing that is faulty, Robots 1 and 3 work fine, robots 5 and 10 have WILD numbers*/
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
-   PutIncreases(std::vector<Real>& vec_l_increase,
-                std::vector<Real>& vec_r_increase,
-                std::vector<UInt32>& vec_failure,
-                std::vector<UInt32>& vec_gripper,
-                std::vector<Real>& vec_angle_to_goal,
-                std::vector<UInt32>& vec_base_model) :
+   PutIncreases(std::map<int, Real>& vec_l_increase,
+                std::map<int, Real>& vec_r_increase,
+                std::map<int, UInt32>& vec_failure,
+                std::map<int, UInt32>& vec_gripper,
+                std::map<int, Real>& vec_angle_to_goal,
+                std::map<int, UInt32>& vec_base_model) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
       Failure(vec_failure),
@@ -688,26 +688,30 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
+//      size_t pos1 = str_robot_id.find('_');
+//      int robot_id = std::stoi(str_robot_id.substr(pos1 + 1));
+//      LOG<<"Robot ID: "<<robot_id<<std::endl;
+
       BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
       BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       BuzzPut(t_vm, "gripper_fault", static_cast<int>(Gripper[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-//      DEBUG("[Ex] [R=%u] A = %f,%f F = %u BM = %u\n",
-//            t_vm->robot,
-//            LIncrease[t_vm->robot],
-//            RIncrease[t_vm->robot],
-//            Failure[t_vm->robot],
-//            BaseModel[t_vm->robot]);
+      DEBUG("[Ex] [R=%u] A = %f,%f F = %u BM = %u\n",
+            t_vm->robot,
+            LIncrease[t_vm->robot],
+            RIncrease[t_vm->robot],
+            Failure[t_vm->robot],
+            BaseModel[t_vm->robot]);
    }
 
-   std::vector<Real> LIncrease;
-   std::vector<Real> RIncrease;
-   std::vector<UInt32> Failure;
-   std::vector<UInt32> Gripper;
-   std::vector<Real> AngleToGoal;
-   std::vector<UInt32> BaseModel;
+   std::map<int, Real> LIncrease;
+   std::map<int, Real> RIncrease;
+   std::map<int, UInt32> Failure;
+   std::map<int, UInt32> Gripper;
+   std::map<int, Real> AngleToGoal;
+   std::map<int, UInt32> BaseModel;
 };
 
 /****************************************/
@@ -945,21 +949,21 @@ void CCollectiveRLTransport::PreStep() {
             pfAction[0],
             pfAction[1]);
    }*/
-   std::vector<Real> vecLIncrease(m_unNumRobots);
-   std::vector<Real> vecRIncrease(m_unNumRobots);
-   std::vector<UInt32> vecGripper(m_unNumRobots);
-   std::vector<UInt32> vecFailure(m_unNumRobots);
-   std::vector<Real> vecAngleToGoal(m_unNumRobots);
-   std::vector<UInt32> vecBaseModel(m_unNumRobots);
+   std::map<int, Real> vecLIncrease;
+   std::map<int, Real> vecRIncrease;
+   std::map<int, UInt32> vecGripper;
+   std::map<int, UInt32> vecFailure;
+   std::map<int, Real> vecAngleToGoal;
+   std::map<int, UInt32> vecBaseModel;
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       float* pfObs = &m_vecObs[0] + i * m_unNumObs;
-      vecLIncrease[i] = pfAction[0];
-      vecRIncrease[i] = pfAction[1];
-      vecGripper[i] = pfAction[2];
-      vecFailure[i] = m_vecFailures[i];
-      vecAngleToGoal[i] = pfObs[1];
-      vecBaseModel[i] = m_unBaseModel;
+      vecLIncrease[m_vecRobotNumbers[i]] = pfAction[0];
+      vecRIncrease[m_vecRobotNumbers[i]] = pfAction[1];
+      vecGripper[m_vecRobotNumbers[i]] = pfAction[2];
+      vecFailure[m_vecRobotNumbers[i]] = m_vecFailures[i];
+      vecAngleToGoal[m_vecRobotNumbers[i]] = pfObs[1];
+      vecBaseModel[m_vecRobotNumbers[i]] = m_unBaseModel;
    }
    LOG<<"vecLIncrease : "<<vecLIncrease[0]<<", "<<vecLIncrease[1]<<", "<<vecLIncrease[2]<<", "<<vecLIncrease[3]<<std::endl;
    LOG<<"vecRIncrease : "<<vecRIncrease[0]<<", "<<vecRIncrease[1]<<", "<<vecRIncrease[2]<<", "<<vecRIncrease[3]<<std::endl;
