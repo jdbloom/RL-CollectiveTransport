@@ -1,0 +1,78 @@
+include "vec2.bzz"
+
+MAX_SPEED = 20.0
+MIN_SPEED = -MAX_SPEED
+
+function set_wheels_debug(Left, Right){
+	#log(id, " speeds: ", Left, " " , Right)
+	set_wheels(Left, Right)
+	#debug.print("i: ", L_increase, " ", R_increase, "; s: ", Left, " ", Right, "; a: ", AngleToGoal)
+}
+function init(){
+  #debug.trajectory.enable(100)
+  R_wheel = MAX_SPEED
+  L_wheel = MAX_SPEED
+	#log("setting init")
+  set_wheels_debug(L_wheel, R_wheel)
+  gripped = 0
+  failure = 0
+	angle_buffer = 6.0 # degrees
+
+}
+
+function step(){
+	#log("failure ", failure)
+	vec_to_goal = math.vec2.newp(1.0, AngleToGoal/180.0*math.pi)
+	debug.rays.add(255, 0, 0, vec_to_goal.x, vec_to_goal.y, 0.1)
+	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
+  if(gripped){
+    # Should we use the base model to control the robots or the learned model
+    #log(id," Gripped ", BaseModel)
+    if (BaseModel == 1){
+      #log(id, " Case = 1, error = ", math.abs(AngleToGoal))
+      if(math.abs(AngleToGoal) < angle_buffer){ # Drive to it
+        set_wheels_debug(MAX_SPEED, MAX_SPEED)
+      } else{ # Rotate
+        error = AngleToGoal / 180
+        set_wheels_debug(-error * MAX_SPEED + 1/8 * MAX_SPEED, error * MAX_SPEED + 1/8 * MAX_SPEED)
+      }
+    }
+    else{
+      #log(id, "Case = 0")
+      # Grab R_increase and L_increase from PreStep() in the loopfunctions code.
+      # Make sure R_wheel and L_wheel are within bounds
+      L_wheel = L_wheel + L_increase
+      L_wheel = math.max(math.min(L_wheel, MAX_SPEED), MIN_SPEED)
+      R_wheel = R_wheel + R_increase
+      R_wheel = math.max(math.min(R_wheel, MAX_SPEED), MIN_SPEED)
+      # Set the wheel speeds
+			#log("setting case = 0")
+      set_wheels_debug(L_wheel, R_wheel)
+    }
+  }
+  else {
+    if (proximity[0].value > 0.6){
+			log("setting gripping")
+      set_wheels_debug(0.0, 0.0)
+      L_wheel = 0.0
+      R_wheel = 0.0
+      gripper_lock()
+      turret_disable()
+      gripped = 1
+    }
+  }
+  # If the robot fails, open the gripper and set the wheel speeds to 0.
+  if(failure){
+    gripper_unlock()
+		log("setting failure")
+    set_wheels_debug(0.0, 0.0)
+  }
+}
+
+function reset() {
+  log(id , " reset")
+}
+
+function destroy() {
+  log(id , " destroy")
+}
