@@ -232,6 +232,12 @@ private:
    /** What robots are we simulating, please put them in clockwise order around the object or I will die */
    std::string m_strRobotsUsed = "0,1,2,3";
 
+   std::vector<Real> m_xOffsetFromRobot;
+
+   std::vector<Real> m_yOffsetFromRobot;
+
+   CRadians Intended_Dir;
+
 
 
 private:
@@ -244,7 +250,11 @@ private:
 
    bool FoundCM();
 
-   bool IsEpisodeFinished();
+   bool IsEpisodeFinished(); // TODO
+
+   bool CylinderAtTarget(); // TODO
+
+   Real PredictionDistance(int robot_index);
 
    void GetObservations(EEpisodeState e_state);
 

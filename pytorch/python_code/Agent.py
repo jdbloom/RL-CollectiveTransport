@@ -135,24 +135,24 @@ class Agent(Actor):
     def parse_action(self, action_num):
         '''
         This function will parse the number action to
-        a set of wheel actions:
+        a set of increments of prediction center of mass
 
-        0 - (- 1,-1)
-        1 - (-1, 0)
-        2 - (-1, 1)
-        3 - (0, -1)
+        0 - (- 0.1,-0.1)
+        1 - (-0.1, 0)
+        2 - (-0.1, 1)
+        3 - (0, -0.1)
         4 - (0, 0)
-        5 - (0, 1)
-        6 - (1, -1)
-        7 - (1, 0)
-        8 - (1, 1)
+        5 - (0, 0.1)
+        6 - (0.1, -0.1)
+        7 - (0.1, 0)
+        8 - (0.1, 0.1)
         '''
         if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
             raise Exception('Action Number Out of Range:'+str(action_num))
-        l_wheel = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1)
-        r_wheel = round((action_num%self.options_per_action - 1)/10.0, 1)
+        x_increment = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1) / 10
+        y_increment = round((action_num%self.options_per_action - 1)/10.0, 1) / 10
         # Trailing zero is hardcoded control for gripper
-        return np.array([l_wheel, r_wheel, 0])
+        return np.array([x_increment, y_increment, 0])
         
 
     def choose_object_intention(self, agent_intention_states, edge_index = None, test = False):

@@ -58,11 +58,12 @@
                   num_episodes = "$$num_episodes$$"
                   episode_time = "4500"
                   time_out_reward = "0"
-                  prediction_reward = "0"
+                  prediction_reward_max = "100"
                   pytorch_url = "tcp://localhost:$$pytorch_port$$"
 		              alphabet_size = "$$alphabet_size$$"
                   proximity_range = "1"
-                  use_base_model = "0"/>
+                  use_base_model = "0"
+                  ticks_per_direction_switch = "300"/>
 
 
   <!-- *********************** -->

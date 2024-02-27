@@ -11,6 +11,8 @@ else()
     set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
 endif(VICON)
 
+# Note : If running with no visualization available, delete this line completely because for some reason
+# CLUSTER=ON does not skip it...
 if(NOT CLUSTER)
     set(LIBRARY_FILES ${LIBRARY_FILES} collectiveRlTransport_qtuser_functions.h collectiveRlTransport_qtuser_functions.cpp)
 endif(NOT CLUSTER)
