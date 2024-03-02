@@ -417,8 +417,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Save Robot Positions and Orientations to send to python for MME learning (Stephen Powers)*/
       m_vecRobotStats[i*6] = cRobotPos.GetX();
       m_vecRobotStats[i*6+1] = cRobotPos.GetY();
-      m_vecRobotStats[i*6+2] = cRobotPos.GetZ();
-      m_vecRobotStats[i*6+3] = ToDegrees(cRobotX).GetValue();
+      m_vecRobotStats[i*6+2] = cRobotPos.GetZ(); // TODO : Do we need this? Probbly NOT
+      m_vecRobotStats[i*6+3] = ToDegrees(cRobotX).GetValue(); // TODO : Do we need these? Probably NOT
       m_vecRobotStats[i*6+4] = ToDegrees(cRobotY).GetValue();
       m_vecRobotStats[i*6+5] = ToDegrees(cRobotZ).GetValue();
 
@@ -504,6 +504,10 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 6] = fAngleRobotToDirection; // Angle to the selected direction in radians
       m_vecObs[i * m_unNumObs + 7] = fRobotOrientation;
+      // TODO : Add the individual robot's prediction and the CM relative to the robot
+      m_vecObs[i * m_unNumObs + 8] = m_xOffsetFromRobot[i];
+      m_vecObs[i * m_unNumObs + 9] = m_yOffsetFromRobot[i];// TODO Modify m_unNumObs to have 2 more
+
       // Get the proximity sensor values
       const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVProximitySensor> ("kheperaiv_proximity")->GetReadings();
@@ -593,7 +597,7 @@ Real CCollectiveRLTransport::PredictionDistance(int robot_index){
     CVector3 robot_grip_direction = cAnchorGripper - *cCenterRobot;
     cPredictionModifier.RotateZ(CVector3::X.getAngleWith(cAnchorGripper));
     CVector3 cPredictedCM = cAnchorGripper + cPredictionModifier;
-    return sqrt((cPredictedCM.GetX() - cCMObject.GetX())^2 + (cPredictedCM.GetY() - cCMObject.GetY())^2)
+    return sqrt((cPredictedCM.GetX() - cCMObject.GetX())^2 + (cPredictedCM.GetY() - cCMObject.GetY())^2);
 }
 
 /****************************************/
@@ -667,6 +671,11 @@ void CCollectiveRLTransport::PostStep() {
       if(m_unEpisodeCounter < m_unNumEpisodes) {
          m_unEpisodeTicksLeft = m_unEpisodeTime;
          GetSimulator().Reset();
+      }
+
+      if(m_unEpisodeCounter % m_unTicksPerDuration == 0){
+      LOG << "Changing Robot Directions" << std::endl;
+      Intended_Dir = (CRadians::PI / 6.0 * Real(m_unEpisodeCounter / m_unTicksPerDuration)) % (2 * CRadians::PI);
       }
    }
 }

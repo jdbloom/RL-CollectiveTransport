@@ -163,7 +163,7 @@ while not exp_done:
             failures = Utility.parse_failures(msgs[2])
             rewards = Utility.parse_rewards(msgs[3])
             stats = Utility.parse_stats(msgs[4])
-            robot_stats = Utility.parse_robot_stats(msgs[5])
+            robot_stats = Utility.parse_robot_stats(msgs[5]) # NOTE : Where all the magic should be happening
             obj_stats = Utility.parse_obj_stats(msgs[6])
 
             object_positions.append([obj_stats[0], obj_stats[1]])
