@@ -238,6 +238,10 @@ private:
 
    CRadians Intended_Dir;
 
+   Real wheel_gain = 0.035;
+
+   Real min_wheel_speed = 2;
+
 
 
 private:

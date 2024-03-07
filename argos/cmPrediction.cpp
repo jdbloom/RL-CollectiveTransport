@@ -41,7 +41,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(8+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, 8 proximity sensors
+   m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -158,12 +158,12 @@ void CCollectiveRLTransport::SimulateRobots() {
        // TODO Use Julian's code here
    } else {
        // TODO : Change this to a square to allow robot to always be perfectly perpendicular
-       m_pcBox = new CBoxEntity("Box_1",
-                                CVector3(),
-                                CQuaternion(),
-                                true,
-                                CVector3(CYLINDER_RADIUS,CYLINDER_RADIUS,CYLINDER_HEIGHT),
-                                CYLINDER_MASS);
+//       m_pcBox = new CBoxEntity("Box_1",
+//                                CVector3(),
+//                                CQuaternion(),
+//                                true,
+//                                CVector3(CYLINDER_RADIUS,CYLINDER_RADIUS,CYLINDER_HEIGHT),
+//                                CYLINDER_MASS);
 //       AddEntity(m_pcBox); // TODO : Make this code work
 
        /* Create the cylinder */
@@ -339,20 +339,20 @@ void CCollectiveRLTransport::Destroy() {
 
 struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
-   PutIncreases(std::vector<Real>& vec_l_increase,
-                std::vector<Real>& vec_r_increase, // TODO : Vector drive direction and PID is handled by us since cpp is easy to do that, no vec_angle_to_goal PROBABLY, but still will have it because it might be easier to let robots handle
+   PutIncreases(std::vector<Real>& vecWheelSpeedL,
+                std::vector<Real>& vecWheelSpeedR,
                 std::vector<Real>& vec_direction_to_drive,
                 std::vector<UInt32>& vec_base_model) :
-      LIncrease(vec_l_increase),
-      RIncrease(vec_r_increase),
+      LSpeed(vecWheelSpeedL),
+      RSpeed(vecWheelSpeedR),
       DirectionToDrive(vec_direction_to_drive),
       BaseModel(vec_base_model) {}
 
    virtual void operator()(const std::string& str_robot_id,
                            buzzvm_t t_vm) {
-      BuzzPut(t_vm, "L_increase", static_cast<float>(LIncrease[t_vm->robot]));
-      BuzzPut(t_vm, "R_increase", static_cast<float>(RIncrease[t_vm->robot]));
-      BuzzPut(t_vm, "AngleToGoal", static_cast<float>(DirectionToDrive[t_vm->robot]));
+      BuzzPut(t_vm, "LSpeed", static_cast<float>(LSpeed[t_vm->robot]));
+      BuzzPut(t_vm, "RSpeed", static_cast<float>(RSpeed[t_vm->robot]));
+      BuzzPut(t_vm, "DriveDirection", static_cast<float>(DirectionToDrive[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
       /**DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
@@ -361,8 +361,8 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
             RIncrease[t_vm->robot]);*/
    }
 
-   std::vector<Real> LIncrease;
-   std::vector<Real> RIncrease;
+   std::vector<Real> LSpeed;
+   std::vector<Real> RSpeed;
    std::vector<Real> DirectionToDrive;
    std::vector<UInt32> BaseModel;
 };
@@ -417,40 +417,25 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Save Robot Positions and Orientations to send to python for MME learning (Stephen Powers)*/
       m_vecRobotStats[i*6] = cRobotPos.GetX();
       m_vecRobotStats[i*6+1] = cRobotPos.GetY();
-      m_vecRobotStats[i*6+2] = cRobotPos.GetZ(); // TODO : Do we need this? Probbly NOT
-      m_vecRobotStats[i*6+3] = ToDegrees(cRobotX).GetValue(); // TODO : Do we need these? Probably NOT
+      m_vecRobotStats[i*6+2] = cRobotPos.GetZ(); // Do we need this? Probbly NOT
+      m_vecRobotStats[i*6+3] = ToDegrees(cRobotX).GetValue(); // Do we need these? Probably NOT
       m_vecRobotStats[i*6+4] = ToDegrees(cRobotY).GetValue();
       m_vecRobotStats[i*6+5] = ToDegrees(cRobotZ).GetValue();
 
-      /* Get vector from robot to goal (robot-local) */
-      CVector2 cVecRobot2Goal(
-         m_cGoal.GetX() - cRobotPos.GetX(),
-         m_cGoal.GetY() - cRobotPos.GetY());
-      cVecRobot2Goal.Rotate(-cRobotZ);
       /* Get vector from robot to cylinder (robot-local) */
       CVector2 cVecRobot2Cylinder(
          cCylinderPos.GetX() - cRobotPos.GetX(),
          cCylinderPos.GetY() - cRobotPos.GetY());
       cVecRobot2Cylinder.Rotate(-cRobotZ);
       /* Get the direction the robot is facing in */
-      Real fAngleRobotToGoal = cRobotPos.GetZAngle(); // TODO : Confirm this is the correct function call IN RADIANS
-      // Can use angles.h FromValueInRadians if wanted, but would rather just use radians as a normal person
-
-      /* Get the cosine similarity of the cylinder */ // TODO Do I need this?
-      CVector2 cMotion(cCylinderPos.GetX() - m_cOldCylinderPos.GetX(), cCylinderPos.GetY() - m_cOldCylinderPos.GetY());
-      Real fDirection = 0;
-      if(cMotion.Length()>1e-4){
-        fDirection= cVecCylinder2Goal.DotProduct(cMotion) /
-                          (cVecCylinder2Goal.Length()*cMotion.Length());
-
-      }
+      Real fRobotAngle = cRobotPos.GetZAngle(); // The robot angle in radians
 
       /* Check if the robot has failed */
-      float hasFailed = 0;
-      UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
-      if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
-          hasFailed = 1;
-      }
+//      float hasFailed = 0;
+//      UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
+//      if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
+//          hasFailed = 1;
+//      }
 
 
       /* Calculate reward */
@@ -493,20 +478,21 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       CRadians cObjZ, cObjY, cObjX;
       cRobotOrientation.ToEulerAngles(cObjZ, cObjY, cObjX);
       Real fRobotOrientation = ToDegrees(cObjZ).GetValue();
-      Real fAngleRobotToDirection = ;
+      Real fTargetDirection = ToDegrees(Intended_Dir).GetValue();
       DEBUG("Perpendicular Force : %f, Parallel Force : %f", fPerpendicularForce, fParallelForce);
       /* Store the observations */
-      m_vecObs[i * m_unNumObs + 0] = fPerpendicularForce; // TODO : Update m_vecObs everywhere to confirm force sends normalized
+      m_vecObs[i * m_unNumObs + 0] = fPerpendicularForce;
       m_vecObs[i * m_unNumObs + 1] = fParallelForce;
       m_vecObs[i * m_unNumObs + 2] = fLWheel;
       m_vecObs[i * m_unNumObs + 3] = fRWheel;
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
-      m_vecObs[i * m_unNumObs + 6] = fAngleRobotToDirection; // Angle to the selected direction in radians
+      m_vecObs[i * m_unNumObs + 6] = fTargetDirection; // Angle to the selected direction in radians
       m_vecObs[i * m_unNumObs + 7] = fRobotOrientation;
-      // TODO : Add the individual robot's prediction and the CM relative to the robot
+
+      // Individual robot's prediction and the CM relative to the robot
       m_vecObs[i * m_unNumObs + 8] = m_xOffsetFromRobot[i];
-      m_vecObs[i * m_unNumObs + 9] = m_yOffsetFromRobot[i];// TODO Modify m_unNumObs to have 2 more
+      m_vecObs[i * m_unNumObs + 9] = m_yOffsetFromRobot[i];
 
       // Get the proximity sensor values
       const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
@@ -558,8 +544,6 @@ void CCollectiveRLTransport::PreStep() {
             pfAction[0],
             pfAction[1]);
    }*/
-   std::vector<Real> vecLIncrease(m_unNumRobots);
-   std::vector<Real> vecRIncrease(m_unNumRobots);
    std::vector<UInt32> vecBaseModel(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
@@ -568,7 +552,21 @@ void CCollectiveRLTransport::PreStep() {
       m_xOffsetFromRobot[i] += pfAction[1];
       vecBaseModel[i] = m_unBaseModel;
    }
-   BuzzForeachVM(PutIncreases(vecLIncrease, vecRIncrease, vecBaseModel));
+
+   std::vector<Real> vecWheelSpeedL(m_unNumRobots);
+   std::vector<Real> vecWheelSpeedR(m_unNumRobots);
+   for(size_t i = 0; i < m_vecRobots.size(); i++){
+//   m_vecRobotStats[i*6 + 5] // Robot z in degrees
+       Real error = ToDegrees(Intended_Dir).GetValue() - m_vecRobotStats[i*6 + 5];
+       if(error < 3){
+           vecWheelSpeedL[i] = max((error * wheel_gain), min_wheel_speed);
+           vecWheelSpeedR[i] = - max((error * wheel_gain), min_wheel_speed);
+       } else{
+           vecWheelSpeedL[i] = max((error * wheel_gain) + 8, 7);
+           vecWheelSpeedR[i] = max( - (error * wheel_gain) + 8, 7);
+       }
+   }
+   BuzzForeachVM(PutIncreases(vecWheelSpeedL, vecWheelSpeedR, vecBaseModel));
 }
 
 /****************************************/
@@ -588,15 +586,16 @@ bool CCollectiveRLTransport::IsExperimentFinished() {
 /****************************************/
 
 Real CCollectiveRLTransport::PredictionDistance(int robot_index){
-    // TODO : Math to get vector of robot to gripper anchor and then robot anchor to what the predicted object center
+    // Math to get vector of robot to gripper anchor and then robot anchor to what the predicted object center
     // of mass is, then the euclidian distance between the predicted and actual
-    CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass
+    CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass, when using Julian's code, change it to be the center of mass of the object
     CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
     CVector3 cAnchorGripper = m_vecRobots[robot_index]->GetGripperEquippedEntity().GetAnchor1();
     CVector3 cPredictionModifier = CVector3(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot, 0.0);
     CVector3 robot_grip_direction = cAnchorGripper - *cCenterRobot;
     cPredictionModifier.RotateZ(CVector3::X.getAngleWith(cAnchorGripper));
     CVector3 cPredictedCM = cAnchorGripper + cPredictionModifier;
+    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f", robot_index, m_xOffsetFromRobot[i], m_yOffsetFromRobot[i], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
     return sqrt((cPredictedCM.GetX() - cCMObject.GetX())^2 + (cPredictedCM.GetY() - cCMObject.GetY())^2);
 }
 
@@ -624,7 +623,7 @@ void CCollectiveRLTransport::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
    /* Check if the cylinder reached the goal */
-   m_bFoundCM = CylinderAtTarget(); // TODO : Create this stop condition properly
+   m_bFoundCM = false; // TODO : Create this stop condition properly
 
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
@@ -674,8 +673,8 @@ void CCollectiveRLTransport::PostStep() {
       }
 
       if(m_unEpisodeCounter % m_unTicksPerDuration == 0){
-      LOG << "Changing Robot Directions" << std::endl;
-      Intended_Dir = (CRadians::PI / 6.0 * Real(m_unEpisodeCounter / m_unTicksPerDuration)) % (2 * CRadians::PI);
+          LOG << "Changing Robot Directions" << std::endl;
+          Intended_Dir = (CRadians::PI / 6.0 * Real(m_unEpisodeCounter / m_unTicksPerDuration)) % (2 * CRadians::PI);
       }
    }
 }
