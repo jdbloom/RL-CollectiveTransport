@@ -4,11 +4,10 @@
 
 message("VICON is set to : ${VICON}")
 if(VICON)
-    message("collectiveRLTransportNetworking.cpp is being selected to run")
-    set(LIBRARY_FILES collectiveRlTransportNetworking.h collectiveRlTransportNetworking.cpp)
+    # do nothing and panic
 else()
-    message("collectiveRLTransport.cpp is being selected to run")
-    set(LIBRARY_FILES collectiveRlTransport.h collectiveRlTransport.cpp)
+    message("cmPrediction.cpp is being selected to run")
+    set(LIBRARY_FILES cmPrediction.h cmPrediction.cpp)
 endif(VICON)
 
 # Note : If running with no visualization available, delete this line completely because for some reason
@@ -46,9 +45,9 @@ add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
 # Buzz code
 #
 if(VICON)
-buzz_make(collectiveRlTransportNetworking.bzz)
-buzz_make(collectiveRlTransportViconReset.bzz)
-buzz_make(collectiveRlTransportViconFactoryTest.bzz)
+# buzz_make(collectiveRlTransportNetworking.bzz)
+# buzz_make(collectiveRlTransportViconReset.bzz)
+# buzz_make(collectiveRlTransportViconFactoryTest.bzz)
 else()
-buzz_make(collectiveRlTransport.bzz)
+buzz_make(cmPrediction.bzz)
 endif(VICON)

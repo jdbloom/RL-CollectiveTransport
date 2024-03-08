@@ -1,4 +1,4 @@
-#include "collectiveRlTransport.h"
+#include "cmPrediction.h"
 #include <buzz/buzzvm.h>
 #include <zmq.h>
 #include <cmath>
@@ -19,7 +19,7 @@ static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
 static const Real CYLINDER_OFFSET           = 0.0;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
-static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
+static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
    "parallel_force",
@@ -58,7 +58,6 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
       GetNodeAttribute(t_tree, "latest_failure_time", m_unLatestFailureTime);
-      GetNodeAttribute(t_tree, "goal",            m_cGoal);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
       GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
       GetNodeAttribute(t_tree, "episode_time",    m_unEpisodeTime);
@@ -66,14 +65,15 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "threshold_freq", m_unDecThresholdTime);
       GetNodeAttribute(t_tree, "threshold_dec", m_fDecThreshold);
       GetNodeAttribute(t_tree, "min_threshold", m_fMinThreshold);
-      GetNodeAttribute(t_tree, "prediction_reward",m_fPredictionReward);
+      GetNodeAttribute(t_tree, "prediction_reward", m_fPredictionReward);
+      GetNodeAttribute(t_tree, "direction_tick_length", m_unTicksPerDuration);
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
       GetNodeAttribute(t_tree, "proximity_range", m_fProximityRange);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
       GetNodeAttributeOrDefault(t_tree, "simulate_robots", m_bSimulateRobots, true);
-      GetNodeAttributeOrDefault(t_tree, "simulate_object_mass_offset", m_bSimulateObjectMO, false)
+      GetNodeAttributeOrDefault(t_tree, "simulate_object_mass_offset", m_bSimulateObjectMO, false);
 
       GetNodeAttributeOrDefault(t_tree, "robots_used", m_strRobotsUsed, m_strRobotsUsed); // Defaults are these because these are the robots we initially tested on
 
@@ -102,12 +102,11 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
          THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
       }
       /* Send parameters */
-      ZMQSendParams();
+      ZMQSendParams(); // TODO : Setup the receiver on the python end for init
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
-      /* Initialize episode-related variables */
+      /* Initialize episode-related variables
        * This weird behavior is a design choice of ZeroMQ.
        */
-      m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
       m_unEpisodeTicksLeft = m_unEpisodeTime;
       /* Create structures for observations, reward, and actions */
@@ -176,18 +175,12 @@ void CCollectiveRLTransport::SimulateRobots() {
           CYLINDER_HEIGHT,
           CYLINDER_MASS);
        AddEntity(*m_pcCylinder);
-       /* Create robots */
-       CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
-       std::ostringstream cKIVId;
-       CKheperaIVEntity* pcKIV;
-       CVector3 cPos;
    }
-   /* Generating random positions for the cylinder */
-   /* We divide the arena in two horizontal halves */
-   /*DEBUG("cXCylinderRange = (%f,%f)\n",
-    GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-    GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);*/
-
+   /* Create robots */
+   CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
+   std::ostringstream cKIVId;
+   CKheperaIVEntity* pcKIV;
+   CVector3 cPos;
    /* Create the robots in simulation*/
    std::vector<int> vect;
    std::stringstream ss(m_strRobotsUsed);
@@ -231,18 +224,18 @@ void CCollectiveRLTransport::SimulateRobots() {
       }
    }
 
-   CRange<Real> cXCylinderRange(
-      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
-      );
-   CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
-      );
+//   CRange<Real> cXCylinderRange(
+//      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
+//      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
+//      );
+//   CRange<Real> cYRange(
+//      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
+//      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+//      );
 
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
-               m_pcRNG->Uniform(cYRange),
+      cPos.Set(0.0,
+               0.0,
                0.0);
       m_vecCylinderPos.push_back(cPos);
       //Generate Failure Times for all episodes
@@ -311,9 +304,6 @@ void CCollectiveRLTransport::Reset() {
      LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
    }
    LOG<<std::endl;
-   if(m_unUseGate==1){
-     LOG<<"[INFO] Current Offset: "<<m_vecOffset[m_unEpisodeCounter]<<std::endl;
-   }
 
    if(m_bSimulateRobots)
      PlaceRobots(m_unEpisodeCounter);
@@ -388,7 +378,7 @@ struct GetForceVector : public CBuzzLoopFunctions::COperation {
    }
    std::vector<float> PerpendicularForce;
    std::vector<float> ParallelForce;
-}
+};
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
@@ -428,7 +418,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          cCylinderPos.GetY() - cRobotPos.GetY());
       cVecRobot2Cylinder.Rotate(-cRobotZ);
       /* Get the direction the robot is facing in */
-      Real fRobotAngle = cRobotPos.GetZAngle(); // The robot angle in radians
+//      Real fRobotAngle = ToDegrees(cRobotPos.GetZAngle()).GetValue(); // The robot angle in radians
 
       /* Check if the robot has failed */
 //      float hasFailed = 0;
@@ -444,10 +434,10 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          case EPISODE_RUNNING: {
             //fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
             /* Cost of living + direction x reward for moving */
-            fReward = -2 + fDirection;
+            fReward = -2;
 
-            LOG << "Predicted Distance is " << PredictionDistance() << std::endl;
-            fReward += m_fPredictionReward * PredictionDistance(); // TODO : Figure out what this is returning
+            LOG << "Predicted Distance is " << PredictionDistance(i) << std::endl;
+            fReward += m_fPredictionReward * PredictionDistance(i); // TODO : Figure out what this is returning
             break;
          }
          case EPISODE_SUCCESS: {
@@ -470,9 +460,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       BuzzForeachVM(cGWS);
       Real fLWheel = cGWS.LWheels[i];
       Real fRWheel = cGWS.RWheels[i];
-      const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController.GetSensor<CCI_KheperaIVGripperForceSensor>("khepera_force")->GetReadings();
-      Real fPerpendicularForce = cForceVector->GetY(); // NOTE : These are correct function calls
-      Real fParallelForce = cForceVector->GetX();
+      const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVGripperForceSensor> ("kheperaiv_gripper_force")->GetReadings();
+      Real fPerpendicularForce = cForceVector.GetY(); // NOTE : These are correct function calls
+      Real fParallelForce = cForceVector.GetX();
       const CQuaternion cRobotOrientation =
          m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
       CRadians cObjZ, cObjY, cObjX;
@@ -555,18 +545,19 @@ void CCollectiveRLTransport::PreStep() {
 
    std::vector<Real> vecWheelSpeedL(m_unNumRobots);
    std::vector<Real> vecWheelSpeedR(m_unNumRobots);
+   std::vector<Real> vecDirectionToDrive(m_unNumRobots);
    for(size_t i = 0; i < m_vecRobots.size(); i++){
 //   m_vecRobotStats[i*6 + 5] // Robot z in degrees
        Real error = ToDegrees(Intended_Dir).GetValue() - m_vecRobotStats[i*6 + 5];
        if(error < 3){
-           vecWheelSpeedL[i] = max((error * wheel_gain), min_wheel_speed);
-           vecWheelSpeedR[i] = - max((error * wheel_gain), min_wheel_speed);
+           vecWheelSpeedL[i] = std::max((error * wheel_gain), min_wheel_speed);
+           vecWheelSpeedR[i] = - std::max((error * wheel_gain), min_wheel_speed);
        } else{
-           vecWheelSpeedL[i] = max((error * wheel_gain) + 8, 7);
-           vecWheelSpeedR[i] = max( - (error * wheel_gain) + 8, 7);
+           vecWheelSpeedL[i] = std::max((error * wheel_gain) + 8.0, 7.0);
+           vecWheelSpeedR[i] = std::max( - (error * wheel_gain) + 8.0, 7.0);
        }
    }
-   BuzzForeachVM(PutIncreases(vecWheelSpeedL, vecWheelSpeedR, vecBaseModel));
+   BuzzForeachVM(PutIncreases(vecWheelSpeedL, vecWheelSpeedR, vecDirectionToDrive, vecBaseModel));
 }
 
 /****************************************/
@@ -590,13 +581,14 @@ Real CCollectiveRLTransport::PredictionDistance(int robot_index){
     // of mass is, then the euclidian distance between the predicted and actual
     CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass, when using Julian's code, change it to be the center of mass of the object
     CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
-    CVector3 cAnchorGripper = m_vecRobots[robot_index]->GetGripperEquippedEntity().GetAnchor1();
-    CVector3 cPredictionModifier = CVector3(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot, 0.0);
-    CVector3 robot_grip_direction = cAnchorGripper - *cCenterRobot;
-    cPredictionModifier.RotateZ(CVector3::X.getAngleWith(cAnchorGripper));
+    CKheperaIVGripperEntity& cGripper = m_vecRobots[robot_index]->GetGripperEquippedEntity();
+    CVector3 cAnchorGripper = cGripper.GetAnchor1();
+    CVector3 cPredictionModifier = CVector3(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], 0.0);
+    CVector3 robot_grip_direction = cAnchorGripper - cCenterRobot;
+    cPredictionModifier.RotateZ(cAnchorGripper.GetAngleWith(CVector3::X));
     CVector3 cPredictedCM = cAnchorGripper + cPredictionModifier;
-    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f", robot_index, m_xOffsetFromRobot[i], m_yOffsetFromRobot[i], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
-    return sqrt((cPredictedCM.GetX() - cCMObject.GetX())^2 + (cPredictedCM.GetY() - cCMObject.GetY())^2);
+    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
+    return sqrt(pow((cPredictedCM.GetX() - cCMObject.GetX()),2) + pow((cPredictedCM.GetY() - cCMObject.GetY()),2));
 }
 
 /****************************************/
@@ -653,17 +645,7 @@ void CCollectiveRLTransport::PostStep() {
       ZMQSendRewards();
       ZMQSendForceStats();
       ZMQSendRobotStats();
-      if(m_unNumObstacles> 0){
-        ZMQSendObjectStats();
-        ZMQSendObstacleStats();
-      }
-      else if(m_unUseGate == 1){
-        ZMQSendObjectStats();
-        ZMQSendGateStats();
-      }
-      else{
-        ZMQSendObjectStatsFinal();
-      }
+      ZMQSendObjectStatsFinal();
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -674,7 +656,8 @@ void CCollectiveRLTransport::PostStep() {
 
       if(m_unEpisodeCounter % m_unTicksPerDuration == 0){
           LOG << "Changing Robot Directions" << std::endl;
-          Intended_Dir = (CRadians::PI / 6.0 * Real(m_unEpisodeCounter / m_unTicksPerDuration)) % (2 * CRadians::PI);
+          Real direction_vector = Real(m_unEpisodeCounter / m_unTicksPerDuration);
+          Intended_Dir = (CRadians::PI / 6.0 * direction_vector);
       }
    }
 }
@@ -682,7 +665,7 @@ void CCollectiveRLTransport::PostStep() {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::FoundCM(Real fXCM, fYCM) {
+bool CCollectiveRLTransport::FoundCM(Real fXCM, Real fYCM) {
 //   CVector3& cCMPrediction =
 //      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
 //   CVector2 cCylinder2Goal(
@@ -738,9 +721,6 @@ void CCollectiveRLTransport::CalculateRobotStats(){
      m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
      m_vecStats[i * m_unNumStats + 2] = deltaX;
      m_vecStats[i * m_unNumStats + 3] = deltaY;
-
-     /* Properly Calculate Force Vector */
-     Real fPerpendicularForce = m_vecRobots[i].GetGripperEquippedEntity.
    }
 }
 
@@ -754,7 +734,7 @@ void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
       {
          0,                            // experiment not done
          (e_state != EPISODE_RUNNING), // episode done?
-         m_bReachedGoal,               // reached goal?
+         m_bFoundCM,               // reached goal?
       };
    if(zmq_send(
          m_ptZMQSocket,             // the socket
@@ -797,32 +777,6 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unNumActions);
    vecParams.push_back(m_unNumStats);
    vecParams.push_back(m_unAlphabetSize);
-   vecParams.push_back(m_fActualCMX); // TODO : Make this relative to the origin anchor of the object being gripped
-   vecParams.push_back(m_fActualCMY);
-   /* Calculate normalizing constants*/
-   float maxY = GetSpace().GetArenaLimits().GetMax().GetY();
-   float minY = GetSpace().GetArenaLimits().GetMin().GetY();
-   float maxX = GetSpace().GetArenaLimits().GetMax().GetX();
-   float minX = GetSpace().GetArenaLimits().GetMin().GetX();
-   float goalX = m_cGoal.GetX();
-   float goalY = m_cGoal.GetY();
-   /* normalize distance to goal by looking at the max distance to the goal possible*/
-   /* calculate distance to goal from all corners and then compare to get the max */
-   float dist1 = Sqrt((maxX - goalX)*(maxX - goalX)+(maxY - goalY)*(maxY - goalY));
-   float dist2 = Sqrt((minX - goalX)*(minX - goalX)+(maxY - goalY)*(maxY - goalY));
-   float dist3 = Sqrt((maxX - goalX)*(maxX - goalX)+(minY - goalY)*(minY - goalY));
-   float dist4 = Sqrt((minX - goalX)*(minX - goalX)+(minY - goalY)*(minY - goalY));
-   float maxDist = dist1;
-   if(dist2 > maxDist){
-     maxDist = dist2;
-   }
-   if(dist3 > maxDist){
-     maxDist = dist3;
-   }
-   if(dist4 > maxDist){
-     maxDist = dist4;
-   }
-   vecParams.push_back(maxDist);
 
 
 
@@ -941,33 +895,6 @@ void CCollectiveRLTransport::ZMQSendObjectStatsFinal(){
   }
 }
 
-/****************************************/
-/****************************************/
-void CCollectiveRLTransport::ZMQSendGateStats(){
-  if (zmq_send_const(
-    m_ptZMQSocket,                        // The socket
-    const_cast <float*>(&m_vecGateStats[0]),  // data pointer
-    sizeof(float)*m_vecGateStats.size(),      // data size in bytes
-    0)                                    //final message
-  < 0) {                                  // >= 0 means success
-    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
-  }
-}
-
-
-
-/****************************************/
-/****************************************/
-void CCollectiveRLTransport::ZMQSendObstacleStats(){
-  if (zmq_send_const(
-    m_ptZMQSocket,                        // The socket
-    const_cast <float*>(&m_vecObstacleStats[0]),  // data pointer
-    sizeof(float)*m_vecObstacleStats.size(),      // data size in bytes
-    0)                                    //no special flags
-  < 0) {                                  // >= 0 means success
-    THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
-  }
-}
 /****************************************/
 /****************************************/
 
