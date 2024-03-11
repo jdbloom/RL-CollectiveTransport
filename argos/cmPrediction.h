@@ -1,5 +1,5 @@
-#ifndef COLLECTIVE_RL_TRANSPORT_H
-#define COLLECTIVE_RL_TRANSPORT_H
+#ifndef CM_PREDICTION_H
+#define CM_PREDICTION_H
 
 #include <buzz/argos/buzz_loop_functions.h>
 #include <argos3/core/utility/math/rng.h>
@@ -19,12 +19,12 @@
 //#include <server/ModelServerClient.hpp>
 using namespace argos;
 
-class CCollectiveRLTransport : public CBuzzLoopFunctions {
+class CCMPrediction : public CBuzzLoopFunctions {
 
 public:
 
-   CCollectiveRLTransport();
-   virtual ~CCollectiveRLTransport() {}
+   CCMPrediction();
+   virtual ~CCMPrediction() {}
 
    /**
     * Executes user-defined initialization logic.
@@ -173,7 +173,6 @@ private:
    CTCPSocket* socket;
 
    /** List of robots */
-   // Chandler : Robot is now KheperaIV, not FootBot
    std::vector<CKheperaIVEntity*> m_vecRobots;
 
    /** The vector of observations */
@@ -186,11 +185,9 @@ private:
    std::vector<float> m_vecRewards;
 
    /** The axel length of the kheperaiv*/
-   // Chandler : Changed m_fFootbotAxelLength to m_fKheperaIVAxelLength
    Real m_fKheperaIVAxelLength;
 
    /** The radius of the wheel of the kheperaiv*/
-   // Chandler : Changed m_fFootbotWheelRadius to m_fKheperaIVWheelRadius
    Real m_fKheperaIVWheelRadius;
 
    /** Number of stats per robot */

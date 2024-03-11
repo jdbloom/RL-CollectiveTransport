@@ -40,7 +40,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 /****************************************/
 
-CCollectiveRLTransport::CCollectiveRLTransport() :
+CCMPrediction::CCMPrediction() :
    m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
@@ -50,7 +50,7 @@ CCollectiveRLTransport::CCollectiveRLTransport() :
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
+void CCMPrediction::Init(TConfigurationNode& t_tree) {
    try {
       /* Parse XML tree */
       LOG<<"Initiating"<<std::endl;
@@ -152,7 +152,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::SimulateRobots() {
+void CCMPrediction::SimulateRobots() {
    if(m_bSimulateObjectMO){
        // TODO Use Julian's code here
    } else {
@@ -267,7 +267,7 @@ void CCollectiveRLTransport::SimulateRobots() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
+void CCMPrediction::PlaceRobots(UInt32 un_episode){
     /* Make sure the episode is valid */
     if(un_episode >= m_unNumEpisodes) {
        THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
@@ -299,7 +299,7 @@ void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::Reset() {
+void CCMPrediction::Reset() {
    for(size_t i = 0; i < m_unNumRobots; i++){
      LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
    }
@@ -317,7 +317,7 @@ void CCollectiveRLTransport::Reset() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::Destroy() {
+void CCMPrediction::Destroy() {
    /* Disconnect and get rid of the ZeroMQ socket */
    if(m_ptZMQSocket) zmq_close(m_ptZMQSocket);
    /* Get rid of the ZeroMQ context */
@@ -380,7 +380,7 @@ struct GetForceVector : public CBuzzLoopFunctions::COperation {
    std::vector<float> ParallelForce;
 };
 
-void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
+void CCMPrediction::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
    CVector3& cCylinderPos =
       m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
@@ -498,7 +498,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PreStep() {
+void CCMPrediction::PreStep() {
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
    m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
@@ -563,7 +563,7 @@ void CCollectiveRLTransport::PreStep() {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::IsExperimentFinished() {
+bool CCMPrediction::IsExperimentFinished() {
    /* This is where we will check if the object breaks
       or if we have reached the goal position. */
    if(m_unEpisodeCounter < m_unNumEpisodes) {
@@ -576,7 +576,7 @@ bool CCollectiveRLTransport::IsExperimentFinished() {
 /****************************************/
 /****************************************/
 
-Real CCollectiveRLTransport::PredictionDistance(int robot_index){
+Real CCMPrediction::PredictionDistance(int robot_index){
     // Math to get vector of robot to gripper anchor and then robot anchor to what the predicted object center
     // of mass is, then the euclidian distance between the predicted and actual
     CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass, when using Julian's code, change it to be the center of mass of the object
@@ -603,7 +603,7 @@ Real CCollectiveRLTransport::PredictionDistance(int robot_index){
  * end of an experiment.
  * The default implementation of this method does nothing.
  */
-void CCollectiveRLTransport::PostExperiment() {
+void CCMPrediction::PostExperiment() {
    LOG<<"Closing the Server"<<std::endl;
    ZMQSendTermination();
 }
@@ -611,7 +611,7 @@ void CCollectiveRLTransport::PostExperiment() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PostStep() {
+void CCMPrediction::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
    /* Check if the cylinder reached the goal */
@@ -665,7 +665,7 @@ void CCollectiveRLTransport::PostStep() {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::FoundCM(Real fXCM, Real fYCM) {
+bool CCMPrediction::FoundCM(Real fXCM, Real fYCM) {
 //   CVector3& cCMPrediction =
 //      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
 //   CVector2 cCylinder2Goal(
@@ -679,7 +679,7 @@ bool CCollectiveRLTransport::FoundCM(Real fXCM, Real fYCM) {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::IsEpisodeFinished() {
+bool CCMPrediction::IsEpisodeFinished() {
    if(m_bFoundCM) {
       LOG << "CM Found within threshold" << std::endl;
       return true;
@@ -694,7 +694,7 @@ bool CCollectiveRLTransport::IsEpisodeFinished() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::CalculateRobotStats(){
+void CCMPrediction::CalculateRobotStats(){
   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
      /* Get robot pose */
      CVector3& cRobotPos =
@@ -729,7 +729,7 @@ void CCollectiveRLTransport::CalculateRobotStats(){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
+void CCMPrediction::ZMQSendEpisodeState(EEpisodeState e_state) {
    unsigned char punDone[3] =
       {
          0,                            // experiment not done
@@ -749,7 +749,7 @@ void CCollectiveRLTransport::ZMQSendEpisodeState(EEpisodeState e_state) {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendTermination() {
+void CCMPrediction::ZMQSendTermination() {
    unsigned char punDone[3] =
       {
          1, // experiment done
@@ -769,7 +769,7 @@ void CCollectiveRLTransport::ZMQSendTermination() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendParams() {
+void CCMPrediction::ZMQSendParams() {
    /* Make the parameter buffer */ // TODO update ZMQ Send Params
    std::vector<float> vecParams;
    vecParams.push_back(m_unNumRobots);
@@ -799,7 +799,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendObservations() {
+void CCMPrediction::ZMQSendObservations() {
    if(zmq_send_const(
          m_ptZMQSocket,                    // the socket
          const_cast<float*>(&m_vecObs[0]), // data pointer
@@ -813,7 +813,7 @@ void CCollectiveRLTransport::ZMQSendObservations() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQSendFailures() {
+void CCMPrediction::ZMQSendFailures() {
    /*LOG<<"[DEBUG] Sending Failures ";
    for(size_t i = 0; i < m_unNumRobots; ++i){
      LOG<<m_vecFailures[i]<<" ";
@@ -831,7 +831,7 @@ void CCollectiveRLTransport::ZMQSendFailures() {
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendRewards(){
+void CCMPrediction::ZMQSendRewards(){
 
   if (zmq_send_const(
         m_ptZMQSocket,                        // the socket
@@ -845,7 +845,7 @@ void CCollectiveRLTransport::ZMQSendRewards(){
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendForceStats(){
+void CCMPrediction::ZMQSendForceStats(){
   if (zmq_send_const(
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecStats[0]),  // data pointer
@@ -858,7 +858,7 @@ void CCollectiveRLTransport::ZMQSendForceStats(){
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendObjectStats(){
+void CCMPrediction::ZMQSendObjectStats(){
   if (zmq_send_const(
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecObjStats[0]),  // data pointer
@@ -871,7 +871,7 @@ void CCollectiveRLTransport::ZMQSendObjectStats(){
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendRobotStats(){
+void CCMPrediction::ZMQSendRobotStats(){
   if (zmq_send_const(
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecRobotStats[0]),  // data pointer
@@ -884,7 +884,7 @@ void CCollectiveRLTransport::ZMQSendRobotStats(){
 
 /****************************************/
 /****************************************/
-void CCollectiveRLTransport::ZMQSendObjectStatsFinal(){
+void CCMPrediction::ZMQSendObjectStatsFinal(){
   if (zmq_send_const(
     m_ptZMQSocket,                        // The socket
     const_cast <float*>(&m_vecObjStats[0]),  // data pointer
@@ -898,7 +898,7 @@ void CCollectiveRLTransport::ZMQSendObjectStatsFinal(){
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQGetActions() {
+void CCMPrediction::ZMQGetActions() {
    /* Receive the message */
    if(zmq_recv(
          m_ptZMQSocket,                       // the socket
@@ -913,7 +913,7 @@ void CCollectiveRLTransport::ZMQGetActions() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::ZMQGetAck() {
+void CCMPrediction::ZMQGetAck() {
    DEBUG_FUNCTION_ENTER;
    char pchAck[4];
    /* Receive the message */
@@ -931,4 +931,4 @@ void CCollectiveRLTransport::ZMQGetAck() {
 /****************************************/
 /****************************************/
 
-REGISTER_LOOP_FUNCTIONS(CCollectiveRLTransport, "collective_rl_transport");
+REGISTER_LOOP_FUNCTIONS(CCMPrediction, "cm_prediction");

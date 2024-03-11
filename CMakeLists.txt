@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16.2)
-project(collective_RL_Transport)
+project(cm_Prediction)
 
 option(CLUSTER "whether we are running on the cluster" OFF)
 option(VICON "whether we are running Vicon" OFF)
