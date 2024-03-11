@@ -169,9 +169,6 @@ private:
    /** The vector of observations */
    std::vector<float> m_vecObs;
 
-   /** The vector of failure flags*/
-   std::vector<int> m_vecFailures;
-
    /** The vector of rewards */
    std::vector<float> m_vecRewards;
 
@@ -204,9 +201,6 @@ private:
 
    /** ZeroMQ communication socket */
    void* m_ptZMQSocket;
-
-   /** List of robot failure times: -1 = no failure **/
-   std::vector <std::vector<SInt32>> m_vecRobotFailures;
 
    /** vector to keep track of the current offset (not used other than to print) */
    std::vector<Real> m_vecOffset;
@@ -241,8 +235,6 @@ private:
 
    void PlaceRobots(UInt32 un_episode);
 
-   std::vector<SInt32> GenerateRobotFailure();
-
    bool FoundCM(Real fXCM, Real fYCM);
 
    bool IsEpisodeFinished();
@@ -260,8 +252,6 @@ private:
    void ZMQSendParams();
 
    void ZMQSendObservations();
-
-   void ZMQSendFailures();
 
    void ZMQSendRewards();
 

@@ -53,7 +53,7 @@ CCMPrediction::CCMPrediction() :
 void CCMPrediction::Init(TConfigurationNode& t_tree) {
    try {
       /* Parse XML tree */
-      LOG<<"Initiating"<<std::endl;
+      LOG << "Initiating" << std::endl;
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
@@ -82,6 +82,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
 
       /* Stats to be sent to Data: */
       m_unNumStats = 4;
+
       /*
        * Connect to PyTorch
        */
@@ -95,23 +96,25 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       if(m_ptZMQSocket == nullptr) {
          THROW_ARGOSEXCEPTION("Cannot create ZeroMQ socket: " << zmq_strerror(errno));
       }
+
       /*
        * This call returns success even when the server is down.
        * Usually a failed connection is detected when the first data is sent.
+       * This weird behavior is a design choice of ZeroMQ.
+       */
       if(zmq_connect(m_ptZMQSocket, strPyTorchURL.c_str()) != 0) {
          THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
       }
+
       /* Send parameters */
       ZMQSendParams(); // TODO : Setup the receiver on the python end for init
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
-      /* Initialize episode-related variables
-       * This weird behavior is a design choice of ZeroMQ.
-       */
+      
+      /* Initialize episode-related variables */
       m_unEpisodeCounter = 0;
       m_unEpisodeTicksLeft = m_unEpisodeTime;
       /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
-      m_vecFailures.resize(m_unNumRobots, 0);
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
@@ -124,17 +127,8 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
       m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
-      if(m_bSimulateRobots){
-        SimulateRobots();
-        LOG<<"Robots Simulated"<<std::endl;
-      } else {
-        SimulateRobots();
-        LOG<<"Robots taken from field"<<std::endl;
-      }
-      //Print first failure set
-      for(size_t i = 0; i < m_unNumRobots; i++){
-        LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
-      }
+      SimulateRobots();
+      LOG<<"Robots Simulated"<<std::endl;
       LOG<<std::endl;
 
       PlaceRobots(0);
@@ -238,8 +232,6 @@ void CCMPrediction::SimulateRobots() {
                0.0,
                0.0);
       m_vecCylinderPos.push_back(cPos);
-      //Generate Failure Times for all episodes
-      m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
@@ -300,10 +292,7 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
 /****************************************/
 
 void CCMPrediction::Reset() {
-   for(size_t i = 0; i < m_unNumRobots; i++){
-     LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
-   }
-   LOG<<std::endl;
+   LOG << "Reseting the robots and field" << std::endl;
 
    if(m_bSimulateRobots)
      PlaceRobots(m_unEpisodeCounter);
@@ -420,13 +409,6 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       /* Get the direction the robot is facing in */
 //      Real fRobotAngle = ToDegrees(cRobotPos.GetZAngle()).GetValue(); // The robot angle in radians
 
-      /* Check if the robot has failed */
-//      float hasFailed = 0;
-//      UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
-//      if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
-//          hasFailed = 1;
-//      }
-
 
       /* Calculate reward */
       Real fReward;
@@ -516,11 +498,9 @@ void CCMPrediction::PreStep() {
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
-   ZMQSendFailures();
    ZMQSendRewards();
    ZMQSendForceStats();
    ZMQSendRobotStats();
-
    ZMQSendObjectStatsFinal();
 
    /* Get actions from PyTorch */
@@ -641,11 +621,11 @@ void CCMPrediction::PostStep() {
       /* Send observations to PyTorch */
       ZMQSendEpisodeState(eState);
       ZMQSendObservations();
-      ZMQSendFailures();
       ZMQSendRewards();
       ZMQSendForceStats();
       ZMQSendRobotStats();
       ZMQSendObjectStatsFinal();
+
       ZMQGetAck();
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -804,25 +784,6 @@ void CCMPrediction::ZMQSendObservations() {
          m_ptZMQSocket,                    // the socket
          const_cast<float*>(&m_vecObs[0]), // data pointer
          sizeof(float) * m_vecObs.size(),  // data size in bytes
-         ZMQ_SNDMORE)                      // another message will follow (rewards)
-      < 0) {                               // >= 0 means success
-      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
-   }
-}
-
-/****************************************/
-/****************************************/
-
-void CCMPrediction::ZMQSendFailures() {
-   /*LOG<<"[DEBUG] Sending Failures ";
-   for(size_t i = 0; i < m_unNumRobots; ++i){
-     LOG<<m_vecFailures[i]<<" ";
-   }
-   LOG<<std::endl;*/
-   if(zmq_send_const(
-         m_ptZMQSocket,                    // the socket
-         const_cast<int*>(&m_vecFailures[0]), // data pointer
-         sizeof(int) * m_vecFailures.size(),  // data size in bytes
          ZMQ_SNDMORE)                      // another message will follow (rewards)
       < 0) {                               // >= 0 means success
       THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
