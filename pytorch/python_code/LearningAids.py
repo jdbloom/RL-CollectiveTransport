@@ -38,7 +38,7 @@ class Hyperparameters:
         self.warmup = 1000
         self.time_step = 0
 
-        self.min_max_action = 1
+        self.min_max_action = 0.5
 
         #GNN
         self.hidden_channels = 32

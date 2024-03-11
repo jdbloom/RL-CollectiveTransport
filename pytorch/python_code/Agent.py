@@ -110,23 +110,16 @@ class Agent(Actor):
     def reset_obj_stats(self):
         self.object_stats = []        
 
-    def choose_agent_action(self, observation, failures, test=False):
+    def choose_agent_action(self, observation, test=False):
         if self.learning_scheme == 'None':
-            # Not sure what to do here for no learning
-            return [0, 0, 0], 0
+            return [0, 0], 0
 
-        if failures:
-            self.failed = True
-            return self.failure_action, self.failure_action_code
-
-        self.failed = False
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
             action_num = self.choose_action(observation, self.networks, test)
             actions = self.parse_action(action_num)
 
         if self.networks['learning_scheme'] == 'DDPG' or self.networks['learning_scheme'] == 'TD3':
             actions = self.choose_action(observation, self.networks, test)
-            actions = np.pad(actions, (0, 1))
             action_num = None
 
         return actions, action_num
@@ -152,7 +145,7 @@ class Agent(Actor):
         x_increment = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1) / 10
         y_increment = round((action_num%self.options_per_action - 1)/10.0, 1) / 10
         # Trailing zero is hardcoded control for gripper
-        return np.array([x_increment, y_increment, 0])
+        return np.array([x_increment, y_increment])
         
 
     def choose_object_intention(self, agent_intention_states, edge_index = None, test = False):

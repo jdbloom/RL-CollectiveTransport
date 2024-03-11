@@ -18,4 +18,4 @@ void CCMPredictionQTUserFunctions::DrawInWorld(){
              CColor::BLACK);
 }
 
-REGISTER_QTOPENGL_USER_FUNCTIONS(CCMPredictionQTUserFunctions, "cm_prediction_qtuser_functions")
+REGISTER_QTOPENGL_USER_FUNCTIONS(CCMPredictionQTUserFunctions, "cmPrediction_qtuser_functions")

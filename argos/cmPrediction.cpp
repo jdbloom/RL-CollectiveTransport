@@ -16,7 +16,7 @@ static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
-static const Real CYLINDER_OFFSET           = 0.0;
+static const Real CYLINDER_OFFSET           = 0.1;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
@@ -42,7 +42,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 
 CCMPrediction::CCMPrediction() :
    m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
-   m_unNumActions(3),
+   m_unNumActions(2),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
 }
@@ -87,6 +87,9 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
        * Connect to PyTorch
        */
       /* Create context */
+
+      // DEBUG("Connecting to ZMQ \n");
+
       m_ptZMQContext = zmq_ctx_new();
       if(m_ptZMQContext == nullptr) {
          THROW_ARGOSEXCEPTION("Cannot create ZeroMQ context: " << zmq_strerror(errno));
@@ -97,6 +100,8 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
          THROW_ARGOSEXCEPTION("Cannot create ZeroMQ socket: " << zmq_strerror(errno));
       }
 
+      // DEBUG("Contex Created \n");
+
       /*
        * This call returns success even when the server is down.
        * Usually a failed connection is detected when the first data is sent.
@@ -105,11 +110,13 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       if(zmq_connect(m_ptZMQSocket, strPyTorchURL.c_str()) != 0) {
          THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
       }
+      // DEBUG("Connection succeeded\n");
 
       /* Send parameters */
       ZMQSendParams(); // TODO : Setup the receiver on the python end for init
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
-      
+      // DEBUG("Sent parameters\n");
+
       /* Initialize episode-related variables */
       m_unEpisodeCounter = 0;
       m_unEpisodeTicksLeft = m_unEpisodeTime;
@@ -118,20 +125,26 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
+      // DEBUG("Resized vectors for observations, rewards, stats, and robot stats\n");
 
       m_xOffsetFromRobot.resize(m_unNumRobots);
       m_yOffsetFromRobot.resize(m_unNumRobots);
+      // DEBUG("Resized vectors for x and y offsets for robots\n");
 
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
+      // DEBUG("Action vec resized\n");
+
       /* Create a new RNG */
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
       m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
       SimulateRobots();
+      // DEBUG("Robots Simulated\n");
       LOG<<"Robots Simulated"<<std::endl;
       LOG<<std::endl;
 
       PlaceRobots(0);
+      DEBUG("Robots Placed\n");
 
       Intended_Dir = CRadians::ZERO;
 
@@ -204,10 +217,11 @@ void CCMPrediction::SimulateRobots() {
       m_xOffsetFromRobot.push_back(0.0);
       m_yOffsetFromRobot.push_back(0.0);
 
-      /** Need to chage the range of the proximity sensor
+      /** Need to change the range of the proximity sensor
           If m_fProximityRange = 0 then the sensor range will
           stay at default */
       AddEntity(*pcKIV);
+      // DEBUG("Adding the entity khepera %d to the environment\n", i);
       if(m_fProximityRange > 0.0){
         CProximitySensorEquippedEntity& cPSEE = pcKIV->GetProximitySensorEquippedEntity();
         CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
@@ -217,15 +231,6 @@ void CCMPrediction::SimulateRobots() {
         }
       }
    }
-
-//   CRange<Real> cXCylinderRange(
-//      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-//      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
-//      );
-//   CRange<Real> cYRange(
-//      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-//      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
-//      );
 
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       cPos.Set(0.0,
@@ -276,6 +281,7 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
                   false,                             // not a check
                   true);                             // ignore collisions
        for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+          DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), m_vecRobotPos[un_episode][i].GetX(), m_vecRobotPos[un_episode][i].GetY(), m_vecRobotPos[un_episode][i].GetZ(), m_vecRobotOrient[un_episode][i].GetZ());
           MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                      m_vecRobotPos[un_episode][i],        // position
                      m_vecRobotOrient[un_episode][i],     // orientation
@@ -709,6 +715,7 @@ void CCMPrediction::CalculateRobotStats(){
 /****************************************/
 /****************************************/
 
+/* Sends if the experiment is done, episode is done, and if the robots found the center of mass */
 void CCMPrediction::ZMQSendEpisodeState(EEpisodeState e_state) {
    unsigned char punDone[3] =
       {

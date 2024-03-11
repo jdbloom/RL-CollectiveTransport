@@ -31,7 +31,6 @@ class Actor(NetworkAids):
         self.meta_param_size = meta_param_size
 
         self.action_space = [i for i in range(self.options_per_action**self.n_actions)]
-        self.failure_action_code = len(self.action_space)
 
         self.intention = intention
         self.recurrent_intention = recurrent_intention

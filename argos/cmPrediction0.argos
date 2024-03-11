@@ -26,8 +26,7 @@
       <sensors>
         <range_and_bearing implementation="medium" medium="rab" show_rays="false" />
         <kheperaiv_proximity implementation = "default" show_rays = "true" />
-        <kheperaiv_gripper_force
-                implementation="default"/>
+        <kheperaiv_gripper_force implementation="default"/>
       </sensors>
       <params bytecode_file = "build/argos/cmPrediction.bo"
                          debug_file = "build/argos/cmPrediction.bdb" />
@@ -49,7 +48,7 @@
                   threshold_dec = "0.1"
                   min_threshold = "2"
                   num_episodes = "1"
-                  episode_time = "30"
+                  episode_time = "3000"
                   time_out_reward = "0"
                   prediction_reward = "100"
                   pytorch_url = "tcp://localhost:55555"

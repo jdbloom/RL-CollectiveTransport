@@ -70,7 +70,6 @@ if not args.no_print:
     print("  num_actions ---", Utility.params['num_actions'])
     print("  num_stats -----", Utility.params['num_stats'])
 
-Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
@@ -120,6 +119,8 @@ else:
 # Send acknowledgment
 socket.send(b"ok")
 
+print("Sending acknowledgment")
+
 #######################################################################
 #                           MAIN LOOP
 #######################################################################
@@ -145,7 +146,7 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'a+') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'])
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'])
 
         if not exp_done:
             time_steps = 0
@@ -160,11 +161,11 @@ while not exp_done:
 
             # Receive initial observations from the environment
             env_observations = Utility.parse_obs(msgs[1])
-            failures = Utility.parse_failures(msgs[2])
-            rewards = Utility.parse_rewards(msgs[3])
-            stats = Utility.parse_stats(msgs[4])
-            robot_stats = Utility.parse_robot_stats(msgs[5]) # NOTE : Where all the magic should be happening
-            obj_stats = Utility.parse_obj_stats(msgs[6])
+            rewards = Utility.parse_rewards(msgs[2])
+            stats = Utility.parse_stats(msgs[3])
+            robot_stats = Utility.parse_robot_stats(msgs[4])
+
+            obj_stats = Utility.parse_obj_stats(msgs[5])
 
             object_positions.append([obj_stats[0], obj_stats[1]])
             old_cyl_ang = obj_stats[5]
@@ -181,24 +182,19 @@ while not exp_done:
                 model.reset_intention_sequence()
 
             agent_states = []
-            force_mags = []
-            force_angs = []
             if args.independent_learning:
                 running_reward = []
             else:
                 running_reward = 0
             
             for i in range(Utility.params['num_robots']):
-                if failures[i][0]:
-                    agent_prox_flags.append(0)
-                else:
-                    prox_values = env_observations[i][7:]
-                    # Add logic to filter prox values that are observing the object
-                    prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                    for j in range(len(filtered_indeces)):
-                        env_observations[i][7+filtered_indeces[j]] = 0.0
-                    prox_value = np.sum(prox_values)
-                    agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+                prox_values = env_observations[i][7:]
+                # Add logic to filter prox values that are observing the object
+                prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                for j in range(len(filtered_indeces)):
+                    env_observations[i][7+filtered_indeces[j]] = 0.0
+                prox_value = np.sum(prox_values)
+                agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
             
             #Define Global Knowledge: [positions, velocities]
             global_knowledge=np.zeros((Utility.params['num_robots'])*4)
@@ -246,8 +242,6 @@ while not exp_done:
                             else:
                                 agent_state = env_observations[i]
                 agent_states.append(agent_state)
-                force_mags.append(stats[i][0])
-                force_angs.append(stats[i][1])
 
             # reward is the same across all agents. If it were per agent then this would need to move into the loop above
             if args.independent_learning:
@@ -255,8 +249,6 @@ while not exp_done:
                     running_reward[i]+= rewards[i]
             else:
                 running_reward += rewards[0]
-            # failures should all be false because we havent started the episode yet
-            failure = failures[0]
 
             #
             # Start the Episode Loop
@@ -269,30 +261,26 @@ while not exp_done:
                     actions = []
                     actions_to_take = []
                     time_steps += 1
-                    robot_failures = []
 
                     for i in range(Utility.params['num_robots']):
                         # Choose an action
                         if args.independent_learning:
-                            action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = models[i].choose_agent_action(agent_states[i], test_mode)
                         else:
-                            action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
+                            action, action_num = model.choose_agent_action(agent_states[i], test_mode)
                         actions_to_take.append(action)
                         actions.append(action_num)
 
-                    old_failures = failures[:]
                     # Take Step
                     socket.send(Utility.serialize_actions(actions_to_take))
                     msgs = socket.recv_multipart()
 
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
                     env_observations = Utility.parse_obs(msgs[1])
-                    failures = Utility.parse_failures(msgs[2])
-                    #print('[DEBUG] Received Failures ', failures)
-                    rewards = Utility.parse_rewards(msgs[3])
-                    stats = Utility.parse_stats(msgs[4])
-                    robot_stats = Utility.parse_robot_stats(msgs[5])
-                    obj_stats = Utility.parse_obj_stats(msgs[6])
+                    rewards = Utility.parse_rewards(msgs[2])
+                    stats = Utility.parse_stats(msgs[3])
+                    robot_stats = Utility.parse_robot_stats(msgs[4])
+                    obj_stats = Utility.parse_obj_stats(msgs[5])
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
@@ -347,23 +335,17 @@ while not exp_done:
                     old_heading_intention = copy.deepcopy(next_heading_intention)
 
                     new_agent_states = []
-                    force_mags = []
-                    force_angs = []
                     r = []
                     agent_prox_flags = []
                     next_object_heading = np.zeros(Utility.params['num_robots'])
                     
                     for i in range(Utility.params['num_robots']):
-                        robot_failures.append(failures[i][0])
-                        if failures[i][0]:
-                            agent_prox_flags.append(0)
-                        else:
-                            prox_values = env_observations[i][7:]
-                            prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                            for j in range(len(filtered_indeces)):
-                                env_observations[i][7+filtered_indeces[j]] = 0.0
-                            prox_value = np.sum(prox_values)              
-                            agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+                        prox_values = env_observations[i][7:]
+                        prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                        for j in range(len(filtered_indeces)):
+                            env_observations[i][7+filtered_indeces[j]] = 0.0
+                        prox_value = np.sum(prox_values)
+                        agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                     if args.intention:
                         if args.attention:
@@ -465,8 +447,6 @@ while not exp_done:
                         #print('[DEBUG] Prox Value Reward:', (-0.1)*prox_value)
                         #reward += (-1)*prox_value
                         rewards[i] += (-1)*prox_value
-                        force_mags.append(stats[i][0])
-                        force_angs.append(stats[i][1])
 
                         if args.independent_learning:
                             if args.intention:
@@ -499,20 +479,19 @@ while not exp_done:
                         if time_steps > 2:
                             if train_mode:
                                 if learning_scheme != 'None':
-                                    if not old_failures[i] and not failures[i]:
-                                        if not episode_done:
-                                            if args.independent_learning:
-                                                models[i].store_agent_transition(agent_states[i],
-                                                                    (actions[i], actions_to_take[i]),
-                                                                    rewards[i],
-                                                                    new_agent_states[i],
-                                                                    episode_done)
-                                            else:
-                                                model.store_agent_transition(agent_states[i],
-                                                                    (actions[i], actions_to_take[i]),
-                                                                    rewards[i],
-                                                                    new_agent_states[i],
-                                                                    episode_done)
+                                    if not episode_done:
+                                        if args.independent_learning:
+                                            models[i].store_agent_transition(agent_states[i],
+                                                                (actions[i], actions_to_take[i]),
+                                                                rewards[i],
+                                                                new_agent_states[i],
+                                                                episode_done)
+                                        else:
+                                            model.store_agent_transition(agent_states[i],
+                                                                (actions[i], actions_to_take[i]),
+                                                                rewards[i],
+                                                                new_agent_states[i],
+                                                                episode_done)
                                                     
                         r.append(rewards[i][0])
                     #print('[DEBUG] Rewards:', r)
@@ -538,20 +517,6 @@ while not exp_done:
                     agent_states = new_agent_states
                     actions = []
 
-                    # Calculate average force vector
-                    average_force_mag = None
-                    average_force_ang = None
-                    for i in range(Utility.params['num_robots']):
-                        if average_force_mag is None:
-                            average_force_mag = force_mags[i]
-                            average_force_ang = force_angs[i]
-                        else:
-                            angle = abs(average_force_ang - force_angs[i])
-                            #average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
-                            #average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
-                            average_force_mag = 0
-                            average_force_ang = 0
-
                     if type(gate_stats) != int:
                         gate = []
                         for i in range(len(gate_stats)):
@@ -565,8 +530,8 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'
-                    writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
+                    # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'
+                    writer.writerow([r, tmp_epsilon, reached_goal, loss,
                                     obj_stats[0], obj_stats[1], obj_stats[5],
                                     intention_reward, next_heading_intention[0],
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
