@@ -56,8 +56,6 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       LOG<<"Initiating"<<std::endl;
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
-      GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
-      GetNodeAttribute(t_tree, "latest_failure_time", m_unLatestFailureTime);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
       GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
       GetNodeAttribute(t_tree, "episode_time",    m_unEpisodeTime);
@@ -66,7 +64,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "threshold_dec", m_fDecThreshold);
       GetNodeAttribute(t_tree, "min_threshold", m_fMinThreshold);
       GetNodeAttribute(t_tree, "prediction_reward", m_fPredictionReward);
-      GetNodeAttribute(t_tree, "direction_tick_length", m_unTicksPerDuration);
+      GetNodeAttribute(t_tree, "ticks_per_direction_switch", m_unTicksPerDuration);
       std::string strPyTorchURL;
       GetNodeAttribute(t_tree, "pytorch_url",     strPyTorchURL);
       GetNodeAttribute(t_tree, "alphabet_size", m_unAlphabetSize);
@@ -79,6 +77,8 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
 
       m_fKheperaIVAxelLength = 0.14; // m
       m_fKheperaIVWheelRadius = 0.029112741; // m
+
+      LOG << "Attributes taken from argos file" << std::endl;
 
       /* Stats to be sent to Data: */
       m_unNumStats = 4;

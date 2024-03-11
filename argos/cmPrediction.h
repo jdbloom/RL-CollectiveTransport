@@ -130,15 +130,6 @@ private:
    /* Reward received on how good the prediction is */
    Real m_fPredictionReward;
 
-   /*Max Number of robot failures*/
-   UInt32 m_unMaxRobotFailures;
-
-   /* Latest time at which a robot can fail */
-   UInt32 m_unLatestFailureTime;
-
-   /*Failure Risk Per Robot*/
-   Real m_fChanceFailure;
-
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
