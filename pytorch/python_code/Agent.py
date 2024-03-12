@@ -4,6 +4,7 @@ import numpy as np
 import math
 from collections import namedtuple
 import statistics
+from itertools import combinations
 
 import torch as T
 import torch.nn as nn
@@ -39,6 +40,8 @@ class Agent(Actor):
         self.binned_acceleration = None
         self.obj_state = None
         self.edge_index = edge_index
+
+        self.actions = list(combinations([-0.1,0,0.1], 2))
         
         self.ROBOT_PROXIMITY_ANGLES = [0.0, 45.0, 90.0, 135.0, 180.0, -135.0, -90.0, -45.0]
         # [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
@@ -142,9 +145,8 @@ class Agent(Actor):
         '''
         if action_num < 0 or action_num >=self.options_per_action**self.n_actions:
             raise Exception('Action Number Out of Range:'+str(action_num))
-        x_increment = round((math.floor(action_num/self.options_per_action) - 1)/10.0, 1) / 10
-        y_increment = round((action_num%self.options_per_action - 1)/10.0, 1) / 10
-        # Trailing zero is hardcoded control for gripper
+        x_increment = self.actions[action_num][0]
+        y_increment = self.actions[action_num][1]
         return np.array([x_increment, y_increment])
         
 

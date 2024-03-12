@@ -16,7 +16,7 @@ static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
-static const Real CYLINDER_OFFSET           = 0.1;
+static const Real CYLINDER_OFFSET           = 0.0;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
@@ -125,6 +125,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
+      m_vecObjStats.resize(6, 0.0);
       // DEBUG("Resized vectors for observations, rewards, stats, and robot stats\n");
 
       m_xOffsetFromRobot.resize(m_unNumRobots);
@@ -183,11 +184,13 @@ void CCMPrediction::SimulateRobots() {
           CYLINDER_MASS);
        AddEntity(*m_pcCylinder);
    }
+
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
    std::ostringstream cKIVId;
    CKheperaIVEntity* pcKIV;
    CVector3 cPos;
+
    /* Create the robots in simulation*/
    std::vector<int> vect;
    std::stringstream ss(m_strRobotsUsed);
@@ -199,6 +202,7 @@ void CCMPrediction::SimulateRobots() {
    }
 
    for(size_t i = 0; i < m_unNumRobots; ++i) {
+
       cKIVId.str("");
       cKIVId << "Khepera_" << vect[i];
       LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
@@ -213,15 +217,10 @@ void CCMPrediction::SimulateRobots() {
          CQuaternion(-cSlice, CVector3::Z)
          );
       m_vecRobots.push_back(pcKIV);
-
-      m_xOffsetFromRobot.push_back(0.0);
-      m_yOffsetFromRobot.push_back(0.0);
-
-      /** Need to change the range of the proximity sensor
+      /** Need to chage the range of the proximity sensor
           If m_fProximityRange = 0 then the sensor range will
           stay at default */
       AddEntity(*pcKIV);
-      // DEBUG("Adding the entity khepera %d to the environment\n", i);
       if(m_fProximityRange > 0.0){
         CProximitySensorEquippedEntity& cPSEE = pcKIV->GetProximitySensorEquippedEntity();
         CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
@@ -230,6 +229,9 @@ void CCMPrediction::SimulateRobots() {
           (*itSensor)->Direction *= m_fProximityRange;
         }
       }
+
+      m_xOffsetFromRobot.push_back(0.0);
+      m_yOffsetFromRobot.push_back(0.0);
    }
 
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
@@ -241,6 +243,8 @@ void CCMPrediction::SimulateRobots() {
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
+      // cOffset = CRadians::ZERO; // DEBUG : Remove this when move entity is solved
+
       m_vecRobotPos.push_back(std::vector<CVector3>());
       m_vecRobotOrient.push_back(std::vector<CQuaternion>());
       for(size_t j = 0; j < m_unNumRobots; ++j) {
@@ -251,8 +255,6 @@ void CCMPrediction::SimulateRobots() {
                      j * cSlice + cOffset));
          /* Translate to actual cylinder center */
          cPos += m_vecCylinderPos[i];
-         // TODO : Confirm this works for box
-
          /* Add position */
          m_vecRobotPos.back().push_back(cPos);
          /* Calculate orientation to cylinder center */
@@ -299,6 +301,7 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
 
 void CCMPrediction::Reset() {
    LOG << "Reseting the robots and field" << std::endl;
+   DEBUG("Reseting the robots");
 
    if(m_bSimulateRobots)
      PlaceRobots(m_unEpisodeCounter);
@@ -382,6 +385,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
    CQuaternion cCylinderOrient =
       m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
    CRadians cObjZ, cObjY, cObjX;
+
    cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
    /** Store object position and orientation to send to python*/
    m_vecObjStats[0] = cCylinderPos.GetX();
@@ -390,6 +394,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+   // DEBUG("Positions and Orientations Found\n");
 
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       /* Get robot pose */
@@ -423,8 +428,6 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
             //fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
             /* Cost of living + direction x reward for moving */
             fReward = -2;
-
-            LOG << "Predicted Distance is " << PredictionDistance(i) << std::endl;
             fReward += m_fPredictionReward * PredictionDistance(i); // TODO : Figure out what this is returning
             break;
          }
@@ -437,6 +440,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
             break;
          }
       }
+      // DEBUG("Rewards Received\n");
       m_vecRewards[i] = fReward;
 
 
@@ -448,6 +452,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       BuzzForeachVM(cGWS);
       Real fLWheel = cGWS.LWheels[i];
       Real fRWheel = cGWS.RWheels[i];
+      // DEBUG("Wheel Speeds Received\n");
       const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVGripperForceSensor> ("kheperaiv_gripper_force")->GetReadings();
       Real fPerpendicularForce = cForceVector.GetY(); // NOTE : These are correct function calls
       Real fParallelForce = cForceVector.GetX();
@@ -457,7 +462,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       cRobotOrientation.ToEulerAngles(cObjZ, cObjY, cObjX);
       Real fRobotOrientation = ToDegrees(cObjZ).GetValue();
       Real fTargetDirection = ToDegrees(Intended_Dir).GetValue();
-      DEBUG("Perpendicular Force : %f, Parallel Force : %f", fPerpendicularForce, fParallelForce);
+      // DEBUG("Perpendicular Force : %f, Parallel Force : %f\n", fPerpendicularForce, fParallelForce);
       /* Store the observations */
       m_vecObs[i * m_unNumObs + 0] = fPerpendicularForce;
       m_vecObs[i * m_unNumObs + 1] = fParallelForce;
@@ -487,7 +492,9 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
 /****************************************/
 
 void CCMPrediction::PreStep() {
+   // DEBUG("Getting Observations\n");
    GetObservations(EPISODE_RUNNING);
+   // DEBUG("Observations Got\n");
    CalculateRobotStats();
    m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -502,15 +509,18 @@ void CCMPrediction::PreStep() {
    }
    DEBUG("\n");*/
    /* Send observations to PyTorch */
+   // DEBUG("Sending ZMQ\n");
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
    ZMQSendRewards();
    ZMQSendForceStats();
    ZMQSendRobotStats();
    ZMQSendObjectStatsFinal();
+   // DEBUG("ZMQ Sent\n");
 
    /* Get actions from PyTorch */
    ZMQGetActions();
+   // DEBUG("Actions Received\n");
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       DEBUG("[E%u] [t=%u] [R=%zu] RAW A = %f,%f\n",
@@ -524,8 +534,10 @@ void CCMPrediction::PreStep() {
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
       float* pfObs = &m_vecObs[0] + i * m_unNumObs;
-      m_xOffsetFromRobot[i] += pfAction[0]; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
-      m_xOffsetFromRobot[i] += pfAction[1];
+      DEBUG("Received %f. %f\n", pfAction[0], pfAction[1]);
+      m_xOffsetFromRobot[i] = std::min(std::max(std::abs(m_xOffsetFromRobot[i] + pfAction[0] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
+      m_yOffsetFromRobot[i] = std::min(std::max(std::abs(m_yOffsetFromRobot[i] + pfAction[1] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2;
+      // DEBUG("xOffset : %f yOffset : %f\n", m_xOffsetFromRobot[i], m_yOffsetFromRobot[i]);
       vecBaseModel[i] = m_unBaseModel;
    }
 
@@ -543,6 +555,7 @@ void CCMPrediction::PreStep() {
            vecWheelSpeedR[i] = std::max( - (error * wheel_gain) + 8.0, 7.0);
        }
    }
+   // DEBUG("Sending Wheel Speeds\n");
    BuzzForeachVM(PutIncreases(vecWheelSpeedL, vecWheelSpeedR, vecDirectionToDrive, vecBaseModel));
 }
 
@@ -573,7 +586,7 @@ Real CCMPrediction::PredictionDistance(int robot_index){
     CVector3 robot_grip_direction = cAnchorGripper - cCenterRobot;
     cPredictionModifier.RotateZ(cAnchorGripper.GetAngleWith(CVector3::X));
     CVector3 cPredictedCM = cAnchorGripper + cPredictionModifier;
-    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
+    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f\n", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
     return sqrt(pow((cPredictedCM.GetX() - cCMObject.GetX()),2) + pow((cPredictedCM.GetY() - cCMObject.GetY()),2));
 }
 
@@ -598,6 +611,7 @@ void CCMPrediction::PostExperiment() {
 /****************************************/
 
 void CCMPrediction::PostStep() {
+   DEBUG("Initiating Post Step\n");
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
    /* Check if the cylinder reached the goal */
@@ -605,15 +619,16 @@ void CCMPrediction::PostStep() {
 
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
+   // DEBUG("Checking if episode is finished\n");
    if(IsEpisodeFinished()) {
       LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
       /* check to see if we need to decrease the threshold */
-      if((m_unEpisodeCounter+1) % m_unDecThresholdTime == 0){
-        if(m_fThreshold > m_fMinThreshold){
-          m_fThreshold = m_fThreshold - m_fDecThreshold;
-          LOG << "Updating Threshold to:"<< m_fThreshold <<std::endl;
-        }
-      }
+      // if((m_unEpisodeCounter+1) % m_unDecThresholdTime == 0){
+      //   if(m_fThreshold > m_fMinThreshold){
+      //     m_fThreshold = m_fThreshold - m_fDecThreshold;
+      //     LOG << "Updating Threshold to:"<< m_fThreshold <<std::endl;
+      //   }
+      // }
 
       eState = m_bFoundCM ? EPISODE_SUCCESS : EPISODE_TIMEOUT;
       GetObservations(eState);
@@ -633,11 +648,14 @@ void CCMPrediction::PostStep() {
       ZMQSendObjectStatsFinal();
 
       ZMQGetAck();
+      // DEBUG("Sent and received actions\n");
       /* Restart episode */
       ++m_unEpisodeCounter;
       if(m_unEpisodeCounter < m_unNumEpisodes) {
+         DEBUG("Restarting Episode\n");
          m_unEpisodeTicksLeft = m_unEpisodeTime;
          GetSimulator().Reset();
+         DEBUG("Reset Complete\n");
       }
 
       if(m_unEpisodeCounter % m_unTicksPerDuration == 0){
@@ -646,6 +664,7 @@ void CCMPrediction::PostStep() {
           Intended_Dir = (CRadians::PI / 6.0 * direction_vector);
       }
    }
+   DEBUG("Finished Post Step\n");
 }
 
 /****************************************/
