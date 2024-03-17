@@ -6,7 +6,7 @@ MIN_SPEED = -MAX_SPEED
 function set_wheels_debug(Left, Right){
 	#log(id, " speeds: ", Left, " " , Right)
 	set_wheels(Left, Right)
-	#debug.print("i: ", LSpeed, " ", RSpeed, "; s: ", Left, " ", Right, "; a: ", DriveDirection)
+	debug.print("i: ", LSpeed, " ", RSpeed, "; s: ", Left, " ", Right, "; a: ", DriveDirection)
 }
 function init(){
   #debug.trajectory.enable(100)

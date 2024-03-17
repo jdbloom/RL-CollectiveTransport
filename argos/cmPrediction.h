@@ -145,6 +145,9 @@ private:
    /** Initial cylinder positions (index = # episode) */
    std::vector<CVector3> m_vecCylinderPos;
 
+   /** Initial cylinder Orientations (index = # episode) */
+   std::vector<CQuaternion> m_vecCylinderOrient;
+
    /** Position of the cylinder from the previous time step*/
    CVector3 m_cOldCylinderPos;
 
@@ -223,9 +226,9 @@ private:
 
    CRadians Intended_Dir;
 
-   Real wheel_gain = 0.035;
+   Real wheel_gain = 0.005;
 
-   Real min_wheel_speed = 2;
+   Real m_fWheelSpeed = 5.0;
 
 
 

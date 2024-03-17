@@ -48,14 +48,14 @@
                   threshold_dec = "0.1"
                   min_threshold = "2"
                   num_episodes = "1000"
-                  episode_time = "30"
+                  episode_time = "3000"
                   time_out_reward = "0"
                   prediction_reward = "100"
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "1"
                   proximity_range = "2"
                   use_base_model = "0"
-                  ticks_per_direction_switch = "3"/>
+                  ticks_per_direction_switch = "100"/>
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
@@ -91,6 +91,7 @@
             <placement index="0" position="0.0,-3.82888,9.65782" look_at="0.0,-3.45302,8.73114" up="0.0,0.926654,0.375866" lens_focal_length="65" />
             <placement index="1" position="3.82726,-3.79865,9.79404" look_at="3.48266,-3.44168,8.92581" up="-0.603008,0.624665,0.496161" lens_focal_length="65" />
             <placement index="2" position="0.0,0.0,10.0" look_at="0.0,0.0,9.5" up="0.0,0.943554,0.331159" lens_focal_length="65" />
+            <placement index="4" position="0,-0.850703,2.31515" look_at="0,-0.474844,1.38847" up="0,0.926671,0.375873" lens_focal_length="65" />
           </placements>
         </camera>
       </qt-opengl>
