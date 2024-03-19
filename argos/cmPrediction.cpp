@@ -560,7 +560,7 @@ void CCMPrediction::PreStep() {
       CQuaternion& cRobotOrient = m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
       CRadians cRobotZ, cRobotY, cRobotX;
       cRobotOrient.ToEulerAngles(cRobotZ, cRobotY, cRobotX);
-      CRadians error_rad = Intended_Dir - cRobotZ;
+      CRadians error_rad = (Intended_Dir - cRobotZ).SignedNormalize();
       Real error = ToDegrees(error_rad).GetValue();
       error *= - error * (error/std::abs(error));
       // if(m_vecRobots[i]->GetGripperEquippedEntity().IsGripping()){
