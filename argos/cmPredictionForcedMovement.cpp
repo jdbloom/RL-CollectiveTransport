@@ -1,4 +1,4 @@
-#include "cmPrediction.h"
+#include "cmPredictionForcedMovement.h"
 #include <buzz/buzzvm.h>
 #include <zmq.h>
 #include <cmath>
@@ -237,6 +237,7 @@ void CCMPrediction::SimulateRobots() {
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
+      m_vectOffset.push_back(cOffset);
       cPos.Set(0.0,
                0.0,
                0.0);
@@ -567,13 +568,8 @@ void CCMPrediction::PreStep() {
          // DEBUG("ROBOT %i is gripped", i);
       // }
       DEBUG("Robot ID %d, Intended Direction %f, Current Direction %f, Error %f\n", i, ToDegrees(Intended_Dir).GetValue(), m_vecRobotStats[i*6+5], error);
-      if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < 50){
-         vecWheelSpeedL[i] = (error * wheel_gain);
-         vecWheelSpeedR[i] = - (error * wheel_gain);
-      } else{
-         vecWheelSpeedL[i] = m_fWheelSpeed;
-         vecWheelSpeedR[i] = m_fWheelSpeed;
-      }
+      vecWheelSpeedL[i] = m_fWheelSpeed + error;
+      vecWheelSpeedR[i] = m_fWheelSpeed - error;
    }
    printf("\n");
    // DEBUG("Sending Wheel Speeds\n");
@@ -682,10 +678,41 @@ void CCMPrediction::PostStep() {
    }
 
    if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration == 0){
+         
           LOG << "Changing Robot Directions" << std::endl;
           Real direction_vector = Real((m_unEpisodeTime - m_unEpisodeTicksLeft) / m_unTicksPerDuration);
           Intended_Dir = (CRadians::PI / 6.0 * direction_vector).SignedNormalize();
+          // TODO : MoveRobots
+          CVector3& cCylinderPos =
+          m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+            CQuaternion cCylinderOrient =
+          m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+
+         CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
+
+          for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+            m_vecRobots[i]->GetControllableEntity().GetController().GetActuator<CCI_KheperaIVGripperActuator>("kheperaiv_gripper")->Unlock();
+            // pcGripper.Unlock();
+            CVector3 cPos(
+            CVector3(ROBOT_CYLINDER_DISTANCE,
+                     CRadians::PI_OVER_TWO,
+                     i * cSlice + m_vectOffset[m_unEpisodeCounter]));
+            /* Translate to actual cylinder center */
+            cPos += cCylinderPos;
+            /* Calculate orientation to cylinder center */
+            CQuaternion cOrient(Intended_Dir, CVector3::Z);
+            DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), cPos.GetX(), cPos.GetY(), cPos.GetZ(), cOrient.GetZ());
+            MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
+                        cPos,        // position
+                        cOrient,     // orientation
+                        false,                               // not a check
+                        true);                               // ignore collisions
+            // pcGripper.Lock();
+       }
       }
+      else
+         for(size_t i = 0; i < m_vecRobots.size(); ++i)
+            m_vecRobots[i]->GetControllableEntity().GetController().GetActuator<CCI_KheperaIVGripperActuator>("kheperaiv_gripper")->Lock();
    // DEBUG("Finished Post Step\n");
 }
 
@@ -940,4 +967,4 @@ void CCMPrediction::ZMQGetAck() {
 /****************************************/
 /****************************************/
 
-REGISTER_LOOP_FUNCTIONS(CCMPrediction, "cm_prediction");
+REGISTER_LOOP_FUNCTIONS(CCMPrediction, "cm_prediction_forced_movement");

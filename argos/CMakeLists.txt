@@ -8,6 +8,9 @@ if(VICON)
 else()
     message("cmPrediction.cpp is being selected to run")
     set(LIBRARY_FILES cmPrediction.h cmPrediction.cpp)
+
+    # message("cmPredictionForcedMovement.cpp is being selected to run")
+    # set(LIBRARY_FILES cmPredictionForcedMovement.h cmPredictionForcedMovement.cpp)
 endif(VICON)
 
 # Note : If running with no visualization available, delete this line completely because for some reason
@@ -17,8 +20,10 @@ if(NOT CLUSTER)
 endif(NOT CLUSTER)
 
 add_library(cmPrediction SHARED ${LIBRARY_FILES})
+# add_library(cmPredictionForcedMovement SHARED ${LIBRARY_FILES})
 
   target_link_libraries(cmPrediction
+  # target_link_libraries(cmPredictionForcedMovement
   ${BUZZ_LIBRARY}
     ${ZeroMQ_LINK_LIBRARIES}
     argos3core_simulator
@@ -30,10 +35,12 @@ add_library(cmPrediction SHARED ${LIBRARY_FILES})
     argos3plugin_simulator_buzz)
   if(NOT CLUSTER)
     target_link_libraries(cmPrediction
+    # target_link_libraries(cmPredictionForcedMovement
       argos3plugin_simulator_qtopengl)
   endif(NOT CLUSTER)
   if(VICON)
     target_link_libraries(cmPrediction
+    # target_link_libraries(cmPredictionForcedMovement
       argos3plugins_simulator_moveable_tcp_socket
       argos3plugins_simulator_tracking)
   endif(VICON)
