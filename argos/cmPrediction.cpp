@@ -230,6 +230,9 @@ void CCMPrediction::SimulateRobots() {
         }
       }
 
+      CDynamics2DKheperaIVModel& cModel = dynamic_cast<CDynamics2DKheperaIVModel&>(pcKIV->GetEmbodiedEntity().GetPhysicsModel(0));
+      cpConstraint* wheel = cModel.m_cDiffSteering.GetAngularConstraint();
+      wheel->maxForce = 10000;
       m_xOffsetFromRobot.push_back(0.0);
       m_yOffsetFromRobot.push_back(0.0);
    }

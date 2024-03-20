@@ -12,6 +12,7 @@
 #include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_gripper_force_sensor.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/kheperaiv_gripper_entity.h>
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
+#include <argos3/plugins/robots/kheperaiv/simulator/dynamics2d_kheperaiv_model.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
