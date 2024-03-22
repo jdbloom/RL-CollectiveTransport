@@ -42,7 +42,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 
 CCMPrediction::CCMPrediction() :
    m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
-   m_unNumActions(2),
+   m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
 }
@@ -291,7 +291,7 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
       //             false,                             // not a check
       //             true);                             // ignore collisions
        for(size_t i = 0; i < m_vecRobots.size(); ++i) {
-          DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), m_vecRobotPos[un_episode][i].GetX(), m_vecRobotPos[un_episode][i].GetY(), m_vecRobotPos[un_episode][i].GetZ(), m_vecRobotOrient[un_episode][i].GetZ());
+//          DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), m_vecRobotPos[un_episode][i].GetX(), m_vecRobotPos[un_episode][i].GetY(), m_vecRobotPos[un_episode][i].GetZ(), m_vecRobotOrient[un_episode][i].GetZ());
           MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                      m_vecRobotPos[un_episode][i],        // position
                      m_vecRobotOrient[un_episode][i],     // orientation
@@ -309,7 +309,7 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
 
 void CCMPrediction::Reset() {
    LOG << "Reseting the robots and field" << std::endl;
-   DEBUG("Reseting the robots");
+//   DEBUG("Reseting the robots");
 
    if(m_bSimulateRobots)
      PlaceRobots(m_unEpisodeCounter);
@@ -441,7 +441,8 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
             //fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
             /* Cost of living + direction x reward for moving */
             fReward = -2;
-            fReward += m_fPredictionReward * PredictionDistance(i); // TODO : Figure out what this is returning
+            fReward += m_fPredictionReward * (1 - Square(PredictionDistance(i))) - m_fPredictionReward / 2; // TODO : Figure out what this is returning
+//            DEBUG("Reward is : %f\n",fReward);
             break;
          }
          case EPISODE_SUCCESS: {
@@ -569,8 +570,8 @@ void CCMPrediction::PreStep() {
       // if(m_vecRobots[i]->GetGripperEquippedEntity().IsGripping()){
          // DEBUG("ROBOT %i is gripped", i);
       // }
-      DEBUG("Robot ID %d, Intended Direction %f, Current Direction %f, Error %f\n", i, ToDegrees(Intended_Dir).GetValue(), m_vecRobotStats[i*6+5], error);
-      if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < 50){
+//      DEBUG("Robot ID %d, Intended Direction %f, Current Direction %f, Error %f\n", i, ToDegrees(Intended_Dir).GetValue(), m_vecRobotStats[i*6+5], error);
+      if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < 40){
          vecWheelSpeedL[i] = (error * wheel_gain);
          vecWheelSpeedR[i] = - (error * wheel_gain);
       } else{
@@ -578,7 +579,7 @@ void CCMPrediction::PreStep() {
          vecWheelSpeedR[i] = m_fWheelSpeed;
       }
    }
-   printf("\n");
+//   printf("\n");
    // DEBUG("Sending Wheel Speeds\n");
    BuzzForeachVM(PutIncreases(vecWheelSpeedL, vecWheelSpeedR, vecDirectionToDrive, vecBaseModel));
 }
@@ -600,19 +601,28 @@ bool CCMPrediction::IsExperimentFinished() {
 /****************************************/
 
 Real CCMPrediction::PredictionDistance(int robot_index){
+/* Returns a value between 0 and 1 of the distance between how good the guess is, the reward for a guess farther than 0.5 should be 0*/
     // Math to get vector of robot to gripper anchor and then robot anchor to what the predicted object center
     // of mass is, then the euclidian distance between the predicted and actual
     CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass, when using Julian's code, change it to be the center of mass of the object
-   //  CVector3& cCMObject = m_pcBox->GetEmbodiedEntity().GetOriginAnchor().Position;
+
     CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
-    CKheperaIVGripperEntity& cGripper = m_vecRobots[robot_index]->GetGripperEquippedEntity();
-    CVector2 cForceVector = cGripper.GetForceSensor() / cGripper.GetForceMag(); // This is the vector between the anchor and the cylinder
+
     CVector2 cPredictionModifier = CVector2(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index]);
-    CVector2 robot_grip_direction = cForceVector - CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
-    cPredictionModifier.Rotate(cForceVector.Angle());
-    CVector2 cPredictedCM = cForceVector + cPredictionModifier;
-   //  DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Predicted Location X : %f, Predicted Location Y : %f, \n Actual X : %f, Actual Y : %f\n", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedCM.GetX(), cPredictedCM.GetY(), cCMObject.GetX(), cCMObject.GetY());
-    return sqrt(pow((cPredictedCM.GetX() - cCMObject.GetX()),2) + pow((cPredictedCM.GetY() - cCMObject.GetY()),2));
+
+//    CVector2 cPredictedCM = cForceVector + cPredictionModifier;
+    CVector2 cRobotToObject = CVector2(cCMObject.GetX(), cCMObject.GetY()) - CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
+    CRadians angleToRobot = cRobotToObject.Angle();
+    cPredictionModifier.Rotate(angleToRobot);
+    CVector2 cGripAnchor = cRobotToObject - CVector2(CYLINDER_RADIUS, 0).Rotate(angleToRobot); // NOTE : This is the hotfix for not being perpendicular to object at all times
+    CVector2 cGlobalFrameGripAnchor = cGripAnchor + CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
+    CVector2 cPredictedCM = cGlobalFrameGripAnchor + cPredictionModifier;
+//    CVector2 cPredictedCM = CVector2(cCenterRobot.Getx(), cCenterRobot.GetY()) + cPredictionModifier;
+    CVector2 cPredictedFromActual = CVector2(cCMObject.GetX(), cCMObject.GetY()) - cPredictedCM;
+    Real dis = cPredictedFromActual.Length();
+//    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Difference Vector : %f, %f, \n distance : %f\n", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedFromActual.GetX(), cPredictedFromActual.GetY(), dis);
+    dis = std::min(dis, 0.99);
+    return dis;
 }
 
 /****************************************/
@@ -678,9 +688,9 @@ void CCMPrediction::PostStep() {
       ++m_unEpisodeCounter;
       if(m_unEpisodeCounter < m_unNumEpisodes) {
          m_unEpisodeTicksLeft = m_unEpisodeTime;
-         // DEBUG("Restarting Episode\n");
-         GetSimulator().Reset();
-         // DEBUG("Reset Complete\n");
+          DEBUG("Restarting Episode\n");
+          GetSimulator().Reset();
+          DEBUG("Reset Complete\n");
       }
    }
 

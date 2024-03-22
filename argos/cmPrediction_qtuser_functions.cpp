@@ -46,6 +46,27 @@ void CCMPredictionQTUserFunctions::Draw(CKheperaIVEntity& cKheperaIV){
   // printf("%f, %f top plate %f, %f\n", cCylinderPos.GetX(), cCylinderPos.GetY(), pos.x, pos.y);
   DrawCircle(cCylinderPos, cCylinderOrient, KHEPERAIV_GRIPPER_RING_RADIUS, CColor::BLUE, false);
   DrawCircle(posvec, gripBodyQuat, KHEPERAIV_GRIPPER_RING_RADIUS, CColor::GREEN, false);
-}
+
+//  cpVect bodyBoundingVert[] = { // create the bounding box of the robot as a bandaid solution instead of a cylinder
+//         cpv(0.0, -KHEPERAIV_GRIPPER_RING_RADIUS/2),
+//         cpv(0.0,  KHEPERAIV_GRIPPER_RING_RADIUS/2),
+//         cpv( KHEPERAIV_GRIPPER_RING_RADIUS,  KHEPERAIV_GRIPPER_RING_RADIUS/2),
+//         cpv( KHEPERAIV_GRIPPER_RING_RADIUS, -KHEPERAIV_GRIPPER_RING_RADIUS/2)
+//      };
+//  std::vector<CVector2> vert;
+//  vert.push_back(CVector2(bodyBoundingVert[0].x,bodyBoundingVert[0].y));
+//  vert.push_back(CVector2(bodyBoundingVert[1].x,bodyBoundingVert[1].y));
+//  vert.push_back(CVector2(bodyBoundingVert[2].x,bodyBoundingVert[2].y));
+//  vert.push_back(CVector2(bodyBoundingVert[3].x,bodyBoundingVert[3].y));
+//
+//
+//  CDynamics2DMultiBodyObjectModel::SBody& cBody2 = cModel.GetBody(2);
+//  cpVect pos2 = cBody2.OffsetPos;
+//  cpFloat angle2 = cBody2.OffsetOrient;
+//  CVector3 perppos = CVector3(pos2.x,pos2.y, 0.07);
+//  CQuaternion perpendicular_forcer = CQuaternion();
+//  perpendicular_forcer.FromEulerAngles(CRadians::ZERO,CRadians::ZERO,CRadians(angle1));
+//  DrawPolygon(perppos,perpendicular_forcer,vert, CColor::RED, false);
+  }
 
 REGISTER_QTOPENGL_USER_FUNCTIONS(CCMPredictionQTUserFunctions, "cmPrediction_qtuser_functions")

@@ -4,7 +4,7 @@ import numpy as np
 import math
 from collections import namedtuple
 import statistics
-from itertools import combinations
+from itertools import product
 
 import torch as T
 import torch.nn as nn
@@ -41,7 +41,7 @@ class Agent(Actor):
         self.obj_state = None
         self.edge_index = edge_index
 
-        self.actions = list(combinations([-0.1,0,0.1], 2))
+        self.actions = list(product([-0.1,0,0.1], repeat=2))
         
         self.ROBOT_PROXIMITY_ANGLES = [0.0, 45.0, 90.0, 135.0, 180.0, -135.0, -90.0, -45.0]
         # [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
@@ -115,7 +115,7 @@ class Agent(Actor):
 
     def choose_agent_action(self, observation, test=False):
         if self.learning_scheme == 'None':
-            return [0, 0], 0
+            return [0, 0]
 
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
             action_num = self.choose_action(observation, self.networks, test)
@@ -135,7 +135,7 @@ class Agent(Actor):
 
         0 - (- 0.1,-0.1)
         1 - (-0.1, 0)
-        2 - (-0.1, 1)
+        2 - (-0.1, 0.1)
         3 - (0, -0.1)
         4 - (0, 0)
         5 - (0, 0.1)
@@ -148,7 +148,7 @@ class Agent(Actor):
         x_increment = self.actions[action_num][0]
         y_increment = self.actions[action_num][1]
         return np.array([x_increment, y_increment])
-        
+
 
     def choose_object_intention(self, agent_intention_states, edge_index = None, test = False):
         if self.intention_neighbors:
