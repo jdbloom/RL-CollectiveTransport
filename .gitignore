@@ -18,3 +18,4 @@ argos/argos/*
 *.bdb
 *.bo
 *.fasl
+.idea/
