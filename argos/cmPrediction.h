@@ -227,7 +227,7 @@ private:
 
    std::vector<Real> m_LengthOffsetFromRobot;
 
-   std::vector<Real> m_AngleFromRCV;
+   std::vector<CRadians> m_AngleFromRCV;
 
    CRadians Intended_Dir;
 

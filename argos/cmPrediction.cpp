@@ -42,7 +42,8 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 
 CCMPrediction::CCMPrediction() :
    // m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
-   m_unNumObs(10); // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation
+   // m_unNumObs(10); // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation
+   m_unNumObs(10), // force angle, |force|, cos force, sin force, 1/|f|, |robot to cylinder|, angle robot to cylinder, angle robot target direction to way we are going, 1 / ", wheelspeeds total
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -239,7 +240,7 @@ void CCMPrediction::SimulateRobots() {
       // m_xOffsetFromRobot.push_back(0.0);
       // m_yOffsetFromRobot.push_back(0.0);
       m_LengthOffsetFromRobot.push_back(0.0);
-      m_AngleFromRCV.push_back(0.0);
+      m_AngleFromRCV.push_back(CRadians::ZERO);
    }
 
    /* Generating random positions for the robots */
@@ -478,26 +479,32 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVGripperForceSensor> ("kheperaiv_gripper_force")->GetReadings();
       CRadians forceAngle = cForceVector.Angle();
       Real forceMagnitude = cForceVector.Length();
-      Real forceCos = CRadians::Cos(cForceVector);
-      Real forceSin = CRadians::Cos(cForceVector);
+      Real forceCos = Cos(forceAngle);
+      Real forceSin = Cos(forceAngle);
       Real inverseForceMag = 1 / forceMagnitude;
       CRadians robotOrientToObject = (cVecRobot2Cylinder.Angle() - cRobotZ).SignedNormalize();
 
       CRadians robotOrientToTargetDirection = Intended_Dir - cRobotZ;
-      Real inverseRobotOrientTargetDirection = 1 / ToDegrees(robotOrientToTargetDirection).GetValue;
+      Real inverseRobotOrientTargetDirection = 1 / ToDegrees(robotOrientToTargetDirection).GetValue();
+      Real TotalDriveMag = fLWheel + fRWheel;
       // Real fPerpendicularForce = cForceVector.GetY(); // NOTE : These are correct function calls
       // Real fParallelForce = cForceVector.GetX();
       // DEBUG("Perpendicular Force : %f, Parallel Force : %f\n", fPerpendicularForce, fParallelForce);
       /* Store the observations */
 
-      m_vecObs[i * m_unNumObs + 0] = fPerpendicularForce;
-      m_vecObs[i * m_unNumObs + 1] = fParallelForce;
-      m_vecObs[i * m_unNumObs + 2] = fLWheel;
-      m_vecObs[i * m_unNumObs + 3] = fRWheel;
-      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
-      m_vecObs[i * m_unNumObs + 5] = ToDegrees(robotOrientToObject.Angle()).GetValue();
-      m_vecObs[i * m_unNumObs + 6] = fTargetDirection; // Angle to the selected direction in radians
-      m_vecObs[i * m_unNumObs + 7] = fRobotOrientation;
+      m_vecObs[i * m_unNumObs + 0] = ToDegrees(forceAngle).GetValue();
+      m_vecObs[i * m_unNumObs + 1] = forceMagnitude;
+      m_vecObs[i * m_unNumObs + 2] = forceCos;
+      m_vecObs[i * m_unNumObs + 3] = forceSin;
+      m_vecObs[i * m_unNumObs + 4] = inverseForceMag;
+      m_vecObs[i * m_unNumObs + 5] = cVecRobot2Cylinder.Length();
+      m_vecObs[i * m_unNumObs + 6] = ToDegrees(robotOrientToObject).GetValue();
+      m_vecObs[i * m_unNumObs + 7] = ToDegrees(robotOrientToTargetDirection).GetValue();
+      m_vecObs[i * m_unNumObs + 8] = inverseRobotOrientTargetDirection;
+      m_vecObs[i * m_unNumObs + 9] = TotalDriveMag;
+      // Individual robot's prediction, should I actually take this in? Saying NO for now, but might change opinion, will probably instead add the dot product of neighbors predictions with out own prediction angle
+      // m_vecObs[i * m_unNumObs + 10] = m_LengthOffsetFromRobot[i];
+      // m_vecObs[i * m_unNumObs + 11] = m_AngleFromRCV[i];
 
       // m_vecObs[i * m_unNumObs + 0] = fPerpendicularForce;
       // m_vecObs[i * m_unNumObs + 1] = fParallelForce;
@@ -508,9 +515,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       // m_vecObs[i * m_unNumObs + 6] = fTargetDirection; // Angle to the selected direction in radians
       // m_vecObs[i * m_unNumObs + 7] = fRobotOrientation;
 
-      // Individual robot's prediction and the CM relative to the robot
-      m_vecObs[i * m_unNumObs + 8] = m_LengthOffsetFromRobot[i];
-      m_vecObs[i * m_unNumObs + 9] = m_AngleFromRCV[i];
+      
 
       // Get the proximity sensor values
       // const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
@@ -573,8 +578,8 @@ void CCMPrediction::PreStep() {
       // DEBUG("Received %f. %f\n", pfAction[0], pfAction[1]);
       // m_xOffsetFromRobot[i] = std::min(std::max(std::abs(m_xOffsetFromRobot[i] + pfAction[0] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
       // m_yOffsetFromRobot[i] = std::min(std::max(std::abs(m_yOffsetFromRobot[i] + pfAction[1] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2;
-      m_LengthOffsetFromRobot[i] = std::min(std::max(std::abs(m_LengthOffsetFromRobot[i] + pfAction[0] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
-      m_AngleFromRCV[i] = std::min(std::max(std::abs(m_AngleFromRCV[i] + pfAction[1] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2;
+      m_LengthOffsetFromRobot[i] = pfAction[0] * CYLINDER_RADIUS + CYLINDER_RADIUS + KHEPERAIV_RADIUS; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
+      m_AngleFromRCV[i] = pfAction[1] * CRadians::PI / 2;
       // DEBUG("xOffset : %f yOffset : %f\n", m_xOffsetFromRobot[i], m_yOffsetFromRobot[i]);
       vecBaseModel[i] = m_unBaseModel;
    }
@@ -669,15 +674,15 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
    CVector3& cCenterObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
    const CQuaternion cRobotOrientation =
-         m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+         m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Orientation;
    CRadians cRobotZ, cRobotY, cRobotX;
    cRobotOrientation.ToEulerAngles(cRobotZ, cRobotY, cRobotX);
    CVector2 cVecRobot2Cylinder(
          cCenterObject.GetX() - cCenterRobot.GetX(),
          cCenterObject.GetY() - cCenterRobot.GetY());
    CRadians robotOrientToObject = (cVecRobot2Cylinder.Angle() - cRobotZ).SignedNormalize();
-   CRadians guessAngleModified = robotOrientToObject + m_AngleFromRCV[i];
-   CVector2 cVecGuess(m_LengthOffsetFromRobot[i], guessAngleModified);
+   CRadians guessAngleModified = robotOrientToObject + m_AngleFromRCV[robot_index];
+   CVector2 cVecGuess(m_LengthOffsetFromRobot[robot_index], guessAngleModified);
    CVector2 cVecPrediction(cCenterRobot.GetX() + cVecGuess.GetX(), cCenterRobot.GetY() + cVecGuess.GetY());
    CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCenterObject.GetX(), cVecPrediction.GetY() - cCenterObject.GetY());
    Real dis = cVecPredictedFromActual.Length();
