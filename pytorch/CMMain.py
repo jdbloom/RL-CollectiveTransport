@@ -146,7 +146,13 @@ while not exp_done:
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
     with open(data_file_path+data_file_name, 'a+') as output:
         writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'])
+        # 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
+        # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
+        # 'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y'
+        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
+                         'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
+                         'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
+                         'perpendicular_force', 'parallel_force'])
 
         if not exp_done:
             time_steps = 0
@@ -187,14 +193,14 @@ while not exp_done:
             else:
                 running_reward = 0
             
-            for i in range(Utility.params['num_robots']):
-                prox_values = env_observations[i][7:]
+            # for i in range(Utility.params['num_robots']):
+                # prox_values = env_observations[i][10:]
                 # Add logic to filter prox values that are observing the object
-                prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                for j in range(len(filtered_indeces)):
-                    env_observations[i][7+filtered_indeces[j]] = 0.0
-                prox_value = np.sum(prox_values)
-                agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+                # prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                # for j in range(len(filtered_indeces)):
+                #     env_observations[i][7+filtered_indeces[j]] = 0.0
+                # prox_value = np.sum(prox_values)
+                # agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
             
             #Define Global Knowledge: [positions, velocities]
             global_knowledge=np.zeros((Utility.params['num_robots'])*4)
@@ -284,11 +290,20 @@ while not exp_done:
                     robot_x_pos = []
                     robot_y_pos = []
                     robot_angle = []
+                    robot_x_prediction = []
+                    robot_y_prediction = []
+                    robot_target_angle = []
+                    force_perpendicular = []
+                    force_parallel = []
                     for i in range(Utility.params['num_robots']):
                         robot_x_pos.append(robot_stats[i][0])
                         robot_y_pos.append(robot_stats[i][1])
                         robot_angle.append(robot_stats[i][5])
-
+                        robot_x_prediction.append(env_observations[i][8])
+                        robot_y_prediction.append(env_observations[i][9])
+                        robot_target_angle.append(env_observations[i][6])
+                        force_perpendicular.append(env_observations[i][0])
+                        force_parallel.append(env_observations[i][1])
 
                     intention_reward = []
                     label = 0
@@ -339,13 +354,13 @@ while not exp_done:
                     agent_prox_flags = []
                     next_object_heading = np.zeros(Utility.params['num_robots'])
                     
-                    for i in range(Utility.params['num_robots']):
-                        prox_values = env_observations[i][7:]
-                        prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                        for j in range(len(filtered_indeces)):
-                            env_observations[i][7+filtered_indeces[j]] = 0.0
-                        prox_value = np.sum(prox_values)
-                        agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+                    # for i in range(Utility.params['num_robots']):
+                    #     prox_values = env_observations[i][10:]
+                    #     prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                    #     for j in range(len(filtered_indeces)):
+                    #         env_observations[i][7+filtered_indeces[j]] = 0.0
+                    #     prox_value = np.sum(prox_values)
+                    #     agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                     if args.intention:
                         if args.attention:
@@ -441,12 +456,12 @@ while not exp_done:
                         #print('[DEBUG] ROBOT', i)
                         #reward = rewards[i]
                         #print('[DEBUG] OBS:', env_observations[i])
-                        prox_values = env_observations[i][7:]
+                        # prox_values = env_observations[i][10:]
                         #print('[DEBUG] Prox Values', prox_values)
-                        prox_value = np.sum(prox_values)
+                        # prox_value = np.sum(prox_values)
                         #print('[DEBUG] Prox Value Reward:', (-0.1)*prox_value)
                         #reward += (-1)*prox_value
-                        rewards[i] += (-1)*prox_value
+                        # rewards[i] += (-1)*prox_value
 
                         if args.independent_learning:
                             if args.intention:
@@ -530,12 +545,16 @@ while not exp_done:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'env_observations', 'agent_predictions'
+                    # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
+                    # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
+                    # 'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
+                    # 'perpendicular_force', parallel_force']
                     writer.writerow([r, tmp_epsilon, reached_goal, loss,
-                                    obj_stats[0], obj_stats[1], obj_stats[5],
+                                    obj_stats[0], obj_stats[1],
                                     intention_reward, next_heading_intention[0],
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
-                                    env_observations, actions_to_take])
+                                    env_observations, robot_x_prediction, robot_y_prediction,
+                                    force_perpendicular, force_parallel])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time

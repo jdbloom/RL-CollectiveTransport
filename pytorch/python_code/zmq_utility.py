@@ -10,10 +10,10 @@ class ZMQ_Utility:
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['perpendicular_force', 'parallel_force', 'robot_lwheel',
                            'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'robot_from_wanted_direction',
-                           'robot_direction', 'xEstimation', 'yEstimation',
-                           'ProxVal_0',  'ProxVal_1',  'ProxVal_2',  'ProxVal_3',
-                           'ProxVal_4',  'ProxVal_5',  'ProxVal_6',  'ProxVal_7']
-        self.OBS_FMT = '18f'
+                           'robot_direction', 'xEstimation', 'yEstimation']
+                           # 'ProxVal_0',  'ProxVal_1',  'ProxVal_2',  'ProxVal_3',
+                           # 'ProxVal_4',  'ProxVal_5',  'ProxVal_6',  'ProxVal_7']
+        self.OBS_FMT = '10f'
         self.REWARDS_FIELDS = ['reward']
         self.REWARDS_FMT = '1f'
         self.STATS_FIELDS = ['magnitude', 'angle', 'deltaX', 'deltaY']

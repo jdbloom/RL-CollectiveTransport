@@ -7,8 +7,8 @@ import torch.optim as Adam
 
 import numpy as np
 
-Loss = nn.MSELoss()
-
+L2Loss = nn.MSELoss()
+L1Loss = nn.L1Loss()
 
 class Hyperparameters:
     def __init__(self):
@@ -253,8 +253,11 @@ class NetworkAids(Hyperparameters):
             q_value = networks['critic']([states, actions], indices)
         else:
             q_value = networks['critic']([states, actions])
-        value_loss = Loss(q_value, target)
+        # value_loss = L2Loss(q_value, target) # NOTE : Modified from using L2 to L1 regularization
+        value_loss = L1Loss(q_value, target)
         value_loss.backward()
+
+        
         networks['critic'].optimizer.step()
 
         #Actor Update
@@ -308,8 +311,10 @@ class NetworkAids(Hyperparameters):
         networks['critic_1'].optimizer.zero_grad()
         networks['critic_2'].optimizer.zero_grad()
 
-        q1_loss = F.mse_loss(target, q1)
-        q2_loss = F.mse_loss(target, q2)
+        # q1_loss = F.mse_loss(target, q1) # NOTE : Modified from using L2 to L1 regulariazation because we want coefficient shrinkage, all information is not the same
+        # q2_loss = F.mse_loss(target, q2)
+        q1_loss = F.l1_loss(target, q1)
+        q2_loss = F.l1_loss(target, q2)
         critic_loss = q1_loss + q2_loss
         critic_loss.backward()
         networks['critic_1'].optimizer.step()
@@ -335,7 +340,8 @@ class NetworkAids(Hyperparameters):
         networks['learn_step_counter'] += 1
         networks['attention'].zero_grad()
         pred_headings = networks['attention'](observations)
-        loss = Loss(pred_headings, labels.unsqueeze(-1))
+        # loss = L2Loss(pred_headings, labels.unsqueeze(-1)) # NOTE : Modified from using L2 to L1 regularization
+        loss = L1Loss(pred_headings, labels.unsqueeze(-1))
         loss.backward()
         networks['attention'].optimizer.step()
         return loss.item()

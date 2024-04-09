@@ -6,12 +6,12 @@
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/simulator/entities/box_entity.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/kheperaiv_entity.h> // TODO : Change this to khepera's entity correctly and update argos3 library
-#include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
+// #include <argos3/plugins/robots/generic/control_interface/ci_proximity_sensor.h>
 #include <argos3/core/control_interface/ci_controller.h>
-#include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_proximity_sensor.h> // TODO: Change to kheperaiv correctly
+// #include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_proximity_sensor.h> // TODO: Change to kheperaiv correctly
 #include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_gripper_force_sensor.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/kheperaiv_gripper_entity.h>
-#include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
+// #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/dynamics2d_kheperaiv_model.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
@@ -117,7 +117,7 @@ private:
    UInt32 m_unAlphabetSize;
 
    /** range for the proximity sensors*/
-   Real m_fProximityRange;
+   // Real m_fProximityRange;
 
    /* Number of episodes */
    UInt32 m_unNumEpisodes;
@@ -221,9 +221,13 @@ private:
    /** What robots are we simulating, please put them in clockwise order around the object or I will die */
    std::string m_strRobotsUsed = "0,1,2,3";
 
-   std::vector<Real> m_xOffsetFromRobot;
+   // std::vector<Real> m_xOffsetFromRobot;
 
-   std::vector<Real> m_yOffsetFromRobot;
+   // std::vector<Real> m_yOffsetFromRobot;
+
+   std::vector<Real> m_LengthOffsetFromRobot;
+
+   std::vector<Real> m_AngleFromRCV;
 
    CRadians Intended_Dir;
 
