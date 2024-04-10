@@ -686,7 +686,7 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    CVector2 cVecPrediction(cCenterRobot.GetX() + cVecGuess.GetX(), cCenterRobot.GetY() + cVecGuess.GetY());
    CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCenterObject.GetX(), cVecPrediction.GetY() - cCenterObject.GetY());
    Real dis = cVecPredictedFromActual.Length();
-   DEBUG("ROBOT ID %d, Prediction X : %f, Prediction Y %f \n Actual : %f, %f, \n distance : %f\n", robot_index, cVecGuess.GetX(), cVecGuess.GetY(), cCenterObject.GetX(), cCenterObject.GetY(), dis);
+   // DEBUG("ROBOT ID %d, Prediction X : %f, Prediction Y %f \n Actual : %f, %f, \n distance : %f\n", robot_index, cVecGuess.GetX(), cVecGuess.GetY(), cCenterObject.GetX(), cCenterObject.GetY(), dis);
    return dis;
 }
 

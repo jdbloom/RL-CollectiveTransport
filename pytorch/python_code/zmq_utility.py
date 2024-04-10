@@ -8,12 +8,18 @@ class ZMQ_Utility:
         self.PARAMS_FMT = '5f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
-        self.OBS_FIELDS = ['perpendicular_force', 'parallel_force', 'robot_lwheel',
-                           'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'robot_from_wanted_direction',
-                           'robot_direction', 'xEstimation', 'yEstimation']
+        self.OBS_FIELDS = ['force_angle', 'force_magnitude', 'force_cos', 'force_sin',
+                           'inverse_force_mag', 'robot_to_obj_dis', 'robot_to_obj_angle',
+                           'robot_to_target_angle', 'inverse_target_angle', 'wheelspeed_total']
+                        #    'robot_to_target_angle', 'inverse_target_angle', 'wheelspeed_total', 
+                        #    'past_prediction_length', 'past_prediction_angle']
+        # self.OBS_FIELDS = ['perpendicular_force', 'parallel_force', 'robot_lwheel',
+        #                    'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'robot_from_wanted_direction',
+        #                    'robot_direction', 'xEstimation', 'yEstimation']
                            # 'ProxVal_0',  'ProxVal_1',  'ProxVal_2',  'ProxVal_3',
                            # 'ProxVal_4',  'ProxVal_5',  'ProxVal_6',  'ProxVal_7']
         self.OBS_FMT = '10f'
+        # self.OBS_FMT = '12f' # If inclduing past prediction values
         self.REWARDS_FIELDS = ['reward']
         self.REWARDS_FMT = '1f'
         self.STATS_FIELDS = ['magnitude', 'angle', 'deltaX', 'deltaY']
