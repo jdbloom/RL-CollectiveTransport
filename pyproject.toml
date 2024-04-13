@@ -1,0 +1,18 @@
+[tool.poetry]
+package-mode = false
+name = "rl-collectivetransport"
+version = "2.0.0"
+description = "Collective Transport trained using RL from the GSP-RL library"
+authors = ["jdbloom <jdbloom@wpi.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10.2"
+gsp-rl = {git = "git@github.com:NESTLab/GSP-RL.git"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
