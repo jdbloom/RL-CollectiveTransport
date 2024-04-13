@@ -180,3 +180,13 @@ class ZMQ_Utility:
             offset = self.FLOAT_SIZE * self.params['num_actions'] * r
             packer.pack_into(msg, offset, *(actions[r]))
         return msg
+
+    def parse_msgs(self, msgs):
+        env_observations = self.parse_obs(msgs[1])
+        failures = self.parse_failures(msgs[2])
+        rewards = self.parse_rewards(msgs[3])
+        stats = self.parse_stats(msgs[4])
+        robot_stats = self.parse_robot_stats(msgs[5])
+        obj_stats = self.parse_obj_stats(msgs[6])
+
+        return env_observations, failures, rewards, stats, robot_stats, obj_stats
