@@ -1,28 +1,4 @@
 import pickle
-from dataclasses import dataclass
-
-
-@dataclass
-class exp_data:
-    reward:list 
-    epsilon:list 
-    termination:list 
-    loss:list 
-    force_magnitude:list 
-    force_angle:list 
-    average_force_vector:list 
-    cyl_x_pos:list 
-    cyl_y_pos:list 
-    cyl_angle:list 
-    gate_stats:list 
-    obstacle_stats:list 
-    gsp_reward:list 
-    gsp_heading:list
-    run_time:list
-    robots_x_pos:list
-    robots_y_pos:list
-    robot_angle:list
-    robot_failures:list
 
 class data_logger:
     def __init__(self, data_file_path):
@@ -89,32 +65,27 @@ class data_logger:
         self.robot_failures.append(robot_failure)
     
     def write_to_file(self):
-        data = exp_data(
-            self.reward,
-            self.epsilon,
-            self.termination,
-            self.loss,
-            self.force_magnitude,
-            self.force_angle,
-            self.average_force_vector,
-            self.cyl_x_pos,
-            self.cyl_y_pos,
-            self.cyl_angle,
-            self.gate_stats,
-            self.obstacle_stats,
-            self.gsp_reward,
-            self.gsp_heading,
-            self.run_time,
-            self.robots_x_pos,
-            self.robots_y_pos,
-            self.robot_angle,
-            self.robot_failures,
-        )
+        data = {
+            'reward': self.reward,
+            'epsilon': self.epsilon,
+            'termination': self.termination,
+            'loss': self.loss,
+            'force_magnitude': self.force_magnitude,
+            'force_angle': self.force_angle,
+            'average_force_vector':self.average_force_vector,
+            'cyl_x_pos': self.cyl_x_pos,
+            'cyl_y_pos': self.cyl_y_pos,
+            'cyl_angle': self.cyl_angle,
+            'gate_stats': self.gate_stats,
+            'obstacle_stats': self.obstacle_stats,
+            'gsp_reward': self.gsp_reward,
+            'gsp_heading': self.gsp_heading,
+            'run_time': self.run_time,
+            'robot_x_pos': self.robots_x_pos,
+            'robot_y_pos': self.robots_y_pos,
+            'robot_anlge': self.robot_angle,
+            'robot_failure':self.robot_failures,
+        }
 
         with open(self.data_file_path, 'wb') as file:
             pickle.dump(data, file)
-        
-        print('SAVING DATA', self.data_file_path)
-
-
-
