@@ -1,8 +1,8 @@
 from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
-from src.env import calculate_gsp_reward
-import python_code.zmq_utility as zmq_utility
+from src.env import calculate_gsp_reward, ZMQ_Utility
+
 #from python_code.comms_viz import viz
 
 import argparse
@@ -19,7 +19,7 @@ import torch as T
 import matplotlib.pyplot as plt
 import yaml
 
-Utility = zmq_utility.ZMQ_Utility()
+Utility = ZMQ_Utility()
 
 # get path to containing folder so this works where ever it is used
 containing_folder = os.path.dirname(os.path.realpath(__file__))

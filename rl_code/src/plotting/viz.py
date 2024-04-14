@@ -30,8 +30,8 @@ for i in range(len(file_names)-1):
     df_list.append((i, df))
 
 episode_rewards = []
-episode_intentions = []
-episode_intention_rewards = []
+episode_gsps = []
+episode_gsp_rewards = []
 episode_success_reward = []
 episode_success_index = []
 episode_failure_reward = []
@@ -49,7 +49,7 @@ print('. . . Consolodating Model Data')
 IL_flag = False
 for episode in df_list:
     rewards = []
-    intention_reward = []
+    gsp_reward = []
 
     robot_x_pos = []
     robot_y_pos = []
@@ -57,7 +57,7 @@ for episode in df_list:
     episode_time_steps.append(len(episode[1]))
     for t in range(len(episode[1])):
         rewards.append(episode[1]['reward'][t].strip('][').split(','))
-        intention_reward.append(episode[1]['intention_reward'][t].strip('][').split(','))
+        gsp_reward.append(episode[1]['gsp_reward'][t].strip('][').split(','))
         terminal+=1
         run_t = episode[1]['run_time'][t]
     episode_run_times.append(run_t)
@@ -65,7 +65,7 @@ for episode in df_list:
     terminals.append(terminal)
 
     robot_rewards = []
-    robot_intentions = []
+    robot_gsps = []
     failures = np.zeros(len(rewards[0]))
     failure_x_pos = np.zeros(len(rewards[0]))
     failure_y_pos = np.zeros(len(rewards[0]))
@@ -75,25 +75,25 @@ for episode in df_list:
         for j in range(len(rewards)):
                 if rewards[j][0] != 'reward':
                     tmp_r += float(rewards[j][i])
-                    tmp_i += float(intention_reward[j][i])
+                    tmp_i += float(gsp_reward[j][i])
 
 
         robot_rewards.append(tmp_r)
-        robot_intentions.append(tmp_i)
+        robot_gsps.append(tmp_i)
     episode_rewards.append(robot_rewards)
-    episode_intentions.append(robot_intentions)
+    episode_gsps.append(robot_gsps)
 
 
 
 robot_exp_rewards = []
 robot_exp_rewards_avg = []
-robot_exp_intentions = []
-robot_exp_intentions_avg = []
+robot_exp_gsps = []
+robot_exp_gsps_avg = []
 for j in range(len(episode_rewards[0])):
     robot_exp_rewards.append([])
     robot_exp_rewards_avg.append([])
-    robot_exp_intentions.append([])
-    robot_exp_intentions_avg.append([])
+    robot_exp_gsps.append([])
+    robot_exp_gsps_avg.append([])
     episode_success_reward.append([])
     episode_success_index.append([])
     episode_failure_reward.append([])
@@ -101,8 +101,8 @@ for j in range(len(episode_rewards[0])):
     for i in range(len(episode_rewards)):
         robot_exp_rewards[j].append(episode_rewards[i][j])
         robot_exp_rewards_avg[j].append(episode_rewards[i][j]/episode_time_steps[i])
-        robot_exp_intentions[j].append(episode_intentions[i][j])
-        robot_exp_intentions_avg[j].append(episode_intentions[i][j]/episode_time_steps[i])
+        robot_exp_gsps[j].append(episode_gsps[i][j])
+        robot_exp_gsps_avg[j].append(episode_gsps[i][j]/episode_time_steps[i])
         if terminals[i] < 4500:
             episode_success_reward[j].append(episode_rewards[i][j])
             episode_success_index[j].append(i)
@@ -118,7 +118,7 @@ print('. . . Statistics')
 print('\n[STATISTICS] Success Rate:', (len(episode_success_reward[0])/ len(episode_rewards)))
 print('[STATISTICS] Failures:', len(episode_failure_reward[0]))
 print('[STATISTICS] Avg Exp Reward:', np.average(robot_exp_rewards))
-print('[STATISTICS] Avg Exp Intention Reward:', np.average(robot_exp_intentions))
+print('[STATISTICS] Avg Exp gsp Reward:', np.average(robot_exp_gsps))
 #print('[STATISTICS] Best Model:', last_10_axis[0][np.argmax(last_10_rewards[0])])
 #print('\n[FAILING EPISODES]', episode_failure_index[0])
 
@@ -150,11 +150,11 @@ plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.rcParams.update({'font.size': 22})
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
-for i in range(len(robot_exp_intentions)):
-    plt.plot(robot_exp_intentions[i], c=avg_colors[i], label = 'Robot '+str(i))
+for i in range(len(robot_exp_gsps)):
+    plt.plot(robot_exp_gsps[i], c=avg_colors[i], label = 'Robot '+str(i))
 plt.legend(loc = 1)
-plt.title(args.figure_name + ' Intention Reward')
-plt.savefig(args.figure_path+args.figure_name+"_Intention.png")
+plt.title(args.figure_name + ' gsp Reward')
+plt.savefig(args.figure_path+args.figure_name+"_gsp.png")
 
 plt.close()
 
@@ -163,7 +163,7 @@ plt.rcParams.update({'font.size': 22})
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
 plt.plot(robot_exp_rewards_avg[0], c=avg_colors[0], label = 'Action Reward')
-plt.plot(robot_exp_intentions_avg[0], c=avg_colors[1], label = 'Intention Reward')
+plt.plot(robot_exp_gsps_avg[0], c=avg_colors[1], label = 'gsp Reward')
 #plt.legend(loc = 1)
 plt.title(args.figure_name + ' Average Time Step Reward ')
 plt.savefig(args.figure_path+args.figure_name+"_average_time_step_reward.png")
@@ -174,10 +174,10 @@ plt.figure(num=None, figsize=(20, 12), dpi=80, facecolor='w', edgecolor='k')
 plt.rcParams.update({'font.size': 22})
 plt.xlabel('Episodes')
 plt.ylabel('Reward')
-plt.plot(robot_exp_intentions_avg[0], c=avg_colors[1], label = 'Intention Reward')
+plt.plot(robot_exp_gsps_avg[0], c=avg_colors[1], label = 'gsp Reward')
 #plt.legend(loc = 1)
-plt.title(args.figure_name + ' Average Time Step Intention Reward ')
-plt.savefig(args.figure_path+args.figure_name+"_average_time_step_intention.png")
+plt.title(args.figure_name + ' Average Time Step gsp Reward ')
+plt.savefig(args.figure_path+args.figure_name+"_average_time_step_gsp.png")
 
 plt.close()
 '''
