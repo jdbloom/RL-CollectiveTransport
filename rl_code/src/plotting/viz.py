@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
-parser.add_argument("figure_path")
-parser.add_argument("figure_name")
 parser.add_argument("--IL", default = False, action = "store_true")
 parser.add_argument("--gate", default = False, action = "store_true")
 
@@ -52,28 +50,46 @@ for i in range(len(file_names)-1):
         episode_gsp_rewards.append([np.sum(robot_gsp_rewards[i]) for i in range(robot_gsp_rewards.shape[0])])
 
 episode_rewards = np.array(episode_rewards)
-episode_gsp_rewards = np.array(episode_gsp_rewards)
+episode_gsp_rewards = np.array(episode_gsp_rewards)[:,0]
 episode_std = np.std(episode_rewards, axis=1)
-episode_gsp_std = np.std(episode_gsp_rewards, axis=1)
 average_episode_rewards = np.average(episode_rewards, axis=1)
-average_episode_gsp_rewards = np.average(episode_gsp_rewards, axis=1)
 episode_index = np.arange(0, average_episode_rewards.shape[0], 1)
 last_10_rewards = np.array([np.average(average_episode_rewards[i-10:i]) for i in range(10, average_episode_rewards.shape[0], 10)])
-last_10_gsp_rewards = np.array([np.average(average_episode_gsp_rewards[i-10:i]) for i in range(10, average_episode_gsp_rewards.shape[0], 10)])
+last_10_gsp_rewards = np.array([np.average(episode_gsp_rewards[i-10:i]) for i in range(10, episode_gsp_rewards.shape[0], 10)])
 last_10_std = np.array([np.average(episode_std[i-10:i]) for i in range(10, episode_std.shape[0], 10)])
-last_10_gsp_std = np.array([np.average(episode_gsp_std[i-10:i]) for i in range(10, episode_gsp_std.shape[0], 10)])
+last_10_gsp_std = np.array([np.std(episode_gsp_rewards[i-10:i]) for i in range(10, episode_gsp_rewards.shape[0], 10)])
 last_10_axis = np.arange(10, average_episode_rewards.shape[0], 10)
 # for i in range(episode_rewards.shape[1]):
 #     plt.plot(episode_rewards[:, i])
 # plt.plot(average_episode_rewards)
-plt.fill_between(last_10_axis, last_10_rewards+last_10_std/2.0, last_10_rewards-last_10_std/2.0, color='lightblue', label='Reward STD')
-plt.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
+
+fig, ax1 = plt.subplots()
+
+ax1.set_xlabel('Episodes')
+ax1.set_ylabel('Reward', c='b')
+ax1.tick_params(axis='y', labelcolor='b')
 if np.average(last_10_gsp_rewards) < 0:
-    plt.fill_between(last_10_axis, last_10_gsp_rewards+last_10_gsp_std/2.0, last_10_gsp_rewards-last_10_gsp_std/2.0, color='salmon', label = 'GSP Reward STD')
-    plt.plot(last_10_axis, last_10_gsp_rewards, color = 'r', label = 'GSP Reward')
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('GSP Reward', c='r')
+    ax2.tick_params(axis='y', labelcolor='r')
+    ax2.fill_between(last_10_axis, last_10_gsp_rewards+last_10_gsp_std/2.0, last_10_gsp_rewards-last_10_gsp_std/2.0, color='salmon', label = 'GSP Reward STD', alpha = 0.2)
+    ax2.plot(last_10_axis, last_10_gsp_rewards, color = 'r', label = 'GSP Reward')
+ax1.fill_between(last_10_axis, last_10_rewards+last_10_std/2.0, last_10_rewards-last_10_std/2.0, color='lightblue', label='Reward STD', alpha=0.5)
+ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
+
+
+
+
+
+
+# plt.fill_between(last_10_axis, last_10_rewards+last_10_std/2.0, last_10_rewards-last_10_std/2.0, color='lightblue', label='Reward STD')
+# plt.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
+# if np.average(last_10_gsp_rewards) < 0:
+#     plt.fill_between(last_10_axis, last_10_gsp_rewards+last_10_gsp_std/2.0, last_10_gsp_rewards-last_10_gsp_std/2.0, color='salmon', label = 'GSP Reward STD')
+#     plt.plot(last_10_axis, last_10_gsp_rewards, color = 'r', label = 'GSP Reward')
 plt.title('Training Reward')
-plt.legend()
-plt.show()
+
+plt.savefig(args.data_path+'Training_Rewards.png')
 
 
     
