@@ -2,6 +2,7 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
+from src.exp_data_structures import data_logger
 
 #from python_code.comms_viz import viz
 
@@ -143,438 +144,437 @@ while not exp_done:
     #receive initial observations
     msgs = socket.recv_multipart()
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
-    data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
-    with open(data_file_path+data_file_name, 'a+') as output:
-        writer = csv.writer(output, delimiter = ',')
-        writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'force magnitude', 'force angle', 'average force vector', 'cyl_x_pos', 'cyl_y_pos', 'cyl_angle', 'gate_stats', 'obstacle_stats', 'gsp_reward', 'gsp_heading', 'run_time', 'robots_x_pos', 'robots_y_pos', 'robot_angle', 'robot_failures', 'env_observations', 'agent_actions'])
+    data_file_name = 'Data_Episode_'+str(ep_counter)+'.pkl'
+    data_writer = data_logger(data_file_path+data_file_name)
 
-        if not exp_done:
-            time_steps = 0
-            
-            object_positions = []
-            agent_prox_flags = []
-            last_object_heading = None
+    if not exp_done:
+        time_steps = 0
+        
+        object_positions = []
+        agent_prox_flags = []
+        last_object_heading = None
 
-            next_heading_gsp = np.zeros(Utility.params['num_robots'])
-            old_heading_gsp = np.zeros(Utility.params['num_robots'])
-            episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
+        next_heading_gsp = np.zeros(Utility.params['num_robots'])
+        old_heading_gsp = np.zeros(Utility.params['num_robots'])
+        episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
 
-            # Receive initial observations from the environment
-            env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
-            object_positions.append([obj_stats[0], obj_stats[1]])
-            old_cyl_ang = obj_stats[5]
+        # Receive initial observations from the environment
+        env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
+        object_positions.append([obj_stats[0], obj_stats[1]])
+        old_cyl_ang = obj_stats[5]
 
-            if Utility.params['num_obstacles'] > 0:
-                obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
-            elif Utility.params['use_gate'] == 1:
-                gate_stats = Utility.parse_gate_stats(msgs[7])
+        if Utility.params['num_obstacles'] > 0:
+            obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
+        elif Utility.params['use_gate'] == 1:
+            gate_stats = Utility.parse_gate_stats(msgs[7])
 
-            agent_states = []
-            force_mags = []
-            force_angs = []
-            if args.independent_learning:
-                running_reward = []
+        agent_states = []
+        force_mags = []
+        force_angs = []
+        if args.independent_learning:
+            running_reward = []
+        else:
+            running_reward = 0
+        
+        for i in range(Utility.params['num_robots']):
+            if failures[i][0]:
+                agent_prox_flags.append(0)
             else:
-                running_reward = 0
-            
-            for i in range(Utility.params['num_robots']):
-                if failures[i][0]:
-                    agent_prox_flags.append(0)
-                else:
-                    prox_values = env_observations[i][7:]
-                    # Add logic to filter prox values that are observing the object
-                    prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                    for j in range(len(filtered_indeces)):
-                        env_observations[i][7+filtered_indeces[j]] = 0.0
-                    prox_value = np.sum(prox_values)
-                    agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
-            
-            #Define Global Knowledge: [positions, velocities]
-            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-            for i in range(Utility.params['num_robots']):
-                global_knowledge[i*4] = robot_stats[i][0]           #x position
-                global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+                prox_values = env_observations[i][7:]
+                # Add logic to filter prox values that are observing the object
+                prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                for j in range(len(filtered_indeces)):
+                    env_observations[i][7+filtered_indeces[j]] = 0.0
+                prox_value = np.sum(prox_values)
+                agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+        
+        #Define Global Knowledge: [positions, velocities]
+        global_knowledge=np.zeros((Utility.params['num_robots'])*4)
+        for i in range(Utility.params['num_robots']):
+            global_knowledge[i*4] = robot_stats[i][0]           #x position
+            global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+            global_knowledge[i*4+2] = stats[i][2]               #velocity X
+            global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
-            for i in range(Utility.params['num_robots']):
-                g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                counter = 0
-                for j in range(Utility.params['num_robots']):
-                    if i != j:
-                        g_knowledge[counter*4] = global_knowledge[j*4]
-                        g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                        g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                        g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                        counter+=1
-                if args.independent_learning:
-                    running_reward.append(0)
-                    if config['GSP']:
-                        if args.global_knowledge:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
-                        else:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+        for i in range(Utility.params['num_robots']):
+            g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+            counter = 0
+            for j in range(Utility.params['num_robots']):
+                if i != j:
+                    g_knowledge[counter*4] = global_knowledge[j*4]
+                    g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                    g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                    g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                    counter+=1
+            if args.independent_learning:
+                running_reward.append(0)
+                if config['GSP']:
+                    if args.global_knowledge:
+                        agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                    else:
+                        agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                else:
+                    if args.global_knowledge:
+                        agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                    else:
+                        agent_state = env_observations[i]
+                    
+            else:
+                if config['GSP']:
+                    if args.global_knowledge:
+                        agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                    else:
+                        agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
+                else: 
+                    if args.share_prox_values:
+                        agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                     else:
                         if args.global_knowledge:
-                            agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                            agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
                         else:
                             agent_state = env_observations[i]
-                        
-                else:
-                    if config['GSP']:
-                        if args.global_knowledge:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
-                        else:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                    else: 
-                        if args.share_prox_values:
-                            agent_state = np.concatenate((env_observations[i], agent_prox_flags))
-                        else:
-                            if args.global_knowledge:
-                                agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
-                            else:
-                                agent_state = env_observations[i]
-                agent_states.append(agent_state)
-                force_mags.append(stats[i][0])
-                force_angs.append(stats[i][1])
+            agent_states.append(agent_state)
+            force_mags.append(stats[i][0])
+            force_angs.append(stats[i][1])
 
-            # reward is the same across all agents. If it were per agent then this would need to move into the loop above
-            if args.independent_learning:
+        # reward is the same across all agents. If it were per agent then this would need to move into the loop above
+        if args.independent_learning:
+            for i in range(Utility.params['num_robots']):
+                running_reward[i]+= rewards[i]
+        else:
+            running_reward += rewards[0]
+        # failures should all be false because we havent started the episode yet
+        failure = failures[0]
+
+        #
+        # Start the Episode Loop
+        #
+
+        episode_start_time = time.time()
+        while not episode_done:
+            if not exp_done:
+                reward = []
+                actions = []
+                actions_to_take = []
+                time_steps += 1
+                robot_failures = []
+
                 for i in range(Utility.params['num_robots']):
-                    running_reward[i]+= rewards[i]
-            else:
-                running_reward += rewards[0]
-            # failures should all be false because we havent started the episode yet
-            failure = failures[0]
+                    # Choose an action
+                    if args.independent_learning:
+                        action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
+                    else:
+                        action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
+                    actions_to_take.append(action)
+                    actions.append(action_num)
 
-            #
-            # Start the Episode Loop
-            #
+                old_failures = failures[:]
+                # Take Step
+                socket.send(Utility.serialize_actions(actions_to_take))
+                msgs = socket.recv_multipart()
 
-            episode_start_time = time.time()
-            while not episode_done:
-                if not exp_done:
-                    reward = []
-                    actions = []
-                    actions_to_take = []
-                    time_steps += 1
-                    robot_failures = []
+                exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
+                env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
+                robot_x_pos = []
+                robot_y_pos = []
+                robot_angle = []
+                for i in range(Utility.params['num_robots']):
+                    robot_x_pos.append(robot_stats[i][0])
+                    robot_y_pos.append(robot_stats[i][1])
+                    robot_angle.append(robot_stats[i][5])
+                if Utility.params['num_obstacles'] > 0:
+                    obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
+                elif Utility.params['use_gate'] == 1:
+                    gate_stats = Utility.parse_gate_stats(msgs[7])
 
-                    for i in range(Utility.params['num_robots']):
-                        # Choose an action
+                old_object_positions = copy.deepcopy(object_positions)
+                object_positions.append([obj_stats[0], obj_stats[1]])
+
+                
+                ############################## gsp REWARD ##############################################
+                gsp_reward, label = calculate_gsp_reward(
+                    config['GSP'], 
+                    old_cyl_ang, 
+                    obj_stats[5], 
+                    next_heading_gsp, 
+                    Utility.params['num_robots']
+                )
+                for i in range(len(gsp_reward)):
+                    episode_gsp_rewards[i] += gsp_reward[i] 
+
+                old_cyl_ang = obj_stats[5]
+
+                # Store Transitions and Learn
+                old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
+                neighbors_old_heading_gsp = copy.deepcopy(old_heading_gsp)
+                old_heading_gsp = copy.deepcopy(next_heading_gsp)
+
+                new_agent_states = []
+                force_mags = []
+                force_angs = []
+                r = []
+                agent_prox_flags = []
+                next_object_heading = np.zeros(Utility.params['num_robots'])
+                
+                for i in range(Utility.params['num_robots']):
+                    robot_failures.append(failures[i][0])
+                    if failures[i][0]:
+                        agent_prox_flags.append(0)
+                    else:
+                        prox_values = env_observations[i][7:]
+                        prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
+                        for j in range(len(filtered_indeces)):
+                            env_observations[i][7+filtered_indeces[j]] = 0.0
+                        prox_value = np.sum(prox_values)              
+                        agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+
+                if config['GSP']:
+                    if config['ATTENTION']:
                         if args.independent_learning:
-                            action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
-                        else:
-                            action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
-                        actions_to_take.append(action)
-                        actions.append(action_num)
-
-                    old_failures = failures[:]
-                    # Take Step
-                    socket.send(Utility.serialize_actions(actions_to_take))
-                    msgs = socket.recv_multipart()
-
-                    exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
-                    env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
-                    robot_x_pos = []
-                    robot_y_pos = []
-                    robot_angle = []
-                    for i in range(Utility.params['num_robots']):
-                        robot_x_pos.append(robot_stats[i][0])
-                        robot_y_pos.append(robot_stats[i][1])
-                        robot_angle.append(robot_stats[i][5])
-                    if Utility.params['num_obstacles'] > 0:
-                        obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
-                    elif Utility.params['use_gate'] == 1:
-                        gate_stats = Utility.parse_gate_stats(msgs[7])
-
-                    old_object_positions = copy.deepcopy(object_positions)
-                    object_positions.append([obj_stats[0], obj_stats[1]])
-
-                    
-                    ############################## gsp REWARD ##############################################
-                    gsp_reward, label = calculate_gsp_reward(
-                        config['GSP'], 
-                        old_cyl_ang, 
-                        obj_stats[5], 
-                        next_heading_gsp, 
-                        Utility.params['num_robots']
-                    )
-                    for i in range(len(gsp_reward)):
-                        episode_gsp_rewards[i] += gsp_reward[i] 
-
-                    old_cyl_ang = obj_stats[5]
-
-                    # Store Transitions and Learn
-                    old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
-                    neighbors_old_heading_gsp = copy.deepcopy(old_heading_gsp)
-                    old_heading_gsp = copy.deepcopy(next_heading_gsp)
-
-                    new_agent_states = []
-                    force_mags = []
-                    force_angs = []
-                    r = []
-                    agent_prox_flags = []
-                    next_object_heading = np.zeros(Utility.params['num_robots'])
-                    
-                    for i in range(Utility.params['num_robots']):
-                        robot_failures.append(failures[i][0])
-                        if failures[i][0]:
-                            agent_prox_flags.append(0)
-                        else:
-                            prox_values = env_observations[i][7:]
-                            prox_values, filtered_indeces = model.filter_prox_values(prox_values, env_observations[i][5])
-                            for j in range(len(filtered_indeces)):
-                                env_observations[i][7+filtered_indeces[j]] = 0.0
-                            prox_value = np.sum(prox_values)              
-                            agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
-
-                    if config['GSP']:
-                        if config['ATTENTION']:
-                            if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    # Check the syntax on object positions to make sure we are giving an X and Y
-                                    next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
-                                    next_heading_gsp[i] = next_object_heading[i]
-                            else:
-                                if model.gsp_neighbors:
-                                    agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                    ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
-                                else:
-                                    ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
-                                for i in range(Utility.params['num_robots']):
-                                    next_heading_gsp[i] = ctde_gsp[i]
-
-                        else:
-                            if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
-                                    next_heading_gsp[i] = next_object_heading[i]
-                            else:
-                                if model.gsp_neighbors:
-                                    agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                    ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
-                                else:
-                                    ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
-                                for i in range(Utility.params['num_robots']):
-                                    if len(ctde_gsp) > 1:
-                                        next_heading_gsp[i] = ctde_gsp[i][0]
-                                    else:
-                                        next_heading_gsp[i] = ctde_gsp[0]
-                        #store transitions of gsps
-                        if config['ATTENTION']:
-                            if args.independent_learning:
-                                    for i in range(Utility.params['num_robots']):
-                                        models[i].store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
-                            else:
-                                if model.gsp_neighbors:
-                                    states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
-                                    new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                    for i in range(Utility.params['num_robots']):
-                                        state = states[i]
-                                        action = old_heading_gsp[i]
-                                        reward = gsp_reward[i]
-                                        new_state = new_states[i]
-                                        model.store_gsp_transition(state, action, reward, new_state, 0)
-                                else:
-                                    model.store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
-
-                        if model.gsp_neighbors:
-                            states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
-                            new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                             for i in range(Utility.params['num_robots']):
-                                state = states[i]
+                                # Check the syntax on object positions to make sure we are giving an X and Y
+                                next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
+                                next_heading_gsp[i] = next_object_heading[i]
+                        else:
+                            if model.gsp_neighbors:
+                                agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                                ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                            else:
+                                ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
+                            for i in range(Utility.params['num_robots']):
+                                next_heading_gsp[i] = ctde_gsp[i]
+
+                    else:
+                        if args.independent_learning:
+                            for i in range(Utility.params['num_robots']):
+                                next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
+                                next_heading_gsp[i] = next_object_heading[i]
+                        else:
+                            if model.gsp_neighbors:
+                                agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                                ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                            else:
+                                ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
+                            for i in range(Utility.params['num_robots']):
+                                if len(ctde_gsp) > 1:
+                                    next_heading_gsp[i] = ctde_gsp[i][0]
+                                else:
+                                    next_heading_gsp[i] = ctde_gsp[0]
+                    #store transitions of gsps
+                    if config['ATTENTION']:
+                        if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    models[i].store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
+                        else:
+                            if model.gsp_neighbors:
+                                states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
+                                new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                                for i in range(Utility.params['num_robots']):
+                                    state = states[i]
+                                    action = old_heading_gsp[i]
+                                    reward = gsp_reward[i]
+                                    new_state = new_states[i]
+                                    model.store_gsp_transition(state, action, reward, new_state, 0)
+                            else:
+                                model.store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
+
+                    if model.gsp_neighbors:
+                        states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
+                        new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                        for i in range(Utility.params['num_robots']):
+                            state = states[i]
+                            action = old_heading_gsp[i]
+                            reward = gsp_reward[i]
+                            new_state = new_states[i]
+                            model.store_gsp_transition(state, action, reward, new_state, 0)
+                    else:
+                        for i in range(Utility.params['num_robots']):
+                            if args.independent_learning:
+                                state = np.array(old_agent_prox_flags)
                                 action = old_heading_gsp[i]
                                 reward = gsp_reward[i]
-                                new_state = new_states[i]
-                                model.store_gsp_transition(state, action, reward, new_state, 0)
+                                new_state = np.array(agent_prox_flags)
+                                models[i].store_gsp_transition(state, action, reward, new_state, 0)
+                            else:
+                                state = np.array(old_agent_prox_flags)
+                                action = old_heading_gsp[i]
+                                reward = gsp_reward[i]
+                                new_state = np.array(agent_prox_flags)
+                            model.store_gsp_transition(state, action, reward, new_state, 0)
+
+
+                #Define Global Knowledge: [positions, velocities]
+                global_knowledge=np.zeros((Utility.params['num_robots'])*4)
+                for i in range(Utility.params['num_robots']):
+                    global_knowledge[i*4] = robot_stats[i][0]           #x position
+                    global_knowledge[i*4+1] = robot_stats[i][1]         #y position
+                    global_knowledge[i*4+2] = stats[i][2]               #velocity X
+                    global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+
+
+                for i in range(Utility.params['num_robots']):
+                    g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
+                    counter = 0
+                    for j in range(Utility.params['num_robots']):
+                        if i != j:
+                            g_knowledge[counter*4] = global_knowledge[j*4]
+                            g_knowledge[counter*4+1] = global_knowledge[j*4+1]
+                            g_knowledge[counter*4+2] = global_knowledge[j*4+2]
+                            g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                            counter+=1
+                    prox_values = env_observations[i][7:]
+                    prox_value = np.sum(prox_values)
+                    rewards[i] += (-1)*prox_value
+                    force_mags.append(stats[i][0])
+                    force_angs.append(stats[i][1])
+
+                    if args.independent_learning:
+                        if config['GSP']:
+                            if args.global_knowledge:
+                                new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                            else:
+                                new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
                         else:
-                            for i in range(Utility.params['num_robots']):
-                                if args.independent_learning:
-                                    state = np.array(old_agent_prox_flags)
-                                    action = old_heading_gsp[i]
-                                    reward = gsp_reward[i]
-                                    new_state = np.array(agent_prox_flags)
-                                    models[i].store_gsp_transition(state, action, reward, new_state, 0)
-                                else:
-                                    state = np.array(old_agent_prox_flags)
-                                    action = old_heading_gsp[i]
-                                    reward = gsp_reward[i]
-                                    new_state = np.array(agent_prox_flags)
-                                model.store_gsp_transition(state, action, reward, new_state, 0)
-
-
-                    #Define Global Knowledge: [positions, velocities]
-                    global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-                    for i in range(Utility.params['num_robots']):
-                        global_knowledge[i*4] = robot_stats[i][0]           #x position
-                        global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                        global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                        global_knowledge[i*4+3] = stats[i][3]               #velocity Y
-
-
-                    for i in range(Utility.params['num_robots']):
-                        g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                        counter = 0
-                        for j in range(Utility.params['num_robots']):
-                            if i != j:
-                                g_knowledge[counter*4] = global_knowledge[j*4]
-                                g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                                g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                                g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                                counter+=1
-                        prox_values = env_observations[i][7:]
-                        prox_value = np.sum(prox_values)
-                        rewards[i] += (-1)*prox_value
-                        force_mags.append(stats[i][0])
-                        force_angs.append(stats[i][1])
-
-                        if args.independent_learning:
-                            if config['GSP']:
-                                if args.global_knowledge:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
-                                else:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                            if args.global_knowledge:
+                                new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                            else:
+                                new_agent_state = env_observations[i]
+                            
+                    else:
+                        if config['GSP']:
+                            if args.global_knowledge:
+                                new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                            else:
+                                new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
+                        else: 
+                            if args.share_prox_values:
+                                new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                             else:
                                 if args.global_knowledge:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                                    new_agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
                                 else:
                                     new_agent_state = env_observations[i]
-                                
-                        else:
-                            if config['GSP']:
-                                if args.global_knowledge:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
-                                else:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                            else: 
-                                if args.share_prox_values:
-                                    new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
-                                else:
-                                    if args.global_knowledge:
-                                        new_agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
-                                    else:
-                                        new_agent_state = env_observations[i]
 
-                        new_agent_states.append(new_agent_state)
-                        if time_steps > 2:
-                            if train_mode:
-                                if learning_scheme != 'None':
-                                    if not old_failures[i] and not failures[i]:
-                                        if not episode_done:
-                                            if args.independent_learning:
-                                                models[i].store_agent_transition(agent_states[i],
-                                                                    (actions[i], actions_to_take[i]),
-                                                                    rewards[i],
-                                                                    new_agent_states[i],
-                                                                    episode_done)
-                                            else:
-                                                model.store_agent_transition(agent_states[i],
-                                                                    (actions[i], actions_to_take[i]),
-                                                                    rewards[i],
-                                                                    new_agent_states[i],
-                                                                    episode_done)
-                                                    
-                        r.append(rewards[i][0])
+                    new_agent_states.append(new_agent_state)
+                    if time_steps > 2:
+                        if train_mode:
+                            if learning_scheme != 'None':
+                                if not old_failures[i] and not failures[i]:
+                                    if not episode_done:
+                                        if args.independent_learning:
+                                            models[i].store_agent_transition(agent_states[i],
+                                                                (actions[i], actions_to_take[i]),
+                                                                rewards[i],
+                                                                new_agent_states[i],
+                                                                episode_done)
+                                        else:
+                                            model.store_agent_transition(agent_states[i],
+                                                                (actions[i], actions_to_take[i]),
+                                                                rewards[i],
+                                                                new_agent_states[i],
+                                                                episode_done)
+                                                
+                    r.append(rewards[i][0])
 
-                    if train_mode and config['LEARNING_SCHEME'] != 'None':
-                        if args.independent_learning:
-                            for i in range(Utility.params['num_robots']):
-                                loss = models[i].learn()
-                        else:
-                            loss = model.learn()
-                    else:
-                        loss = 0
-
+                if train_mode and config['LEARNING_SCHEME'] != 'None':
                     if args.independent_learning:
                         for i in range(Utility.params['num_robots']):
-                            running_reward[i] += r[i]
+                            loss = models[i].learn()
                     else:
-                        running_reward += np.average(r)
-                    # Store New Observations
-                    agent_states = new_agent_states
-                    actions = []
+                        loss = model.learn()
+                else:
+                    loss = 0
 
-                    # Calculate average force vector
-                    average_force_mag = None
-                    average_force_ang = None
+                if args.independent_learning:
                     for i in range(Utility.params['num_robots']):
-                        if average_force_mag is None:
-                            average_force_mag = force_mags[i]
-                            average_force_ang = force_angs[i]
-                        else:
-                            angle = abs(average_force_ang - force_angs[i])
-                            #average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
-                            #average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
-                            average_force_mag = 0
-                            average_force_ang = 0
+                        running_reward[i] += r[i]
+                else:
+                    running_reward += np.average(r)
+                # Store New Observations
+                agent_states = new_agent_states
+                actions = []
 
-                    if type(gate_stats) != int:
-                        gate = []
-                        for i in range(len(gate_stats)):
-                            gate.append(gate_stats[i])
-                    if type(obstacle_stats) != int:
-                        obstacles = []
-                        for i in range(len(obstacle_stats)):
-                            obstacles.append(obstacle_stats[i])
-                    if args.independent_learning:
-                        tmp_epsilon = models[0].epsilon
+                # Calculate average force vector
+                average_force_mag = None
+                average_force_ang = None
+                for i in range(Utility.params['num_robots']):
+                    if average_force_mag is None:
+                        average_force_mag = force_mags[i]
+                        average_force_ang = force_angs[i]
                     else:
-                        tmp_epsilon = model.epsilon
+                        angle = abs(average_force_ang - force_angs[i])
+                        #average_force_mag = math.sqrt(average_force_mag**2 + force_mags[i]**2 + 2*(average_force_mag)*(force_mags[i])*math.cos(math.radians(angle)))
+                        #average_force_ang = math.asin(force_mags[i]*math.sin(math.radians(180 - angle)) / average_force_mag)
+                        average_force_mag = 0
+                        average_force_ang = 0
 
-                    writer.writerow([r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
-                                    [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
-                                    obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp[0], 
-                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
-                                    robot_failures, env_observations, actions_to_take])
+                if type(gate_stats) != int:
+                    gate = []
+                    for i in range(len(gate_stats)):
+                        gate.append(gate_stats[i])
+                if type(obstacle_stats) != int:
+                    obstacles = []
+                    for i in range(len(obstacle_stats)):
+                        obstacles.append(obstacle_stats[i])
+                if args.independent_learning:
+                    tmp_epsilon = models[0].epsilon
+                else:
+                    tmp_epsilon = model.epsilon
 
-                    if episode_done:
-                        run_time = time.time() - episode_start_time
+                data_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
+                                [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
+                                obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp[0], 
+                                time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
+                                robot_failures)
+
+                if episode_done:
+                    run_time = time.time() - episode_start_time
+                    data_writer.write_to_file()
+                    if not args.no_print:
+                        print('[RUN TIME] %.2f' % run_time)
+                    if args.independent_learning:
+                        exp_rewards.append(np.average(running_reward))
+                    else:
+                        exp_rewards.append(running_reward)
+                    if not reached_goal:
                         if not args.no_print:
-                            print('[RUN TIME] %.2f' % run_time)
-                        if args.independent_learning:
-                            exp_rewards.append(np.average(running_reward))
-                        else:
-                            exp_rewards.append(running_reward)
-                        if not reached_goal:
-                            if not args.no_print:
-                                print("Episode", ep_counter ,"timed out")
-                            if test_mode:
-                                Testing_Failures += 1
-                        else:
-                            if not args.no_print:
-                                print("Episode", ep_counter ,"reached goal")
-                            if test_mode:
-                                Testing_Successes += 1
+                            print("Episode", ep_counter ,"timed out")
+                        if test_mode:
+                            Testing_Failures += 1
+                    else:
                         if not args.no_print:
-                            for i in range(Utility.params['num_robots']):
-                                if args.independent_learning:
-                                    print('Agent', i, 'reward %.1f' % running_reward[i],
-                                          'epsilon:%.2f' % models[i].epsilon,
-                                          'steps:', models[i].learn_step_counter)
-                                else:
-                                    print('Agent', i, 'reward %.1f' % running_reward[0],
-                                          'epsilon:%.2f' % model.epsilon,
-                                          'steps:', model.networks['learn_step_counter'])
-                                    print('gsp rewards %.2f' % episode_gsp_rewards[i])
+                            print("Episode", ep_counter ,"reached goal")
+                        if test_mode:
+                            Testing_Successes += 1
+                    if not args.no_print:
+                        for i in range(Utility.params['num_robots']):
+                            if args.independent_learning:
+                                print('Agent', i, 'reward %.1f' % running_reward[i],
+                                        'epsilon:%.2f' % models[i].epsilon,
+                                        'steps:', models[i].learn_step_counter)
+                            else:
+                                print('Agent', i, 'reward %.1f' % running_reward[0],
+                                        'epsilon:%.2f' % model.epsilon,
+                                        'steps:', model.networks['learn_step_counter'])
+                                print('gsp rewards %.2f' % episode_gsp_rewards[i])
 
-                        if ep_counter % 10 == 0:
-                            exp_mean_rewards.append(np.mean(exp_rewards))
-                            exp_rewards = []
-                            file_name = 'Episode_'+str(ep_counter)
-                            path = recording_path + "/Models/" +file_name
-                            if train_mode:
-                                if args.independent_learning:
-                                    for i in range(Utility.params['num_robots']):
-                                        models[i].save_model(path)
-                                else:
-                                    model.save_model(path)
-                            if not args.no_print:
-                                print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
-                        ep_counter += 1
+                    if ep_counter % 10 == 0:
+                        exp_mean_rewards.append(np.mean(exp_rewards))
+                        exp_rewards = []
+                        file_name = 'Episode_'+str(ep_counter)
+                        path = recording_path + "/Models/" +file_name
+                        if train_mode:
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    models[i].save_model(path)
+                            else:
+                                model.save_model(path)
+                        if not args.no_print:
+                            print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+                    ep_counter += 1
 
-                        # Send acknowledgment
-                        socket.send(b"ok")
+                    # Send acknowledgment
+                    socket.send(b"ok")
 print("[RUN TIME] Experiment: %.2f" % (time.time() - experiment_start_time))
 if test_mode:
     print('Experiment:', args.recording_path)

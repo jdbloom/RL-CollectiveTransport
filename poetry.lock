@@ -487,7 +487,7 @@ protobuf = ["grpcio-tools (>=1.62.1)"]
 
 [[package]]
 name = "gsp-rl"
-version = "1.1.3"
+version = "1.1.4"
 description = "Stable with config support"
 optional = false
 python-versions = "3.10.2"
@@ -512,7 +512,7 @@ zmq = "^0.0.0"
 type = "git"
 url = "git@github.com:NESTLab/GSP-RL.git"
 reference = "HEAD"
-resolved_reference = "3398f1d9e45e09d17942c3ccb33d1e05a331b070"
+resolved_reference = "c82755c9c8cc0586598270bdbd3d148fcfc14cca"
 
 [[package]]
 name = "gymnasium"
