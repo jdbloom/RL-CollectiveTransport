@@ -83,7 +83,7 @@ class data_logger:
             'run_time': self.run_time,
             'robot_x_pos': self.robots_x_pos,
             'robot_y_pos': self.robots_y_pos,
-            'robot_anlge': self.robot_angle,
+            'robot_angle': self.robot_angle,
             'robot_failure':self.robot_failures,
         }
 

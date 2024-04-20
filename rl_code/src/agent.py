@@ -33,9 +33,13 @@ class Agent(Actor):
             gsp_look_back: int,
             gsp_sequence_length: int,
             prox_filter_angle_deg: float = 45.0,
+            n_hop_neighbors: int = 1,
     ):
         if neighbors:
-            gsp_input_size = 6  #to account for GSP and Avg Prox from OWN, CW, and CCW neighbors
+            # 2 inputs from ownship (prev_gsp, avg_prox)
+            # 2 inputs from each neighbor (prev_gsp, avg_prox)
+            # 2*n_hop_neighbors for symmetry in both CW and CCW
+            gsp_input_size = 2+2*(n_hop_neighbors*2)  
 
         output_size = n_actions
         if network in ['DQN', 'DDQN']:
@@ -64,6 +68,7 @@ class Agent(Actor):
         self._network = network
         self._n_actions = n_actions
         self._neighbors = neighbors
+        self._n_hop_neighbors = n_hop_neighbors
         self.neighbors_dict = {}
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
@@ -86,7 +91,11 @@ class Agent(Actor):
     def build_neighbors(self):
         agents_available = np.arange(self.n_agents)
         for agent in range(self.n_agents):
-            self.neighbors_dict[agent] = [agents_available[agent-1], agents_available[(agent+1)%self.n_agents]]
+            neighbors = []
+            for i in range(1, self._n_hop_neighbors+1):
+                neighbors.append(agents_available[agent-i])
+                neighbors.append(agents_available[(agent+1)%self.n_agents])
+            self.neighbors_dict[agent] = neighbors
     
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
         if heading_gsp is not None:
@@ -100,15 +109,16 @@ class Agent(Actor):
     
     def make_gsp_states(self, agent_prox_values, agent_prev_gsp):
         states = []
-        for agent in self.neighbors_dict.keys():
+        for agent in range(self._n_agents):
             agent_state = np.zeros(self.gsp_network_input)
-            n1, n2 = self.neighbors_dict[agent]
+            neighbors = self.neighbors_dict[agent]
             agent_state[0] = agent_prox_values[agent]
-            agent_state[1] = agent_prox_values[n1]
-            agent_state[2] = agent_prox_values[n2]
-            agent_state[3] = agent_prev_gsp[agent]
-            agent_state[4] = agent_prev_gsp[n1]
-            agent_state[5] = agent_prev_gsp[n2]
+            agent_state[1] = agent_prev_gsp[agent]
+            i=2
+            for neighbor in neighbors:
+                agent_state[i] = agent_prev_gsp[neighbor]
+                agent_state[i+1] = agent_prev_gsp[neighbor]
+                i+=2
             states.append(agent_state)
         return states
     

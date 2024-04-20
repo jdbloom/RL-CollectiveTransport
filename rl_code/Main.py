@@ -342,7 +342,10 @@ while not exp_done:
                             else:
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                             for i in range(Utility.params['num_robots']):
-                                next_heading_gsp[i] = ctde_gsp[i]
+                                if len(ctde_gsp) > 1:
+                                    next_heading_gsp[i] = ctde_gsp[i].item()
+                                else:
+                                    next_heading_gsp[i] = ctde_gsp[0].item()
 
                     else:
                         if args.independent_learning:
@@ -357,9 +360,9 @@ while not exp_done:
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                             for i in range(Utility.params['num_robots']):
                                 if len(ctde_gsp) > 1:
-                                    next_heading_gsp[i] = ctde_gsp[i][0]
+                                    next_heading_gsp[i] = ctde_gsp[i].item()
                                 else:
-                                    next_heading_gsp[i] = ctde_gsp[0]
+                                    next_heading_gsp[i] = ctde_gsp[0].item()
                     #store transitions of gsps
                     if config['ATTENTION']:
                         if args.independent_learning:
