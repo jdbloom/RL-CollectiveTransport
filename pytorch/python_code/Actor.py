@@ -205,6 +205,7 @@ class Actor(NetworkAids):
             self.attention_observation.append(observation)
             self.attention_observation.pop(0)
             #print(type(observation))
+            
             observation = np.array(self.attention_observation)
             #print(type(observation))
             observation = T.Tensor(observation).to(networks['attention'].device)

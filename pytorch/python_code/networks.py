@@ -768,7 +768,7 @@ class SharedGATDQNAgent:
         
         #print("actionsbef", np.shape(actions))
         actions = np.argmax(np.reshape(np.array(actions),(-1, self.num_actions)), axis=1)
-        indices = T.LongTensor(np.arange(actions.shape[0]).astype(np.long))
+        indices = T.LongTensor(np.arange(actions.shape[0]).astype(np.longlong))
 
         rewards = T.tensor(rewards, dtype=T.float).to(device)
         next_states = T.stack([next_state.to(device) for next_state in next_states], dim=0)

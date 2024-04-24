@@ -116,6 +116,7 @@ else:
         model = Agent.Agent(id = 0, **agent_args)
     if test_mode:
         model.load_model(model_file_path)
+        print("WE ARE TESTING FRFRFR")
 
 
 # Send acknowledgment

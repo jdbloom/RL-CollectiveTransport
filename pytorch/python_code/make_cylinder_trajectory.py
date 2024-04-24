@@ -72,6 +72,7 @@ for ep in range(len(df_list)):
     neg_gate_x = 0
     neg_gate_length = 0
     for t in range(len(episode[1])):
+        # print(episode[1])
         cyl_x_pos.append(float(episode[1]['cyl_x_pos'][t]))
         cyl_y_pos.append(float(episode[1]['cyl_y_pos'][t]))
         if args.failures:

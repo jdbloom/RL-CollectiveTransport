@@ -578,7 +578,7 @@ class Agent():
 
         states, actions, rewards, states_, dones, state_vec, message_vec = self.sample_memory(network = self.q_eval)
 
-        indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
+        indices = T.LongTensor(np.arange(self.batch_size).astype(np.longlong))
 
         q_pred = self.q_eval(states)[indices, actions]
 
@@ -1308,7 +1308,7 @@ class Agent():
             
             states, actions, rewards, states_, dones = self.sample_intention_memory(network = self.intention_q_eval)
 
-            indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
+            indices = T.LongTensor(np.arange(self.batch_size).astype(np.longlong))
 
             q_pred = self.intention_q_eval(states)[indices, actions.to(T.int64)]
 

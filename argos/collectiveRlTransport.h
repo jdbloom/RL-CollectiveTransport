@@ -13,6 +13,8 @@
 #include <argos3/plugins/robots/kheperaiv/control_interface/ci_kheperaiv_proximity_sensor.h> // TODO: Change to kheperaiv correctly
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
+#include <argos3/plugins/simulator/entities/convex_prism_entity.h>
+#include <argos3/plugins/simulator/entities/composite_entity.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
@@ -161,10 +163,13 @@ private:
    unsigned int m_unEpisodeTicksLeft;
 
    /** Initial cylinder positions (index = # episode) */
-   std::vector<CVector3> m_vecCylinderPos;
+   std::vector<CVector3> m_vecPrismPos;
+
+   /** Initial cylinder orientation (index = # episode) */
+   std::vector<CQuaternion> m_vecPrismOrient;
 
    /** Position of the cylinder from the previous time step*/
-   CVector3 m_cOldCylinderPos;
+   CVector3 m_cOldPrismPos;
 
    /** Initial robot positions (index = # episode, # robot) */
    std::vector< std::vector<CVector3> > m_vecRobotPos;
@@ -173,7 +178,7 @@ private:
    std::vector< std::vector<CQuaternion> > m_vecRobotOrient;
 
    /** The cylinder */
-   CCylinderEntity* m_pcCylinder;
+   CConvexPrismEntity* m_pcConvexPrism;
 
    /** The networking socket */
    CTCPSocket* socket;
@@ -278,6 +283,9 @@ private:
 
    /** What robots are we simulating, please put them in clockwise order around the object or I will die */
    std::string m_strRobotsUsed = "0,1,2,3";
+
+   std::vector<Real> m_xOffsetFromRobot;
+   std::vector<Real> m_yOffsetFromRobot;
 
 
 

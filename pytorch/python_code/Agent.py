@@ -121,11 +121,11 @@ class Agent(Actor):
 
         self.failed = False
         if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
-            action_num = self.choose_action(observation, self.networks, test)
+            action_num = self.choose_action(observation, self.networks, test=test)
             actions = self.parse_action(action_num)
 
         if self.networks['learning_scheme'] == 'DDPG' or self.networks['learning_scheme'] == 'TD3':
-            actions = self.choose_action(observation, self.networks, test)
+            actions = self.choose_action(observation, self.networks, test=test)
             actions = np.pad(actions, (0, 1))
             action_num = None
 

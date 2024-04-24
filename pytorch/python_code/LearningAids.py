@@ -165,7 +165,7 @@ class NetworkAids(Hyperparameters):
 
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
-        indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
+        indices = T.LongTensor(np.arange(self.batch_size).astype(np.longlong))
 
         q_pred = networks['q_eval'](states)[indices, actions.type(T.LongTensor)]
 
@@ -191,7 +191,7 @@ class NetworkAids(Hyperparameters):
 
         states, actions, rewards, states_, dones = self.sample_memory(networks)
 
-        indices = T.LongTensor(np.arange(self.batch_size).astype(np.long))
+        indices = T.LongTensor(np.arange(self.batch_size).astype(np.longlong))
 
         q_pred = networks['q_eval'](states)[indices, actions.type(T.LongTensor)]
 

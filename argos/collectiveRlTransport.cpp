@@ -10,26 +10,32 @@ using namespace argos;
 
 static const std::string KIV_CONTROLLER = "kivc";
 static const Real WALL_THICKNESS            = 0.05;  // m
-static const Real CYLINDER_RADIUS           = 0.12;  // m
-static const Real CYLINDER_HEIGHT           = 0.25; // m
-static const Real CYLINDER_MASS             = 100;  // kg
+static const std::vector<CVector2> PRISM_POINTS{CVector2(-0.05,-0.1),CVector2(0.1,-0.15),CVector2(0.1,0.1),CVector2(0.0,0.15),CVector2(-0.1,0.1)};
+static const Real PRISM_HEIGHT           = 0.25; // m
+static const Real PRISM_MASS             = 10;  // kg
+Real ROBOT_PRISM_DISTANCE                = 0.0; //this is so the code won't yell at me, will get updated in simulateRobots
+Real PRISM_PLACEMENT_RADIUS              = 0.0; //this one will also get updated (hopefully)
+static const Real CYLINDER_RADIUS           = 0.5;  // m
 static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
+static const Real PRISM_OFFSET           = 0.0;
 static const Real CYLINDER_OFFSET           = 0.0;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
+
+
 
 static const std::string OBS_DESCRIPTIONS[] = {
    "robot2goal_dist",
    "robot2goal_angle",
    "lwheel",
    "rwheel",
-   "robot2cylinder_dist",
-   "robot2cylinder_angle",
-   "cylinder2goal_dist",
+   "robot2prism_dist",
+   "robot2prism_angle",
+   "prism2goal_dist",
    "reward"
 };
 
@@ -181,15 +187,30 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 
 void CCollectiveRLTransport::SimulateRobots() {
    /* Create the cylinder */
-   m_pcCylinder = new CCylinderEntity(
-      "Cylinder_1",
+   m_pcConvexPrism = new CConvexPrismEntity(
+      "Prism_1",
       CVector3(),
       CQuaternion(),
       true,
-      CYLINDER_RADIUS,
-      CYLINDER_HEIGHT,
-      CYLINDER_MASS);
-   AddEntity(*m_pcCylinder);
+      PRISM_POINTS,
+      PRISM_HEIGHT,
+      PRISM_MASS);
+   AddEntity(*m_pcConvexPrism);
+   CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+   Real max_length = 0;
+   for(size_t i = 0; i < PRISM_POINTS.size(); i++) {
+      Real point_distance = Distance(origin, PRISM_POINTS[i]);
+      LOG<<"point: " << point_distance<<std::endl;
+      if(point_distance > max_length) {
+         max_length = point_distance;
+      }
+   }
+
+   ROBOT_PRISM_DISTANCE   = max_length + KHEPERAIV_RADIUS + PRISM_OFFSET;
+   
+   // Adding an offset just makes the robots start slightly farther away
+   PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + KHEPERAIV_RADIUS;
+   
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
    std::ostringstream cKIVId;
@@ -216,7 +237,7 @@ void CCollectiveRLTransport::SimulateRobots() {
       cKIVId.str("");
       cKIVId << "Khepera_" << vect[i];
       LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
-      cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
+      cPos.FromSphericalCoords(ROBOT_PRISM_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
@@ -239,41 +260,53 @@ void CCollectiveRLTransport::SimulateRobots() {
           (*itSensor)->Direction *= m_fProximityRange;
         }
       }
+      m_xOffsetFromRobot.push_back(0.0);
+      m_yOffsetFromRobot.push_back(0.0);
    }
-
-   CRange<Real> cXCylinderRange(
-      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
+   LOG<<"Prism placement radius: " << PRISM_PLACEMENT_RADIUS<<std::endl;
+   LOG<<"arena x lim : " << GetSpace().GetArenaLimits().GetMin().GetX()<<std::endl;
+   LOG<<"arena y lim : " << GetSpace().GetArenaLimits().GetMin().GetY()<<std::endl;
+   CRange<Real> cXPrismRange(
+      GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
+      -PRISM_PLACEMENT_RADIUS
       );
+      
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
       );
 
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
+      cPos.Set(m_pcRNG->Uniform(cXPrismRange),
                m_pcRNG->Uniform(cYRange),
                0.0);
-      m_vecCylinderPos.push_back(cPos);
+      m_vecPrismPos.push_back(cPos);
       //Generate Failure Times for all episodes
       m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
+      cPos.Set(0.0,
+               0.0,
+               0.0);
+      m_vecPrismPos.push_back(cPos);
+      CQuaternion cPrismOrient(cOffset + CRadians::PI, CVector3::Z);
+      m_vecPrismOrient.push_back(cPrismOrient);
+
       m_vecRobotPos.push_back(std::vector<CVector3>());
       m_vecRobotOrient.push_back(std::vector<CQuaternion>());
       for(size_t j = 0; j < m_unNumRobots; ++j) {
-         /* Create offset wrt cylinder center */
+         /* Create offset wrt prism center */
          CVector3 cPos(
-            CVector3(ROBOT_CYLINDER_DISTANCE,
+            CVector3(ROBOT_PRISM_DISTANCE,
                      CRadians::PI_OVER_TWO,
                      j * cSlice + cOffset));
-         /* Translate to actual cylinder center */
-         cPos += m_vecCylinderPos[i];
+         /* Translate to actual prism center */
+         cPos += m_vecPrismPos[i];
          /* Add position */
          m_vecRobotPos.back().push_back(cPos);
-         /* Calculate orientation to cylinder center */
+         /* Calculate orientation to prism center */
          CQuaternion cOrient(j * cSlice + cOffset + CRadians::PI, CVector3::Z);
          m_vecRobotOrient.back().push_back(cOrient);
       }
@@ -303,14 +336,29 @@ void CCollectiveRLTransport::SimulateObstacles(){
      m_vecObstacles.push_back(pcC);
      AddEntity(*pcC);
    }
+   std::vector<CVector2> PRISM_POINTS = m_pcConvexPrism->GetVertices();
+   CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+   Real max_length = 0;
+   for(size_t i = 0; i < PRISM_POINTS.size(); i++) {
+      Real point_distance = Distance(origin, PRISM_POINTS[i]);
+      LOG<<"point: " << point_distance<<std::endl;
+      if(point_distance > max_length) {
+         max_length = point_distance;
+      }
+   }
+
+   ROBOT_PRISM_DISTANCE   = max_length + KHEPERAIV_RADIUS + PRISM_OFFSET;
+   
+   // Adding an offset just makes the robots start slightly farther away
+   PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + KHEPERAIV_RADIUS;
 
    CRange<Real> cXObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/2,
-      0
+      GetSpace().GetArenaLimits().GetMin().GetX()/4 + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetX()/3 - PRISM_PLACEMENT_RADIUS
    );
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
       );
 
    /** Generate Random Positions for the obstacles */
@@ -341,8 +389,8 @@ void CCollectiveRLTransport::SimulateGate(){
 
    if(m_unUseGate){
      CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
       );
      /** Create two box entities and add them to the environment*/
      std::ostringstream bCID;
@@ -435,15 +483,22 @@ void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
 
     if(m_bSimulateRobots){
        /* Get the old position of the cylinder*/
-       m_cOldCylinderPos = m_vecCylinderPos[un_episode];
+       m_cOldPrismPos = m_vecPrismPos[un_episode];
        /* The placements we chose are collision-free by construction, no need to
         * check for collisions */
-       MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
-                  m_vecCylinderPos[un_episode],      // position
-                  CQuaternion(),                     // orientation
+      //  MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
+      //             m_vecCylinderPos[un_episode],      // position
+      //             CQuaternion(),                     // orientation
+      //             false,                             // not a check
+      //             true);                             // ignore collisions
+      
+       MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
+                  m_vecPrismPos[un_episode],      // position
+                  m_vecPrismOrient[un_episode],   // orientation
                   false,                             // not a check
                   true);                             // ignore collisions
        for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+          DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), m_vecRobotPos[un_episode][i].GetX(), m_vecRobotPos[un_episode][i].GetY(), m_vecRobotPos[un_episode][i].GetZ(), m_vecRobotOrient[un_episode][i].GetZ());
           MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                      m_vecRobotPos[un_episode][i],        // position
                      m_vecRobotOrient[un_episode][i],     // orientation
@@ -642,16 +697,16 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
-   CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CQuaternion cCylinderOrient =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+   CVector3& cPrismPos =
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CQuaternion cPrismOrient =
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Orientation;
    CRadians cObjZ, cObjY, cObjX;
-   cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
+   cPrismOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
    /** Store object position and orientation to send to python*/
-   m_vecObjStats[0] = cCylinderPos.GetX();
-   m_vecObjStats[1] = cCylinderPos.GetY();
-   m_vecObjStats[2] = cCylinderPos.GetZ();
+   m_vecObjStats[0] = cPrismPos.GetX();
+   m_vecObjStats[1] = cPrismPos.GetY();
+   m_vecObjStats[2] = cPrismPos.GetZ();
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
@@ -691,18 +746,18 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       cVecRobot2Goal.Rotate(-cRobotZ);
       /* Get vector from robot to cylinder (robot-local) */
       CVector2 cVecRobot2Cylinder(
-         cCylinderPos.GetX() - cRobotPos.GetX(),
-         cCylinderPos.GetY() - cRobotPos.GetY());
+         cPrismPos.GetX() - cRobotPos.GetX(),
+         cPrismPos.GetY() - cRobotPos.GetY());
       cVecRobot2Cylinder.Rotate(-cRobotZ);
       /* Get vector from cylinder to goal (robot-local) */
-      CVector2 cVecCylinder2Goal
-         (m_cGoal.GetX() - cCylinderPos.GetX(), m_cGoal.GetY() - cCylinderPos.GetY());
+      CVector2 cVecPrism2Goal
+         (m_cGoal.GetX() - cPrismPos.GetX(), m_cGoal.GetY() - cPrismPos.GetY());
       /* Get the cosine similarity of the cylinder */
-      CVector2 cMotion(cCylinderPos.GetX() - m_cOldCylinderPos.GetX(), cCylinderPos.GetY() - m_cOldCylinderPos.GetY());
+      CVector2 cMotion(cPrismPos.GetX() - m_cOldPrismPos.GetX(), cPrismPos.GetY() - m_cOldPrismPos.GetY());
       Real fDirection = 0;
       if(cMotion.Length()>1e-4){
-        fDirection= cVecCylinder2Goal.DotProduct(cMotion) /
-                          (cVecCylinder2Goal.Length()*cMotion.Length());
+        fDirection= cVecPrism2Goal.DotProduct(cMotion) /
+                          (cVecPrism2Goal.Length()*cMotion.Length());
 
       }
 
@@ -749,9 +804,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 3] = fRWheel;
       m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
       m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
-      m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
+      m_vecObs[i * m_unNumObs + 6] = cVecPrism2Goal.Length();
       /* Adding cylinder angle to goal for MME*/
-      m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
+      m_vecObjStats[6] = ToDegrees(cVecPrism2Goal.Angle()).GetValue();
       // Get the proximity sensor values
       // Chandler : changed CCI_FootBotProximitySensor to CCI_KheperaIVProximitySensor
       const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
@@ -773,7 +828,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
-   m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   m_cOldPrismPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       for(size_t j = 0; j < m_unNumObs; ++j) {
          DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
@@ -927,7 +982,7 @@ void CCollectiveRLTransport::PostStep() {
 
 bool CCollectiveRLTransport::CylinderAtTarget() {
    CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
    CVector2 cCylinder2Goal(
       m_cGoal.GetX() - cCylinderPos.GetX(),
       m_cGoal.GetY() - cCylinderPos.GetY());

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/julian/RL-CollectiveTransport/pytorch/Main.py", line 391, in <module>
+    ctde_intention = model.choose_object_intention(agent_intention_states, edge_index, test_mode)
+  File "/home/julian/RL-CollectiveTransport/pytorch/python_code/Agent.py", line 160, in choose_object_intention
+    return [self.choose_action(agent_intention_states[i], self.intention_networks, edge_index, test) for i in range(len(agent_intention_states))]
+  File "/home/julian/RL-CollectiveTransport/pytorch/python_code/Agent.py", line 160, in <listcomp>
+    return [self.choose_action(agent_intention_states[i], self.intention_networks, edge_index, test) for i in range(len(agent_intention_states))]
+  File "/home/julian/RL-CollectiveTransport/pytorch/python_code/Actor.py", line 211, in choose_action
+    observation = T.Tensor(observation).to(networks['attention'].device)
+RuntimeError: CUDA error: unspecified launch failure
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1.
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

@@ -18,7 +18,7 @@ class ReplayBuffer():
         else:
             self.action_memory = np.zeros((self.mem_size), dtype=np.float32)
         self.reward_memory = np.zeros((self.mem_size), dtype = np.float32)
-        self.terminal_memory = np.zeros((self.mem_size), dtype = np.bool)
+        self.terminal_memory = np.zeros((self.mem_size), dtype = bool)
 
 
     def store_transition(self, state, action, reward, state_, done):
@@ -63,14 +63,14 @@ class SequenceReplayBuffer:
         self.action_memory = np.zeros((self.mem_size, self.num_actions), dtype = np.float64)
         self.new_state_memory = np.zeros((self.mem_size, self.num_observations), dtype = np.float64)
         self.reward_memory = np.zeros((self.mem_size), dtype = np.float64)
-        self.terminal_memory = np.zeros((self.mem_size), dtype = np.bool)
+        self.terminal_memory = np.zeros((self.mem_size), dtype = bool)
 
         #sequence buffer stores 1 sequence of len seq_len, transfers seq to main buffer once full
         self.seq_state_memory = np.zeros((self.seq_len, self.num_observations), dtype=np.float64)
         self.seq_action_memory = np.zeros((self.seq_len, self.num_actions), dtype=np.float64)
         self.seq_new_state_memory = np.zeros((self.seq_len, self.num_observations), dtype = np.float64)
         self.seq_reward_memory = np.zeros((self.seq_len), dtype = np.float64)
-        self.seq_terminal_memory = np.zeros((self.seq_len), dtype = np.bool)
+        self.seq_terminal_memory = np.zeros((self.seq_len), dtype = bool)
 
     def store_transition(self, s, a ,r, s_, d):
         mem_index = self.mem_ctr % self.mem_size
@@ -111,7 +111,7 @@ class SequenceReplayBuffer:
         s_ = np.zeros((batch_size,self.seq_len,self.num_observations))
         a = np.zeros((batch_size,self.seq_len,self.num_actions))
         r = np.zeros((batch_size, self.seq_len), dtype= np.float64)
-        d = np.zeros((batch_size, self.seq_len), dtype= np.bool)
+        d = np.zeros((batch_size, self.seq_len), dtype= bool)
         for i,j in enumerate(samples_indices):
             s[i] = self.state_memory[j:j+self.seq_len]
             s_[i] = self.new_state_memory[j:j+self.seq_len]
