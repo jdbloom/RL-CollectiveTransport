@@ -7,29 +7,38 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
     gsp_reward = []
     label = 0
     if GSP:
+        # print(f'[OLD] {old_cyl_ang}')
+        # print(f'[NEW] {cyl_ang}')
         # shift to get between 0 and 2 Pi
-        old_cyl_ang += math.pi
-        new_cyl_ang = cyl_ang + math.pi
-        # check edge wrap at 0
-        if old_cyl_ang < math.pi and new_cyl_ang > math.pi:
-            diff = old_cyl_ang - new_cyl_ang + 2*math.pi
-        # check edge wrap at 2 pi
-        elif old_cyl_ang < math.pi and new_cyl_ang < math.pi:
-            diff = new_cyl_ang - old_cyl_ang + 2*math.pi
-        # otherwise we are not wrapping
+        old_cyl_ang = (math.radians(old_cyl_ang) + math.pi)%(2*math.pi)
+        new_cyl_ang = (math.radians(cyl_ang) + math.pi)%(2*math.pi)
+        # find the angle difference
+        abs_diff = abs(old_cyl_ang-new_cyl_ang)
+        diff = min(abs_diff, 2*math.pi-abs_diff)
+        # find the directional difference
+        if old_cyl_ang < new_cyl_ang:
+            direction = 1 if (new_cyl_ang-old_cyl_ang) <= math.pi else -1
         else:
-            diff = old_cyl_ang - new_cyl_ang
-        label=diff
+            direction = -1 if (old_cyl_ang-new_cyl_ang) <= math.pi else 1
+        
+        # print(f'[DIF] {math.degrees(diff)}')
+        # shift back and apply direction
+        diff *= direction
+
+        # normalize between -1 and 1
+        label=diff/math.pi
+        # print('[Label]', label)
         x1 = math.cos(diff)
         y1 = math.sin(diff)                        
         for i in range(num_robots):
-                x2 = math.cos(next_heading_gsp[i] * math.pi)
-                y2 = math.sin(next_heading_gsp[i] * math.pi)
+            x2 = math.cos(next_heading_gsp[i] * math.pi)
+            y2 = math.sin(next_heading_gsp[i] * math.pi)
 
-                error = np.dot([x1, y1], [x2, y2])
-                gsp_reward.append(-1 + error)
+            error = np.dot([x1, y1], [x2, y2])
+            # print('[Pred] ', next_heading_gsp[i])
+            # print('[Error]', -1+error)
+            gsp_reward.append(-1 + error)
                 
-
     else:
         gsp_reward = [0 for i in range(num_robots)]
     

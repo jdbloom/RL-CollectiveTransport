@@ -31,7 +31,7 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
-parser.add_argument("--port", default = "55555")
+parser.add_argument("--port", default = "55556")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
@@ -300,11 +300,11 @@ while not exp_done:
                     Utility.params['num_robots']
                 )
                 for i in range(len(gsp_reward)):
+                    # print(f'Agent {i} adding {gsp_reward[i]}')
                     episode_gsp_rewards[i] += gsp_reward[i] 
 
                 old_cyl_ang = obj_stats[5]
 
-                # Store Transitions and Learn
                 old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
                 neighbors_old_heading_gsp = copy.deepcopy(old_heading_gsp)
                 old_heading_gsp = copy.deepcopy(next_heading_gsp)
@@ -316,6 +316,7 @@ while not exp_done:
                 agent_prox_flags = []
                 next_object_heading = np.zeros(Utility.params['num_robots'])
                 
+                # Build proximity observation
                 for i in range(Utility.params['num_robots']):
                     robot_failures.append(failures[i][0])
                     if failures[i][0]:
@@ -329,62 +330,29 @@ while not exp_done:
                         agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                 if config['GSP']:
-                    if config['ATTENTION']:
-                        if args.independent_learning:
-                            for i in range(Utility.params['num_robots']):
-                                # Check the syntax on object positions to make sure we are giving an X and Y
-                                next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
-                                next_heading_gsp[i] = next_object_heading[i]
-                        else:
-                            if model.gsp_neighbors:
-                                agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
-                            else:
-                                ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
-                            for i in range(Utility.params['num_robots']):
-                                if len(ctde_gsp) > 1:
-                                    next_heading_gsp[i] = ctde_gsp[i].item()
-                                else:
-                                    next_heading_gsp[i] = ctde_gsp[0].item()
-
+                    # GSP Predict
+                    if args.independent_learning:
+                        for i in range(Utility.params['num_robots']):
+                            next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
+                            next_heading_gsp[i] = next_object_heading[i]
                     else:
-                        if args.independent_learning:
-                            for i in range(Utility.params['num_robots']):
-                                next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
-                                next_heading_gsp[i] = next_object_heading[i]
+                        if model.gsp_neighbors:
+                            agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                            ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                         else:
-                            if model.gsp_neighbors:
-                                agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                            ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
+                        for i in range(Utility.params['num_robots']):
+                            if len(ctde_gsp) > 1:
+                                next_heading_gsp[i] = ctde_gsp[i].item()
                             else:
-                                ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
-                            for i in range(Utility.params['num_robots']):
-                                if len(ctde_gsp) > 1:
-                                    next_heading_gsp[i] = ctde_gsp[i].item()
-                                else:
-                                    next_heading_gsp[i] = ctde_gsp[0].item()
-                    #store transitions of gsps
-                    if config['ATTENTION']:
-                        if args.independent_learning:
-                                for i in range(Utility.params['num_robots']):
-                                    models[i].store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
-                        else:
-                            if model.gsp_neighbors:
-                                states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
-                                new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
-                                for i in range(Utility.params['num_robots']):
-                                    state = states[i]
-                                    action = old_heading_gsp[i]
-                                    reward = gsp_reward[i]
-                                    new_state = new_states[i]
-                                    model.store_gsp_transition(state, action, reward, new_state, 0)
-                            else:
-                                model.store_gsp_transition(agent_prox_flags, label, 0, 0, 0)
+                                next_heading_gsp[i] = ctde_gsp[0].item()
 
+                    # Store GSP Transition
                     if model.gsp_neighbors:
                         states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
                         new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                         for i in range(Utility.params['num_robots']):
+                            # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
                             state = states[i]
                             action = old_heading_gsp[i]
                             reward = gsp_reward[i]
@@ -399,6 +367,7 @@ while not exp_done:
                                 new_state = np.array(agent_prox_flags)
                                 models[i].store_gsp_transition(state, action, reward, new_state, 0)
                             else:
+                                # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
                                 state = np.array(old_agent_prox_flags)
                                 action = old_heading_gsp[i]
                                 reward = gsp_reward[i]
