@@ -73,6 +73,14 @@ class Agent(Actor):
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
+        if self.recurrent_gsp:
+            if self._neighbors:
+                self.gsp_observation = []
+                for _ in range(self._n_agents):
+                    self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
+            else:
+                self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
+
         self._ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
                                        112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
                                        -157.5, -142.5, -127.5, -112.5, -97.5, 
@@ -119,6 +127,8 @@ class Agent(Actor):
                 agent_state[i] = agent_prev_gsp[neighbor]
                 agent_state[i+1] = agent_prev_gsp[neighbor]
                 i+=2
+            self.gsp_observation[agent].pop(0)
+            self.gsp_observation[agent].append(agent_state)
             states.append(agent_state)
         return states
     
@@ -175,11 +185,11 @@ class Agent(Actor):
             return self.failure_action, self.failure_action_code
 
         self.failed = False
-        if self.networks['learning_scheme'] == 'DQN' or self.networks['learning_scheme'] == 'DDQN':
+        if self.networks['learning_scheme'] in ['DQN', 'DDQN']:
             action_num = self.choose_action(observation, self.networks, test)
             actions = self.parse_action(action_num)
 
-        if self.networks['learning_scheme'] == 'DDPG' or self.networks['learning_scheme'] == 'TD3':
+        if self.networks['learning_scheme'] in ['DDPG', 'TD3']:
             actions = self.choose_action(observation, self.networks, test)
             actions = np.pad(actions, (0, 1))
             action_num = None
@@ -188,8 +198,24 @@ class Agent(Actor):
     
     def choose_agent_gsp(self, agent_gsp_states, test = False):
         if self._neighbors:
-            return [self.choose_action(agent_gsp_states[i], self.gsp_networks, test) for i in range(len(agent_gsp_states))]
+            actions = []
+            for i in range(self._n_agents):
+                if self.recurrent_gsp:
+                    # print(f'[AGENT {i}], Observation: {self.gsp_observation[i]}')
+                    actions.append(self.choose_action(self.gsp_observation[i], self.gsp_networks, test))
+                    # print(f'[AGENT {i}], Action: {actions[i].shape}')
+                else: 
+                    actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, test))
+            return actions
         else:
+            if self.recurrent_gsp:
+                self.gsp_observation.append(agent_gsp_states)
+                self.gsp_observation.pop(0)
+                print(f'[AGENT], Observation: {self.gsp_observation}')
+                action = self.choose_action(self.gsp_observation, self.gsp_networks, test)
+                print(f'[AGENT], Action: {action.shape}')
+                return action
+            
             observation = np.array(agent_gsp_states)
             return self.choose_action(observation, self.gsp_networks, test)
 

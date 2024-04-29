@@ -343,9 +343,9 @@ while not exp_done:
                             ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                         for i in range(Utility.params['num_robots']):
                             if len(ctde_gsp) > 1:
-                                next_heading_gsp[i] = ctde_gsp[i].item()
+                                next_heading_gsp[i] = ctde_gsp[i][-1].item()
                             else:
-                                next_heading_gsp[i] = ctde_gsp[0].item()
+                                next_heading_gsp[i] = ctde_gsp[-1].item()
 
                     # Store GSP Transition
                     if model.gsp_neighbors:

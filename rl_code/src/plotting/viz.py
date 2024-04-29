@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
+parser.add_argument("--gsp_log_scale", default=False, action="store_true")
 parser.add_argument("--IL", default = False, action = "store_true")
 parser.add_argument("--gate", default = False, action = "store_true")
 
@@ -76,10 +77,13 @@ ax1.set_ylabel('Reward', c='b')
 ax1.tick_params(axis='y', labelcolor='b')
 if np.average(last_10_gsp_rewards) < 0:
     ax = ax1.twinx()
-    ax.set_ylabel('GSP Reward', c='r')
-    ax.tick_params(axis='y', labelcolor='r')
     ax.fill_between(last_10_axis, last_10_gsp_rewards+last_10_gsp_std/2.0, last_10_gsp_rewards-last_10_gsp_std/2.0, color='salmon', label = 'GSP Reward STD', alpha = 0.2)
     ax.plot(last_10_axis, last_10_gsp_rewards, color = 'r', label = 'GSP Reward')
+    if args.gsp_log_scale:
+        ax.set_yscale("symlog")
+    ax.set_ylabel('GSP Reward', c='r')
+    # ax.set_ylim(1000, 100)
+    ax.tick_params(axis='y', labelcolor='r')
 ax1.fill_between(last_10_axis, last_10_rewards+last_10_std/2.0, last_10_rewards-last_10_std/2.0, color='lightblue', label='Reward STD', alpha=0.5)
 ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
 
