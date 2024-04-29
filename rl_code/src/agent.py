@@ -211,9 +211,7 @@ class Agent(Actor):
             if self.recurrent_gsp:
                 self.gsp_observation.append(agent_gsp_states)
                 self.gsp_observation.pop(0)
-                print(f'[AGENT], Observation: {self.gsp_observation}')
                 action = self.choose_action(self.gsp_observation, self.gsp_networks, test)
-                print(f'[AGENT], Action: {action.shape}')
                 return action
             
             observation = np.array(agent_gsp_states)
