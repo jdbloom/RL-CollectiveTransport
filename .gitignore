@@ -1,9 +1,7 @@
 build
-/pytorch/python_code/Data/*
-/pytorch/python_code/__pycache__/*
-pytorch/__pycache__
-pytorch/gmodels
-pytorch/python_code/rec_dir/*
+rl_code/Data/*
+rl_code/*/__pycache__/*
+rl_code/__pycache__
 #*~ excludes emacs auto-gen'd backup files
 *~
 # The below file is now auto generated
@@ -18,3 +16,4 @@ argos/argos/*
 *.bdb
 *.bo
 *.fasl
+*.pyc
