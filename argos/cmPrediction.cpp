@@ -710,14 +710,16 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    CVector2 cVecRobot2Cylinder(
          cCenterObject.GetX() - cCenterRobot.GetX(),
          cCenterObject.GetY() - cCenterRobot.GetY());
-   CRadians robotOrientToObject = (cVecRobot2Cylinder.Angle() - cRobotZ).SignedNormalize();
-   CRadians guessAngleModified = robotOrientToObject + m_AngleFromRCV[robot_index];
+   // CRadians robotOrientToObject = NormalizedDifference(cVecRobot2Cylinder.Angle(), cRobotZ);
+   // CRadians guessAngleModified = (robotOrientToObject + m_AngleFromRCV[robot_index]).SignedNormalize();
+   CRadians guessAngleModified = (cVecRobot2Cylinder.Angle() + m_AngleFromRCV[robot_index]).SignedNormalize();
    CVector2 cVecGuess(m_LengthOffsetFromRobot[robot_index], guessAngleModified);
    CVector2 cVecPrediction(cCenterRobot.GetX() + cVecGuess.GetX(), cCenterRobot.GetY() + cVecGuess.GetY());
    CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCenterObject.GetX(), cVecPrediction.GetY() - cCenterObject.GetY());
    m_yEstimate[robot_index] = cVecPrediction.GetY();
    m_xEstimate[robot_index] = cVecPrediction.GetX();
    Real dis = cVecPredictedFromActual.Length();
+   // DEBUG("ROBOT ID %d, robotOrientToObject: %f, guessAngle : %f, robotGuess: %f\n", robot_index, robotOrientToObject.GetValue(), guessAngleModified.GetValue(), m_AngleFromRCV[robot_index].GetValue());
    // DEBUG("ROBOT ID %d, Prediction X : %f, Prediction Y %f \n Actual : %f, %f, \n distance : %f\n", robot_index, cVecGuess.GetX(), cVecGuess.GetY(), cCenterObject.GetX(), cCenterObject.GetY(), dis);
    return dis;
 }

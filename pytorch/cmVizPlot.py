@@ -53,6 +53,7 @@ mag_forces = np.empty([len(data['agent_predictions_y']),args.num_robots])
 for i in range(len(pos_x_robots)):
     # print(data['robots_x_pos'][i])
     # print(np.fromstring(data['robots_x_pos'][i].strip('[]'), sep=','))
+    # print(data['robots_x_pos'][i].strip('[]'))
     pos_x_robots[i] = np.fromstring(data['robots_x_pos'][i].strip('[]'), sep=',')
     pos_y_robots[i] = np.fromstring(data['robots_y_pos'][i].strip('[]'), sep=',')
     pred_x_robots[i] = np.fromstring(data['agent_predictions_x'][i].strip('[]'), sep=',')
@@ -63,7 +64,7 @@ for i in range(len(pos_x_robots)):
     # print("ang", ang)
     vrf_temp = []
     for j in range(args.num_robots):
-        vrf_temp.append(np.array([math.cos(math.radians(ang[j])), math.sin(math.radians(ang[j]))]) * mag[j])
+        vrf_temp.append(np.array([math.cos(ang[j]), math.sin(ang[j])]) * mag[j])
         # print(vrf_temp[-1], mag[j])
     vec_robot_force[i] = vrf_temp
     avg_forces[i] = np.mean(mag)

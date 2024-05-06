@@ -144,7 +144,7 @@ while not exp_done:
     msgs = socket.recv_multipart()
     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
     data_file_name = 'Data_Episode_'+str(ep_counter)+'.csv'
-    with open(data_file_path+data_file_name, 'a+') as output:
+    with open(data_file_path+data_file_name, 'w+') as output:
         writer = csv.writer(output, delimiter = ',')
         # 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
         # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
