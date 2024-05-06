@@ -148,11 +148,11 @@ while not exp_done:
         writer = csv.writer(output, delimiter = ',')
         # 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
         # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
-        # 'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y'
+        # 'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y'
         writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
                          'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
-                         'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
-                         'perpendicular_force', 'parallel_force'])
+                         'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
+                         'force_angle', 'force_magnitude'])
 
         if not exp_done:
             time_steps = 0
@@ -278,8 +278,8 @@ while not exp_done:
                         actions.append(action_num)
 
                     # Take Step
-                    socket.send(Utility.serialize_actions(actions_to_take))
-                    msgs = socket.recv_multipart()
+                    socket.send(Utility.serialize_actions(actions_to_take)) # Out step
+                    msgs = socket.recv_multipart() # This is receiving argos step
 
                     exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
                     env_observations = Utility.parse_obs(msgs[1])
@@ -289,21 +289,19 @@ while not exp_done:
                     obj_stats = Utility.parse_obj_stats(msgs[5])
                     robot_x_pos = []
                     robot_y_pos = []
-                    robot_angle = []
                     robot_x_prediction = []
                     robot_y_prediction = []
-                    robot_target_angle = []
-                    force_perpendicular = []
-                    force_parallel = []
+                    robot_target_angle_offset = []
+                    force_angle = []
+                    force_magnitude = []
                     for i in range(Utility.params['num_robots']):
                         robot_x_pos.append(robot_stats[i][0])
                         robot_y_pos.append(robot_stats[i][1])
-                        robot_angle.append(robot_stats[i][5])
-                        robot_x_prediction.append(env_observations[i][8])
-                        robot_y_prediction.append(env_observations[i][9])
-                        robot_target_angle.append(env_observations[i][6])
-                        force_perpendicular.append(env_observations[i][0])
-                        force_parallel.append(env_observations[i][1])
+                        robot_x_prediction.append(stats[i][4])
+                        robot_y_prediction.append(stats[i][5])
+                        robot_target_angle_offset.append(env_observations[i][6])
+                        force_angle.append(env_observations[i][0])
+                        force_magnitude.append(env_observations[i][1])
 
                     intention_reward = []
                     label = 0
@@ -509,8 +507,8 @@ while not exp_done:
                                                                 episode_done)
                                                     
                         r.append(rewards[i][0])
-                    #print('[DEBUG] Rewards:', r)
-                    #print('[DEBUG] Reward Average:', np.average(r))
+                    # print('[DEBUG] Rewards:', r)
+                    # print('[DEBUG] Reward Average:', np.average(r))
                     #for i in range(Utility.params['num_robots']):
                     #    print('[DEBUG] robot %i memory:'%i, message_memory[i])
 
@@ -547,14 +545,14 @@ while not exp_done:
 
                     # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm',
                     # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
-                    # 'robot_angle', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
-                    # 'perpendicular_force', parallel_force']
+                    # 'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
+                    # 'force_angle', force_magnitude']
                     writer.writerow([r, tmp_epsilon, reached_goal, loss,
                                     obj_stats[0], obj_stats[1],
                                     intention_reward, next_heading_intention[0],
-                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
+                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_target_angle_offset, 
                                     env_observations, robot_x_prediction, robot_y_prediction,
-                                    force_perpendicular, force_parallel])
+                                    force_angle, force_magnitude])
 
                     if episode_done:
                         run_time = time.time() - episode_start_time

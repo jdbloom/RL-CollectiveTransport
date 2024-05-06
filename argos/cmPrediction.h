@@ -161,6 +161,9 @@ private:
    /** The cylinder */
    CCylinderEntity* m_pcCylinder;
 
+   /** The weight that modifies the center of mass of the object */
+   CCylinderEntity* m_pcCylinderCMModifier;
+
    /** The box */
    CBoxEntity* m_pcBox;
 
@@ -229,11 +232,17 @@ private:
 
    std::vector<CRadians> m_AngleFromRCV;
 
+   std::vector<Real> m_xEstimate;
+
+   std::vector<Real> m_yEstimate;
+
    CRadians Intended_Dir;
 
    Real wheel_gain = 0.005;
 
    Real m_fWheelSpeed = 5.0;
+
+   bool m_bSendZMQ;
 
 
 

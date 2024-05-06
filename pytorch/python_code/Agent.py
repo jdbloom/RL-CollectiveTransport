@@ -123,6 +123,8 @@ class Agent(Actor):
 
         if self.networks['learning_scheme'] == 'DDPG' or self.networks['learning_scheme'] == 'TD3':
             actions = self.choose_action(observation, self.networks, test)
+            if math.isnan(actions[0]):
+                actions = [0,0]
             action_num = None
 
         return actions, action_num

@@ -3,6 +3,8 @@
 #include <zmq.h>
 #include <cmath>
 
+// TODO : NormalizedDifference for all angle subtraction
+
 using namespace argos;
 
 /****************************************/
@@ -43,7 +45,8 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 CCMPrediction::CCMPrediction() :
    // m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
    // m_unNumObs(10); // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation
-   m_unNumObs(10), // force angle, |force|, cos force, sin force, 1/|f|, |robot to cylinder|, angle robot to cylinder, angle robot target direction to way we are going, 1 / ", wheelspeeds total
+   m_unNumObs(13), // force angle, |force|, cos force, sin force, 1/|f|, |robot to cylinder|, angle robot to cylinder, cos angle robot to cylinder, sin angle robot to cylinder, angle robot target direction to way we are going, sin cos angle robot target direction to way we are going, drive magnitude
+   // NOTE : IF YOU EVER CHANGE HOW THE ROBOTS CALIBRATE i.e allow them to drive in a continuous circle, send the angular velocity which is the following equation : (f_right_wheel - f_left_wheel) / m_fInterwheelDistance
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -83,7 +86,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       LOG << "Attributes taken from argos file" << std::endl;
 
       /* Stats to be sent to Data: */
-      m_unNumStats = 4;
+      m_unNumStats = 6; // two I think useless variables, robot velocity x and y, robot prediction x and y
 
       /*
        * Connect to PyTorch
@@ -134,10 +137,14 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       // m_yOffsetFromRobot.resize(m_unNumRobots);
       m_LengthOffsetFromRobot.resize(m_unNumRobots);
       m_AngleFromRCV.resize(m_unNumRobots); // The angle from the robot to cylinder's center's vector
+      m_xEstimate.resize(m_unNumRobots);
+      m_yEstimate.resize(m_unNumRobots);
       // DEBUG("Resized vectors for x and y offsets for robots\n");
 
       m_vecActions.resize(m_unNumActions * m_unNumRobots, 0.0);
       // DEBUG("Action vec resized\n");
+
+      m_bSendZMQ = false;
 
       /* Create a new RNG */
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
@@ -187,6 +194,17 @@ void CCMPrediction::SimulateRobots() {
           CYLINDER_HEIGHT,
           CYLINDER_MASS);
        AddEntity(*m_pcCylinder);
+       /* Create the center of mass CM modifier Cylinder */
+      //  m_pcCylinderCMModifier = new CCylinderEntity(
+      //    "Cylinder_2",
+      //    CVector3(),
+      //    CQuaternion(),
+      //    true,
+      //    CYLINDER_RADIUS / 8,
+      //    CYLINDER_HEIGHT / 8,
+      //    CYLINDER_MASS);
+      //  m_pcCylinderCMModifier->u = 1.0;
+      //  AddEntity(*m_pcCylinderCMModifier);
    }
 
    /* Create robots */
@@ -241,6 +259,8 @@ void CCMPrediction::SimulateRobots() {
       // m_yOffsetFromRobot.push_back(0.0);
       m_LengthOffsetFromRobot.push_back(0.0);
       m_AngleFromRCV.push_back(CRadians::ZERO);
+      m_yEstimate.push_back(0.0);
+      m_yEstimate.push_back(0.0);
    }
 
    /* Generating random positions for the robots */
@@ -432,7 +452,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       m_vecRobotStats[i*6+5] = ToDegrees(cRobotZ).GetValue();
 
       /* Get vector from robot to cylinder (robot-local) */
-      CVector2 cVecRobot2Cylinder(
+      CVector2 cVecRobot2Cylinder( // 
          cCylinderPos.GetX() - cRobotPos.GetX(),
          cCylinderPos.GetY() - cRobotPos.GetY());
       /* Get the direction the robot is facing in */
@@ -446,8 +466,8 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
             //fReward = -1.0 + (1.0 / (10.0 * cVecRobot2Goal.Length()));
             /* Cost of living + direction x reward for moving */
             fReward = -2;
-            fReward += m_fPredictionReward * (1 - Square(PredictionDistance(i))) - (m_fPredictionReward / 2); // TODO : Figure out what this is returning
-//            DEBUG("Reward is : %f\n",fReward);
+            fReward += m_fPredictionReward * (1 - Sqrt(PredictionDistance(i))); // TODO : Figure out what this is returning
+         //   DEBUG("Reward is : %f\n",fReward);
             break;
          }
          case EPISODE_SUCCESS: {
@@ -480,28 +500,34 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       CRadians forceAngle = cForceVector.Angle();
       Real forceMagnitude = cForceVector.Length();
       Real forceCos = Cos(forceAngle);
-      Real forceSin = Cos(forceAngle);
-      Real inverseForceMag = 1 / forceMagnitude;
-      CRadians robotOrientToObject = (cVecRobot2Cylinder.Angle() - cRobotZ).SignedNormalize();
+      Real forceSin = Sin(forceAngle);
+      Real inverseForceMag = 1.0 / forceMagnitude;
+      CRadians robotOrientToObject = NormalizedDifference(cVecRobot2Cylinder.Angle(), cRobotZ); // All angle subtractions need to be using NormalizedDifference
 
-      CRadians robotOrientToTargetDirection = Intended_Dir - cRobotZ;
-      Real inverseRobotOrientTargetDirection = 1 / ToDegrees(robotOrientToTargetDirection).GetValue();
+      CRadians robotOrientToTargetDirection = NormalizedDifference(Intended_Dir, cRobotZ); 
       Real TotalDriveMag = fLWheel + fRWheel;
       // Real fPerpendicularForce = cForceVector.GetY(); // NOTE : These are correct function calls
       // Real fParallelForce = cForceVector.GetX();
       // DEBUG("Perpendicular Force : %f, Parallel Force : %f\n", fPerpendicularForce, fParallelForce);
       /* Store the observations */
 
-      m_vecObs[i * m_unNumObs + 0] = ToDegrees(forceAngle).GetValue();
+      m_vecObs[i * m_unNumObs + 0] = forceAngle.GetValue(); // Keep it radians
       m_vecObs[i * m_unNumObs + 1] = forceMagnitude;
       m_vecObs[i * m_unNumObs + 2] = forceCos;
       m_vecObs[i * m_unNumObs + 3] = forceSin;
       m_vecObs[i * m_unNumObs + 4] = inverseForceMag;
       m_vecObs[i * m_unNumObs + 5] = cVecRobot2Cylinder.Length();
-      m_vecObs[i * m_unNumObs + 6] = ToDegrees(robotOrientToObject).GetValue();
-      m_vecObs[i * m_unNumObs + 7] = ToDegrees(robotOrientToTargetDirection).GetValue();
-      m_vecObs[i * m_unNumObs + 8] = inverseRobotOrientTargetDirection;
-      m_vecObs[i * m_unNumObs + 9] = TotalDriveMag;
+      m_vecObs[i * m_unNumObs + 6] = robotOrientToObject.GetValue(); // Returning in radians
+      m_vecObs[i * m_unNumObs + 7] = Cos(robotOrientToObject);
+      m_vecObs[i * m_unNumObs + 8] = Sin(robotOrientToObject);
+      // every angle should be given in sin and cosine, tangent if everything doesn't work?
+      m_vecObs[i * m_unNumObs + 9] = robotOrientToTargetDirection.GetValue();
+      m_vecObs[i * m_unNumObs + 10] = Cos(robotOrientToTargetDirection);
+      m_vecObs[i * m_unNumObs + 11] = Sin(robotOrientToTargetDirection);
+      m_vecObs[i * m_unNumObs + 12] = TotalDriveMag; 
+      // TODO : provide the robot its actuation ~ a deltax,deltay to know how the robot moved instead of the drive magnitude
+
+
       // Individual robot's prediction, should I actually take this in? Saying NO for now, but might change opinion, will probably instead add the dot product of neighbors predictions with out own prediction angle
       // m_vecObs[i * m_unNumObs + 10] = m_LengthOffsetFromRobot[i];
       // m_vecObs[i * m_unNumObs + 11] = m_AngleFromRCV[i];
@@ -551,16 +577,18 @@ void CCMPrediction::PreStep() {
    DEBUG("\n");*/
    /* Send observations to PyTorch */
    // DEBUG("Sending ZMQ\n");
-   ZMQSendEpisodeState(EPISODE_RUNNING);
-   ZMQSendObservations();
-   ZMQSendRewards();
-   ZMQSendForceStats();
-   ZMQSendRobotStats();
-   ZMQSendObjectStatsFinal();
-   // DEBUG("ZMQ Sent\n");
+   if(m_bSendZMQ){
+      ZMQSendEpisodeState(EPISODE_RUNNING);
+      ZMQSendObservations();
+      ZMQSendRewards();
+      ZMQSendForceStats();
+      ZMQSendRobotStats();
+      ZMQSendObjectStatsFinal();
+      // DEBUG("ZMQ Sent\n");
 
-   /* Get actions from PyTorch */
-   ZMQGetActions();
+      /* Get actions from PyTorch */
+      ZMQGetActions();
+   }
    // DEBUG("Actions Received\n");
    /*for(size_t i = 0; i < m_unNumRobots; ++i) {
       float* pfAction = &m_vecActions[0] + i * m_unNumActions;
@@ -580,7 +608,7 @@ void CCMPrediction::PreStep() {
       // m_yOffsetFromRobot[i] = std::min(std::max(std::abs(m_yOffsetFromRobot[i] + pfAction[1] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2;
       m_LengthOffsetFromRobot[i] = pfAction[0] * CYLINDER_RADIUS + CYLINDER_RADIUS + KHEPERAIV_RADIUS; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
       m_AngleFromRCV[i] = pfAction[1] * CRadians::PI / 2;
-      // DEBUG("xOffset : %f yOffset : %f\n", m_xOffsetFromRobot[i], m_yOffsetFromRobot[i]);
+      // DEBUG("Dis : %f Angle : %f\n", m_LengthOffsetFromRobot[i], m_AngleFromRCV[i]);
       vecBaseModel[i] = m_unBaseModel;
    }
 
@@ -602,9 +630,11 @@ void CCMPrediction::PreStep() {
       if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < 40){
          vecWheelSpeedL[i] = (error * wheel_gain);
          vecWheelSpeedR[i] = - (error * wheel_gain);
+         m_bSendZMQ = false;
       } else{
          vecWheelSpeedL[i] = m_fWheelSpeed;
          vecWheelSpeedR[i] = m_fWheelSpeed;
+         m_bSendZMQ = true;
       }
    }
 //   printf("\n");
@@ -685,6 +715,8 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    CVector2 cVecGuess(m_LengthOffsetFromRobot[robot_index], guessAngleModified);
    CVector2 cVecPrediction(cCenterRobot.GetX() + cVecGuess.GetX(), cCenterRobot.GetY() + cVecGuess.GetY());
    CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCenterObject.GetX(), cVecPrediction.GetY() - cCenterObject.GetY());
+   m_yEstimate[robot_index] = cVecPrediction.GetY();
+   m_xEstimate[robot_index] = cVecPrediction.GetX();
    Real dis = cVecPredictedFromActual.Length();
    // DEBUG("ROBOT ID %d, Prediction X : %f, Prediction Y %f \n Actual : %f, %f, \n distance : %f\n", robot_index, cVecGuess.GetX(), cVecGuess.GetY(), cCenterObject.GetX(), cCenterObject.GetY(), dis);
    return dis;
@@ -742,14 +774,16 @@ void CCMPrediction::PostStep() {
       }
       DEBUG("\n");*/
       /* Send observations to PyTorch */
-      ZMQSendEpisodeState(eState);
-      ZMQSendObservations();
-      ZMQSendRewards();
-      ZMQSendForceStats();
-      ZMQSendRobotStats();
-      ZMQSendObjectStatsFinal();
+      if(m_bSendZMQ){
+         ZMQSendEpisodeState(eState);
+         ZMQSendObservations();
+         ZMQSendRewards();
+         ZMQSendForceStats();
+         ZMQSendRobotStats();
+         ZMQSendObjectStatsFinal();
 
-      ZMQGetAck();
+         ZMQGetAck();
+      }
       // DEBUG("Sent and received actions\n");
       /* Restart episode */
       ++m_unEpisodeCounter;
@@ -828,6 +862,8 @@ void CCMPrediction::CalculateRobotStats(){
      m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
      m_vecStats[i * m_unNumStats + 2] = deltaX;
      m_vecStats[i * m_unNumStats + 3] = deltaY;
+     m_vecStats[i * m_unNumStats + 4] = m_xEstimate[i];
+     m_vecStats[i * m_unNumStats + 5] = m_yEstimate[i];
    }
 }
 
