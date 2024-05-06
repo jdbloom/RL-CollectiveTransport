@@ -8,17 +8,19 @@ using namespace argos;
 /****************************************/
 /****************************************/
 
-static const std::string FB_CONTROLLER = "fgc";
-static const Real WALL_THICKNESS            = 0.2;  // m
-static const Real CYLINDER_RADIUS           = 0.5;  // m
+static const std::string KIV_CONTROLLER = "kivc";
+static const Real WALL_THICKNESS            = 0.05;  // m
+static const Real CYLINDER_RADIUS           = 0.12;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
-static const Real OBSTACLE_RADIUS           = 0.5;  // m
+static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
-static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
-static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
-static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
+static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
+static const Real CYLINDER_OFFSET           = 0.0;
+static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
+// Adding an offset just makes the robots start slightly farther away
+static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
    "robot2goal_dist",
@@ -40,7 +42,7 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
 /****************************************/
 
 CCollectiveRLTransport::CCollectiveRLTransport() :
-   m_unNumObs(7+24),
+   m_unNumObs(7+8), // Was m_unNumObs(7+24) but kheperaiv has 8 proximity sensors, not 24
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -78,10 +80,18 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
+      GetNodeAttributeOrDefault(t_tree, "simulate_robots", m_bSimulateRobots, true);
+      GetNodeAttributeOrDefault(t_tree, "simulate_obstacles", m_bSimulateObstacles, true);
+      GetNodeAttributeOrDefault(t_tree, "simulate_gate", m_bSimulateGate, true);
+
+      GetNodeAttributeOrDefault(t_tree, "robots_used", m_strRobotsUsed, m_strRobotsUsed); // Defaults are these because these are the robots we initially tested on
 
       /* Footbot dynamic equation parameters*/
-      m_fFootbotAxelLength = 0.14; // m
-      m_fFootbotWheelRadius = 0.029112741; // m
+      // TODO : Grap the actual values for khepera
+      // Chandler : Changed m_fFootbotAxelLength to m_fKheperaIVAxelLength
+      m_fKheperaIVAxelLength = 0.14; // m
+      // Chandler : Changed m_fFootbotWheelRadius to m_fKheperaIVWheelRadius and all instances of its use
+      m_fKheperaIVWheelRadius = 0.029112741; // m
 
       /* Stats to be sent to Data: Force vector (direction and magnitude) for every robot*/
       m_unNumStats = 4;
@@ -129,17 +139,37 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
       m_pcRNG = CRandom::CreateRNG("argos");
       /* Create and place stuff */
-      CreateEntities();
-      LOG<<"Added Entities\n";
+      if(m_bSimulateRobots){
+        SimulateRobots();
+        LOG<<"Robots Simulated"<<std::endl;
+      } else {
+        SimulateRobots();
+        LOG<<"Robots taken from field"<<std::endl;
+      }
+      if(m_bSimulateObstacles){
+        SimulateObstacles();
+        LOG<<"Simulated Obstacles"<<std::endl;} else{
+        LOG<<"Obstacles taken from field"<<std::endl;
+        }
+      if(m_bSimulateGate){
+        SimulateGate();
+        LOG<<"Simulated Gate"<<std::endl;} else{
+        LOG<<"Gate taken from field"<<std::endl;
+        }
       //Print first failure set
       for(size_t i = 0; i < m_unNumRobots; i++){
         LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
       }
       LOG<<std::endl;
-      PlaceEntities(0);
-      LOG<<"Placed Entities\n";
-      /* Call buzz Init() (HAS TO BE THE LAST LINE) */
-      CBuzzLoopFunctions::Init(t_tree);
+
+      PlaceRobots(0);
+      PlaceObstacles(0);
+      PlaceGate(0);
+
+//      if(m_bSimulateRobots){
+        /* Call buzz Init() (HAS TO BE THE LAST LINE) */
+        CBuzzLoopFunctions::Init(t_tree);
+//      }
    }
    catch(CARGoSException& ex) {
       THROW_ARGOSEXCEPTION_NESTED("while initializing the loop functions", ex);
@@ -149,10 +179,10 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::CreateEntities() {
+void CCollectiveRLTransport::SimulateRobots() {
    /* Create the cylinder */
    m_pcCylinder = new CCylinderEntity(
-      "c1",
+      "Cylinder_1",
       CVector3(),
       CQuaternion(),
       true,
@@ -162,29 +192,50 @@ void CCollectiveRLTransport::CreateEntities() {
    AddEntity(*m_pcCylinder);
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
-   std::ostringstream cFBId;
-   CFootBotEntity* pcFB;
+   std::ostringstream cKIVId;
+   CKheperaIVEntity* pcKIV;
    CVector3 cPos;
+
+   /* Generating random positions for the cylinder */
+   /* We divide the arena in two horizontal halves */
+   /*DEBUG("cXCylinderRange = (%f,%f)\n",
+    GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
+    GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS);*/
+
+   /* Create the robots in simulation*/
+   std::vector<int> vect;
+   std::stringstream ss(m_strRobotsUsed);
+
+   for (int i; ss >> i;) {
+       vect.push_back(i);
+       if (ss.peek() == ',')
+           ss.ignore();
+   }
+
    for(size_t i = 0; i < m_unNumRobots; ++i) {
-      cFBId.str("");
-      cFBId << "fb" << i;
+      cKIVId.str("");
+      cKIVId << "Khepera_" << vect[i];
+      LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
-      pcFB = new CFootBotEntity(
-         cFBId.str(),
-         FB_CONTROLLER,
+      pcKIV = new CKheperaIVEntity(
+         cKIVId.str(),
+         KIV_CONTROLLER,
          cPos,
          CQuaternion(-cSlice, CVector3::Z)
          );
-      m_vecRobots.push_back(pcFB);
+      m_vecRobots.push_back(pcKIV);
       /** Need to chage the range of the proximity sensor
           If m_fProximityRange = 0 then the sensor range will
           stay at default */
-      AddEntity(*pcFB);
+      AddEntity(*pcKIV);
+      CDynamics2DKheperaIVModel& cModel = dynamic_cast<CDynamics2DKheperaIVModel&>(pcKIV->GetEmbodiedEntity().GetPhysicsModel(0));
+      cpConstraint* wheel = cModel.m_cDiffSteering.GetAngularConstraint();
+      wheel->maxForce = 10000;
       if(m_fProximityRange > 0.0){
-        CProximitySensorEquippedEntity& cPSEE = pcFB->GetProximitySensorEquippedEntity();
+        CProximitySensorEquippedEntity& cPSEE = pcKIV->GetProximitySensorEquippedEntity();
         CProximitySensorEquippedEntity::SSensor::TList& listPS = cPSEE.GetSensors();
         for(auto itSensor = listPS.begin(); itSensor != listPS.end(); ++itSensor){
           (*itSensor)->Direction.Normalize();
@@ -192,37 +243,16 @@ void CCollectiveRLTransport::CreateEntities() {
         }
       }
    }
-   /** Create Cylinder Obstacles */
-   std::ostringstream cCID;
-   CCylinderEntity* pcC;
-   for(size_t i = 0; i < m_unNumObstacles; ++i){
-     cCID.str("");
-     cCID << "o" << i;
-     pcC = new CCylinderEntity(
-        cCID.str(),
-        CVector3(),
-        CQuaternion(),
-        false,
-        OBSTACLE_RADIUS,
-        OBSTACLE_HEIGHT,
-        OBSTACLE_MASS);
-     m_vecObstacles.push_back(pcC);
-     AddEntity(*pcC);
-   }
-   /* Generating random positions for the cylinder */
-   /* We divide the arena in two horizontal halves */
+
    CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
       );
-   CRange<Real> cXObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/2,
-      0
-   );
    CRange<Real> cYRange(
       GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
       );
+
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
                m_pcRNG->Uniform(cYRange),
@@ -251,6 +281,41 @@ void CCollectiveRLTransport::CreateEntities() {
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
+}
+
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::SimulateObstacles(){
+   CVector3 cPos;
+   /** Create Cylinder Obstacles */
+   std::ostringstream cCID;
+   CCylinderEntity* pcC;
+   for(size_t i = 1; i < m_unNumObstacles+1; ++i){
+     cCID.str("");
+     cCID << "Cylinder" << i;
+     pcC = new CCylinderEntity(
+        cCID.str(),
+        CVector3(),
+        CQuaternion(),
+        false,
+        OBSTACLE_RADIUS,
+        OBSTACLE_HEIGHT,
+        OBSTACLE_MASS);
+     m_vecObstacles.push_back(pcC);
+     AddEntity(*pcC);
+   }
+
+   CRange<Real> cXObstacleRange(
+      GetSpace().GetArenaLimits().GetMin().GetX()/2,
+      0
+   );
+   CRange<Real> cYRange(
+      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      );
+
    /** Generate Random Positions for the obstacles */
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
      m_vecObstaclePos.push_back(std::vector<CVector3>());
@@ -261,6 +326,13 @@ void CCollectiveRLTransport::CreateEntities() {
        m_vecObstaclePos.back().push_back(cPos);
      }
    }
+}
+
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::SimulateGate(){
    /**
    Generate the gate model obstacle from
    two box_entities. The gate should be in
@@ -268,7 +340,13 @@ void CCollectiveRLTransport::CreateEntities() {
    means the boxes have to change shape every
    episode.
    */
+   CVector3 cPos;
+
    if(m_unUseGate){
+     CRange<Real> cYRange(
+      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      );
      /** Create two box entities and add them to the environment*/
      std::ostringstream bCID;
      CBoxEntity* pcB;
@@ -345,53 +423,96 @@ void CCollectiveRLTransport::CreateEntities() {
 /****************************************/
 /****************************************/
 
-void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
-   /* Make sure the episode is valid */
-   if(un_episode >= m_unNumEpisodes) {
-      THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
-   }
-   /* Get the old position of the cylinder*/
-   m_cOldCylinderPos = m_vecCylinderPos[un_episode];
-   /* The placements we chose are collision-free by construction, no need to
-    * check for collisions */
-   MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
-              m_vecCylinderPos[un_episode],      // position
-              CQuaternion(),                     // orientation
-              false,                             // not a check
-              true);                             // ignore collisions
-   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
-      MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
-                 m_vecRobotPos[un_episode][i],        // position
-                 m_vecRobotOrient[un_episode][i],     // orientation
-                 false,                               // not a check
-                 true);                               // ignore collisions
-   }
-   for(size_t i = 0; i < m_vecObstacles.size(); ++i){
-     MoveEntity(m_vecObstacles[i]->GetEmbodiedEntity(), // body
-                m_vecObstaclePos[un_episode][i],        // position
-                CQuaternion(),                          // orientation
-                false,                                  // not a check
-                true);                                  // ignore collisions
-   }
-   if(m_unUseGate == 1){
-     /** Move the Walls */
-     MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][0],
-                CQuaternion(),
-                false,
-                true);
-     MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][1],
-                CQuaternion(),
-                false,
-                true);
+void CCollectiveRLTransport::ScanGate() {
+   // TODO : Don't want to do today, nor tomorrow, so its a next person issue
+}
 
-      /** Resize the walls */
-      m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
-      m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::PlaceRobots(UInt32 un_episode){
+    /* Make sure the episode is valid */
+    if(un_episode >= m_unNumEpisodes) {
+       THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
     }
 
+    if(m_bSimulateRobots){
+       /* Get the old position of the cylinder*/
+       m_cOldCylinderPos = m_vecCylinderPos[un_episode];
+       /* The placements we chose are collision-free by construction, no need to
+        * check for collisions */
+       MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
+                  m_vecCylinderPos[un_episode],      // position
+                  CQuaternion(),                     // orientation
+                  false,                             // not a check
+                  true);                             // ignore collisions
+       for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+          MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
+                     m_vecRobotPos[un_episode][i],        // position
+                     m_vecRobotOrient[un_episode][i],     // orientation
+                     false,                               // not a check
+                     true);                               // ignore collisions
+       }
+       LOG<<"Placed Robots in Simulation"<<std::endl;
+    } else{
+        LOG<<"Taking Robots from Real"<<std::endl;
+    }
+}
 
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::PlaceObstacles(UInt32 un_episode){
+    /* Make sure the episode is valid */
+    if(un_episode >= m_unNumEpisodes) {
+      THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
+    }
+
+    if(m_bSimulateObstacles){
+       for(size_t i = 0; i < m_vecObstacles.size(); ++i){
+         MoveEntity(m_vecObstacles[i]->GetEmbodiedEntity(), // body
+                    m_vecObstaclePos[un_episode][i],        // position
+                    CQuaternion(),                          // orientation
+                    false,                                  // not a check
+                    true);                                  // ignore collisions
+       }
+       LOG<<"Placed Obstacles in Simulation"<<std::endl;
+    } else{
+        LOG<<"Taking Obstacles from Real"<<std::endl;
+   }
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::PlaceGate(UInt32 un_episode){
+    /* Make sure the episode is valid */
+    if(un_episode >= m_unNumEpisodes) {
+      THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
+    }
+
+    if(m_bSimulateGate){
+    if(m_unUseGate == 1){
+         /** Move the Walls */
+         MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
+                    m_vecGateWallPos[un_episode][0],
+                    CQuaternion(),
+                    false,
+                    true);
+         MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
+                    m_vecGateWallPos[un_episode][1],
+                    CQuaternion(),
+                    false,
+                    true);
+
+          /** Resize the walls */
+          m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
+          m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+         }
+         LOG<<"Placed Gate in Simulation"<<std::endl;
+     } else{
+        LOG<<"Taking Gate from Real"<<std::endl;
+     }
 }
 
 /****************************************/
@@ -449,7 +570,14 @@ void CCollectiveRLTransport::Reset() {
    if(m_unUseGate==1){
      LOG<<"[INFO] Current Offset: "<<m_vecOffset[m_unEpisodeCounter]<<std::endl;
    }
-   PlaceEntities(m_unEpisodeCounter);
+
+   if(m_bSimulateRobots)
+     PlaceRobots(m_unEpisodeCounter);
+   if(m_bSimulateObstacles)
+     PlaceObstacles(m_unEpisodeCounter);
+   if(m_bSimulateObstacles)
+     PlaceGate(m_unEpisodeCounter);
+
    m_bReachedGoal = false;
 
 }
@@ -471,12 +599,12 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
 
    PutIncreases(std::vector<Real>& vec_l_increase,
                 std::vector<Real>& vec_r_increase,
-                std::vector<UInt32>& vec_faiulure,
+                std::vector<UInt32>& vec_failure,
                 std::vector<Real>& vec_angle_to_goal,
                 std::vector<UInt32>& vec_base_model) :
       LIncrease(vec_l_increase),
       RIncrease(vec_r_increase),
-      Failure(vec_faiulure),
+      Failure(vec_failure),
       AngleToGoal(vec_angle_to_goal),
       BaseModel(vec_base_model) {}
 
@@ -487,7 +615,7 @@ struct PutIncreases : public CBuzzLoopFunctions::COperation {
       BuzzPut(t_vm, "failure", static_cast<int>(Failure[t_vm->robot]));
       BuzzPut(t_vm, "AngleToGoal", static_cast<float>(AngleToGoal[t_vm->robot]));
       BuzzPut(t_vm, "BaseModel", static_cast<int>(BaseModel[t_vm->robot]));
-      /*DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
+      /**DEBUG("[Ex] [t=%u] [R=%u] A = %f,%f F = %u\n",
             CSimulator::GetInstance().GetSpace().GetSimulationClock(),
             t_vm->robot,
             LIncrease[t_vm->robot],
@@ -514,7 +642,6 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
    std::vector<float> LWheels;
    std::vector<float> RWheels;
 };
-
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
@@ -586,7 +713,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       float hasFailed = 0;
       UInt32 ticksElapsed = m_unEpisodeTime - m_unEpisodeTicksLeft;
       if (m_vecRobotFailures[m_unEpisodeCounter][i] != -1 && m_vecRobotFailures[m_unEpisodeCounter][i] <= ticksElapsed) {
-	       hasFailed = 1;
+          hasFailed = 1;
       }
 
 
@@ -629,8 +756,9 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       /* Adding cylinder angle to goal for MME*/
       m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
       // Get the proximity sensor values
-      const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
-        m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
+      // Chandler : changed CCI_FootBotProximitySensor to CCI_KheperaIVProximitySensor
+      const std::vector<argos::CCI_KheperaIVProximitySensor::SReading>& tReadings =
+        m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVProximitySensor> ("kheperaiv_proximity")->GetReadings(); // Chandler : Edited footbot_proximity to kheperaiv_proximity
       for(size_t t = 0; t < tReadings.size(); t++){
         m_vecObs[i * m_unNumObs + 7 + t] = tReadings[t].Value;
       }
@@ -844,8 +972,8 @@ void CCollectiveRLTransport::CalculateRobotStats(){
      Real fRWheel = cGWS.RWheels[i];
 
      /*Calculate force vector*/
-     Real deltaX = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
-     Real deltaY = (m_fFootbotWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
+     Real deltaX = (m_fKheperaIVWheelRadius/2.0) * (fLWheel + fRWheel) * Cos(cRobotZ);
+     Real deltaY = (m_fKheperaIVWheelRadius/2.0) * (fLWheel + fRWheel) * Sin(cRobotZ);
 
      Real magnitude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
                             + (cRobotPos.GetY() - deltaY)*(cRobotPos.GetY() - deltaY));

@@ -1,6 +1,6 @@
 include "vec2.bzz"
 
-MAX_SPEED = 10.0
+MAX_SPEED = 20.0
 MIN_SPEED = -MAX_SPEED
 
 function set_wheels_debug(Left, Right){
@@ -16,7 +16,8 @@ function init(){
   set_wheels_debug(L_wheel, R_wheel)
   gripped = 0
   failure = 0
-	angle_buffer = 5.0 # degrees
+	angle_buffer = 6.0 # degrees
+
 }
 
 function step(){
@@ -26,20 +27,14 @@ function step(){
 	debug.rays.add(0, 0, 255, 1.0, 0.0, 0.1)
   if(gripped){
     # Should we use the base model to control the robots or the learned model
-    #log(id, BaseModel)
+    #log(id," Gripped ", BaseModel)
     if (BaseModel == 1){
-      #log(id, " Case = 1")
-      AngleToGoal = AngleToGoal + 180.0
-			#log("ANGLES: ",AngleToGoal, " ", 360-AngleToGoal, " ", angle_buffer)
-      if(AngleToGoal < angle_buffer or (360 - AngleToGoal) < angle_buffer){
-				#log("Setting wheels case 1 in range", -MAX_SPEED," ", -MAX_SPEED)
-        set_wheels_debug(-MAX_SPEED, -MAX_SPEED)
-      }
-      # Otherwise rotate
-      else {
-				#log("Setting wheels case 1, out of range ", -MAX_SPEED/2.0, " ", MAX_SPEED/2.0)
-        set_wheels_debug(-5.0, 5.0)
-				#log("Wheels set")
+      #log(id, " Case = 1, error = ", math.abs(AngleToGoal))
+      if(math.abs(AngleToGoal) < angle_buffer){ # Drive to it
+        set_wheels_debug(MAX_SPEED, MAX_SPEED)
+      } else{ # Rotate
+        error = AngleToGoal / 180
+        set_wheels_debug(-error * MAX_SPEED + 1/8 * MAX_SPEED, error * MAX_SPEED + 1/8 * MAX_SPEED)
       }
     }
     else{
@@ -57,7 +52,7 @@ function step(){
   }
   else {
     if (proximity[0].value > 0.6){
-			#log("setting gripping")
+			log("setting gripping")
       set_wheels_debug(0.0, 0.0)
       L_wheel = 0.0
       R_wheel = 0.0
@@ -69,7 +64,7 @@ function step(){
   # If the robot fails, open the gripper and set the wheel speeds to 0.
   if(failure){
     gripper_unlock()
-		#log("setting failure")
+		log("setting failure")
     set_wheels_debug(0.0, 0.0)
   }
 }
