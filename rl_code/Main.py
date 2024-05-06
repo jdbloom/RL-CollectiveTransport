@@ -127,6 +127,7 @@ socket.send(b"ok")
 exp_done = False
 ep_counter = 0
 exp_rewards = []
+exp_gsp = []
 exp_mean_rewards = []
 high_score = -np.inf
 mean_axis = []

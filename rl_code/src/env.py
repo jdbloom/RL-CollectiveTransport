@@ -21,7 +21,7 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         # shift back and apply direction
         diff *= direction
         # normalize between -1 and 1
-        label=diff/math.pi
+        label=np.clip((diff/math.pi)*100, -1, 1) # 100 is a scaling factor to prevent information converging to 0
         x1 = math.cos(diff)
         y1 = math.sin(diff)                        
         for i in range(num_robots):

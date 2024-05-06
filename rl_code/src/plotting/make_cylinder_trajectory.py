@@ -65,6 +65,31 @@ for ep in range(len(file_names)-1):
     plt.savefig(args.data_path+'/plots/Trajectory'+'_'+str(ep)+'.png')
     plt.close()
 
+    cyl_heading_diff = []
+    for i in range(len(data['cyl_angle'])-1):
+        # shift to get between 0 and 2 Pi
+        old_cyl_ang = (math.radians(data['cyl_angle'][i]) + math.pi)%(2*math.pi)
+        new_cyl_ang = (math.radians(data['cyl_angle'][i+1]) + math.pi)%(2*math.pi)
+        # find the angle difference
+        abs_diff = abs(old_cyl_ang-new_cyl_ang)
+        diff = min(abs_diff, 2*math.pi-abs_diff)
+        # find the directional difference
+        if old_cyl_ang < new_cyl_ang:
+            direction = 1 if (new_cyl_ang-old_cyl_ang) <= math.pi else -1
+        else:
+            direction = -1 if (old_cyl_ang-new_cyl_ang) <= math.pi else 1
+        # shift back and apply direction
+        diff *= direction
+        # normalize between -1 and 1
+        cyl_heading_diff.append((diff/math.pi)*100)
+
+    fig, ax = plt.subplots(figsize=(20, 10))
+    plt.rcParams.update({'font.size': 22})
+    plt.plot(data['gsp_heading'], c= 'b')
+    plt.plot(cyl_heading_diff, c='r')
+    plt.savefig(args.data_path+'/plots/GSP_Heading_'+str(ep)+'.png')
+    plt.close()
+
 
 
 

@@ -37,8 +37,8 @@ episode_time_steps = []
 
 print('. . . Consolodating Model Data')
 IL_flag = False
-for i in range(len(file_names)-1):
-    name = 'Data_Episode_'+str(i)+'.pkl'
+for ep in range(len(file_names)-1):
+    name = 'Data_Episode_'+str(ep)+'.pkl'
     with open(data_path+name, 'rb') as f:
         data = pickle.load(f)
 
