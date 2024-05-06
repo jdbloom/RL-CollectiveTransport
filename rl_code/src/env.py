@@ -46,12 +46,8 @@ class ZMQ_Utility:
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',
                            'robot_rwheel', 'cyl_dist2robot', 'cyl_angle2robot', 'cyl_dist2goal',
                            'ProxVal_0',  'ProxVal_1',  'ProxVal_2',  'ProxVal_3',
-                           'ProxVal_4',  'ProxVal_5',  'ProxVal_6',  'ProxVal_7',
-                           'ProxVal_8',  'ProxVal_9',  'ProxVal_10', 'ProxVal_11',
-                           'ProxVal_12', 'ProxVal_13', 'ProxVal_14', 'ProxVal_15',
-                           'ProxVal_16', 'ProxVal_17', 'ProxVal_18', 'ProxVal_19',
-                           'ProxVal_20', 'ProxVal_21', 'ProxVal_22', 'ProxVal_23']
-        self.OBS_FMT = '31f'
+                           'ProxVal_4',  'ProxVal_5',  'ProxVal_6',  'ProxVal_7',]
+        self.OBS_FMT = '15f'
         self.FAILURE_FIELDS = ['failure']
         self.FAILURE_FMT = '1I'
         self.REWARDS_FIELDS = ['reward']

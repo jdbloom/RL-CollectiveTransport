@@ -73,18 +73,16 @@ class Agent(Actor):
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
-        if self.recurrent_gsp:
-            if self._neighbors:
-                self.gsp_observation = []
-                for _ in range(self._n_agents):
-                    self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
-            else:
-                self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
 
-        self._ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
-                                       112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
-                                       -157.5, -142.5, -127.5, -112.5, -97.5, 
-                                       -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
+        if self._neighbors:
+            self.gsp_observation = []
+            for _ in range(self._n_agents):
+                self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
+        else:
+            self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
+
+        self._ROBOT_PROXIMITY_ANGLES = [0.0, 45.0, 90.0, 135.0, 180.0, -135.0, -90.0, -45.0]
+
         if self._neighbors:
             self.build_neighbors()
         
