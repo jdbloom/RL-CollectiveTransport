@@ -106,6 +106,31 @@ class Agent(Actor):
             self.neighbors_dict[agent] = neighbors
     
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
+        print('[OBSERVATIONS] Robot Dist to Goal', env_observations[0][0])
+        print('[OBSERVATIONS] Robot Angle to Goal', env_observations[0][1])
+        print('[OBSERVATIONS] Robot Left Wheel Speed', env_observations[0][2])
+        print('[OBSERVATIONS] Robot Right Wheel Speed', env_observations[0][3])
+        print('[OBSERVATIONS] Cyl Dist to Robot', env_observations[0][4])
+        print('[OBSERVATIONS] Cyl Angle to Robot', env_observations[0][5])
+        print('[OBSERVATIONS] Cyl Dist to Goal', env_observations[0][6])
+
+        robot_cos_to_goal = math.cos(env_obs[1])
+        robot_sin_to_goal = math.sin(env_obs[1])
+        robot_tan_to_goal = math.tan(env_obs[1])
+
+        cyl_cos_to_goal = math.cos(env_obs[5])
+        cyl_sin_to_goal = math.sin(env_obs[5])
+        cyl_tan_to_goal = math.tan(env_obs[5])
+
+        anlges = np.array(
+            robot_cos_to_goal, 
+            robot_sin_to_goal,
+            robot_tan_to_goal,
+            cyl_cos_to_goal,
+            cyl_sin_to_goal,
+            cyl_tan_to_goal
+        )
+        env_obs = np.concatenate((env_obs, anlges))
         if heading_gsp is not None:
             if global_knowledge is not None:
                 env_obs = np.concatenate((env_obs, np.array([heading_gsp]), global_knowledge)) 

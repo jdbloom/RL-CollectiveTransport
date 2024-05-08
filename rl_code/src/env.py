@@ -8,8 +8,8 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
     label = 0
     if GSP:
         # shift to get between 0 and 2 Pi
-        old_cyl_ang = (math.radians(old_cyl_ang) + math.pi)%(2*math.pi)
-        new_cyl_ang = (math.radians(cyl_ang) + math.pi)%(2*math.pi)
+        old_cyl_ang = (old_cyl_ang + math.pi)%(2*math.pi)
+        new_cyl_ang = (cyl_ang + math.pi)%(2*math.pi)
         # find the angle difference
         abs_diff = abs(old_cyl_ang-new_cyl_ang)
         diff = min(abs_diff, 2*math.pi-abs_diff)
