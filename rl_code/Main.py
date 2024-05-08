@@ -160,14 +160,6 @@ while not exp_done:
 
         # Receive initial observations from the environment
         env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
-
-        print('[OBSERVATIONS] Robot Dist to Goal', env_observations[0][0])
-        print('[OBSERVATIONS] Robot Angle to Goal', env_observations[0][1])
-        print('[OBSERVATIONS] Robot Left Wheel Speed', env_observations[0][2])
-        print('[OBSERVATIONS] Robot Right Wheel Speed', env_observations[0][3])
-        print('[OBSERVATIONS] Cyl Dist to Robot', env_observations[0][4])
-        print('[OBSERVATIONS] Cyl Angle to Robot', env_observations[0][5])
-        print('[OBSERVATIONS] Cyl Dist to Goal', env_observations[0][6])
         object_positions.append([obj_stats[0], obj_stats[1]])
         old_cyl_ang = obj_stats[5]
 
@@ -283,14 +275,6 @@ while not exp_done:
 
                 exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
                 env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
-                print('========================================================')
-                print('[OBSERVATIONS] Robot Dist to Goal', env_observations[0][0])
-                print('[OBSERVATIONS] Robot Angle to Goal', env_observations[0][1])
-                print('[OBSERVATIONS] Robot Left Wheel Speed', env_observations[0][2])
-                print('[OBSERVATIONS] Robot Right Wheel Speed', env_observations[0][3])
-                print('[OBSERVATIONS] Cyl Dist to Robot', env_observations[0][4])
-                print('[OBSERVATIONS] Cyl Angle to Robot', env_observations[0][5])
-                print('[OBSERVATIONS] Cyl Dist to Goal', env_observations[0][6])
                 robot_x_pos = []
                 robot_y_pos = []
                 robot_angle = []
