@@ -73,13 +73,13 @@ class Agent(Actor):
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
-        if self.recurrent_gsp:
-            if self._neighbors:
-                self.gsp_observation = []
-                for _ in range(self._n_agents):
-                    self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
-            else:
-                self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
+
+        if self._neighbors:
+            self.gsp_observation = []
+            for _ in range(self._n_agents):
+                self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
+        else:
+            self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
 
         self._ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
                                        112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
@@ -131,6 +131,7 @@ class Agent(Actor):
             cyl_tan_to_goal
         )
         env_obs = np.concatenate((env_obs, anlges))
+
         if heading_gsp is not None:
             if global_knowledge is not None:
                 env_obs = np.concatenate((env_obs, np.array([heading_gsp]), global_knowledge)) 
