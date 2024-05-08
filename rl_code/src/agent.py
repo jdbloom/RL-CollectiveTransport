@@ -106,23 +106,34 @@ class Agent(Actor):
             self.neighbors_dict[agent] = neighbors
     
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
-        robot_cos_to_goal = math.cos(env_obs[1])
-        robot_sin_to_goal = math.sin(env_obs[1])
-        robot_tan_to_goal = math.tan(env_obs[1])
+        # robot_cos_to_goal = math.cos(env_obs[1])
+        # robot_sin_to_goal = math.sin(env_obs[1])
+        # robot_tan_to_goal = math.tan(env_obs[1])
 
-        cyl_cos_to_goal = math.cos(env_obs[5])
-        cyl_sin_to_goal = math.sin(env_obs[5])
-        cyl_tan_to_goal = math.tan(env_obs[5])
+        # cyl_cos_to_goal = math.cos(env_obs[5])
+        # cyl_sin_to_goal = math.sin(env_obs[5])
+        # cyl_tan_to_goal = math.tan(env_obs[5])
 
-        anlges = np.array((
-            robot_cos_to_goal, 
-            robot_sin_to_goal,
-            robot_tan_to_goal,
-            cyl_cos_to_goal,
-            cyl_sin_to_goal,
-            cyl_tan_to_goal
-        ))
-        env_obs = np.concatenate((env_obs, anlges))
+        # anlges = np.array((
+        #     robot_cos_to_goal, 
+        #     robot_sin_to_goal,
+        #     robot_tan_to_goal,
+        #     cyl_cos_to_goal,
+        #     cyl_sin_to_goal,
+        #     cyl_tan_to_goal
+        # ))
+        # env_obs = np.concatenate((env_obs, anlges))
+        # # Normalize the angles
+        # env_obs[1] /= math.pi
+        # env_obs[5] /= math.pi
+        # print('===============================')
+        # print('robot_dist2goal ', env_obs[0])
+        # print('robot_angle2goal', env_obs[1])
+        # print('robot_lwheel    ', env_obs[2])
+        # print('robot_rwheel    ', env_obs[3])
+        # print('cyl_dist2robot  ', env_obs[4])
+        # print('cyl_angle2robot ', env_obs[5])
+        # print('cyl_dist2goal   ', env_obs[6])
 
         if heading_gsp is not None:
             if global_knowledge is not None:

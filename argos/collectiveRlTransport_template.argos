@@ -54,7 +54,7 @@
                   time_out_reward = "0"
                   goal_reward = "0"
                   pytorch_url = "tcp://localhost:$$pytorch_port$$"
-		              alphabet_size = "$$alphabet_size$$"
+		              alphabet_size = "1"
                   proximity_range = "1"
                   num_obstacles = "$$num_obstacles$$"
                   use_gate = "$$use_gate$$"

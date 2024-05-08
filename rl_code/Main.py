@@ -31,7 +31,6 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
-parser.add_argument("--port", default = "55556")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
@@ -47,7 +46,7 @@ with open(config_path, 'r') as file:
 if args.model_path is not None:
     model_file_path = os.path.join(containing_folder, args.model_path)
 learning_scheme = config['LEARNING_SCHEME']
-port = args.port
+port = str(config['PORT'])
 test_mode = args.test
 train_mode = not test_mode
 #
@@ -86,7 +85,7 @@ agent_nn_args = {
     'config': config,
     'network': config['LEARNING_SCHEME'],
     'n_agents': Utility.params['num_robots'],
-    'n_obs': num_obs + 6,  # to account for the sin, cos, and tan of the two angles
+    'n_obs': num_obs, # + 6,  # to account for the sin, cos, and tan of the two angles
     'n_actions': Utility.params['num_actions']-1,  #remove control of the gripper
     'options_per_action':config['OPTIONS_PER_ACTION'],
     'min_max_action':config['MIN_MAX_ACTION'],

@@ -42,27 +42,28 @@
                   data_file = "data.csv"
                   num_robots = "4"
                   max_robot_failures = "0"
-		              latest_failure_time = "2250"
+		              latest_failure_time = "1000"
 		              chance_failure = "0.25"
                   goal = "4.5, 0"
                   threshold = "2"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "2"
-                  num_episodes = "1000"
+                  num_episodes = "100"
                   episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
                   pytorch_url = "tcp://localhost:55556"
 		              alphabet_size = "1"
-                  proximity_range = "2"
-                  num_obstacles = "0"
+                  proximity_range = "1"
+                  num_obstacles = "2"
                   use_gate = "0"
                   gate_curriculum = "0"
                   gate_update_frequency = "50"
-                  gate_update_amount = ".25"
+                  gate_update_amount = "0.25"
                   gate_minimum = "4"
                   use_base_model = "0"/>
+
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
@@ -81,23 +82,13 @@
     <box id="wall_west" size="0.1,10,0.5" movable="false">
       <body position="-9.9,0,0" orientation="0,0,0" />
     </box>
-    <!-- Non-Convex Obstacle -->
-
-    <!--<box id="barrier_1" size="0.1,2,0.5" movable="false">
-      <body position="0,-0.7,0" orientation="-45,0,0" />
-    </box>
-    <box id="barrier_2" size="0.1,2,0.5" movable="false">
-      <body position="0,0.7,0" orientation="45,0,0" />
-    </box>-->
-
   </arena>
-
 
   <!-- ******************* -->
   <!-- * Physics engines * -->
   <!-- ******************* -->
   <physics_engines>
-    <dynamics2d id="dyn2d" gripping_rigidity="10000" />
+    <dynamics2d id="dyn2d" />
   </physics_engines>
 
   <!-- ********* -->
@@ -111,7 +102,7 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <!-- <qt-opengl>
+    <!--<qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
           <placements>
@@ -123,7 +114,7 @@
             <placement index="5" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
           </placements>
         </camera>
-      </qt-opengl> -->
+      </qt-opengl>-->
   </visualization>
-  
+
 </argos-configuration>
