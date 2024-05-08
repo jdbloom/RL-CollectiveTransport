@@ -1,0 +1,25 @@
+include "vec2.bzz"
+
+function init(){
+    set_wheels(0.0, 0.0)
+}
+
+function step(){
+    gripper_unlock()
+    turret_disable()
+    set_wheels(0.0, 0.0)
+}
+
+function reset() {
+  log(id , " reset")
+  gripper_unlock()
+  turret_disable()
+  set_wheels(0.0, 0.0)
+}
+
+function destroy() {
+  log(id , " destroy")
+  gripper_unlock()
+  turret_disable()
+  set_wheels(0.0, 0.0)
+}
