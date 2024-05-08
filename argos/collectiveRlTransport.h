@@ -5,6 +5,8 @@
 #include <argos3/core/utility/math/rng.h>
 #include <argos3/plugins/simulator/entities/cylinder_entity.h>
 #include <argos3/plugins/simulator/entities/box_entity.h>
+#include <argos3/plugins/simulator/entities/convex_prism_entity.h>
+#include <argos3/plugins/simulator/entities/composite_entity.h>
 //#include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/kheperaiv_entity.h> // TODO : Change this to khepera's entity correctly and update argos3 library
 #include <argos3/plugins/robots/kheperaiv/simulator/dynamics2d_kheperaiv_model.h>
@@ -152,7 +154,7 @@ private:
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
-   /** Whether the cylinder reached the goal */
+   /** Whether the object reached the goal */
    bool m_bReachedGoal;
 
    /** Number of episodes */
@@ -161,11 +163,11 @@ private:
    /** Number of time steps left */
    unsigned int m_unEpisodeTicksLeft;
 
-   /** Initial cylinder positions (index = # episode) */
-   std::vector<CVector3> m_vecCylinderPos;
+   /** Initial prism positions (index = # episode) */
+   std::vector<CVector3> m_vecPrismPos;
 
-   /** Position of the cylinder from the previous time step*/
-   CVector3 m_cOldCylinderPos;
+   /** Position of the prism from the previous time step*/
+   CVector3 m_cOldPrismPos;
 
    /** Initial robot positions (index = # episode, # robot) */
    std::vector< std::vector<CVector3> > m_vecRobotPos;
@@ -173,8 +175,8 @@ private:
    /** Initial robot orientations (index = # episode, # robot) */
    std::vector< std::vector<CQuaternion> > m_vecRobotOrient;
 
-   /** The cylinder */
-   CCylinderEntity* m_pcCylinder;
+   /** The prism */
+   CCompositeEntity* m_pcComposite;
 
    /** The networking socket */
    CTCPSocket* socket;
@@ -295,7 +297,7 @@ private:
 
    std::vector<SInt32> GenerateRobotFailure();
 
-   bool CylinderAtTarget();
+   bool ObjectAtTarget();
 
    bool IsEpisodeFinished();
 
