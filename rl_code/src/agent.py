@@ -114,14 +114,14 @@ class Agent(Actor):
         cyl_sin_to_goal = math.sin(env_obs[5])
         cyl_tan_to_goal = math.tan(env_obs[5])
 
-        anlges = np.array(
+        anlges = np.array((
             robot_cos_to_goal, 
             robot_sin_to_goal,
             robot_tan_to_goal,
             cyl_cos_to_goal,
             cyl_sin_to_goal,
             cyl_tan_to_goal
-        )
+        ))
         env_obs = np.concatenate((env_obs, anlges))
 
         if heading_gsp is not None:

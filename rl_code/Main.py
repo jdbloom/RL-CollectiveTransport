@@ -86,7 +86,7 @@ agent_nn_args = {
     'config': config,
     'network': config['LEARNING_SCHEME'],
     'n_agents': Utility.params['num_robots'],
-    'n_obs': num_obs,
+    'n_obs': num_obs + 6,  # to account for the sin, cos, and tan of the two angles
     'n_actions': Utility.params['num_actions']-1,  #remove control of the gripper
     'options_per_action':config['OPTIONS_PER_ACTION'],
     'min_max_action':config['MIN_MAX_ACTION'],
