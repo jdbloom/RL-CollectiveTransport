@@ -1,0 +1,495 @@
+!29
+'math
+'vec2
+'new
+'x
+'y
+'newp
+'cos
+'sin
+'length
+'sqrt
+'angle
+'atan
+'norm
+'add
+'sub
+'scale
+'dot
+'rotate
+'init
+'set_wheels
+'step
+'gripper_unlock
+'turret_disable
+'reset
+'log
+'id
+' reset
+'destroy
+' destroy
+
+	pushs 18
+	pushcn @__label_11
+	gstore
+	pushs 20
+	pushcn @__label_12
+	gstore
+	pushs 23
+	pushcn @__label_13
+	gstore
+	pushs 27
+	pushcn @__label_14
+	gstore
+	nop
+
+@__label_0
+	pushs 0	|4,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|4,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|4,10,/usr/local/share/buzz/include/vec2.bzz
+	pusht	|4,13,/usr/local/share/buzz/include/vec2.bzz
+	tput	|12,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|12,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|12,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|12,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|12,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 2	|12,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_1	|12,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|22,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|22,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|22,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|22,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|22,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 5	|22,15,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_2	|22,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|34,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|34,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|34,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|34,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|34,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 8	|34,17,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_3	|34,19,/usr/local/share/buzz/include/vec2.bzz
+	tput	|43,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|43,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|43,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|43,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|43,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 10	|43,16,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_4	|43,18,/usr/local/share/buzz/include/vec2.bzz
+	tput	|52,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|52,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|52,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|52,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|52,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 12	|52,15,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_5	|52,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|66,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|66,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|66,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|66,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|66,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 13	|66,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_6	|66,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|79,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|79,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|79,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|79,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|79,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 14	|79,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_7	|79,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|92,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|92,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|92,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|92,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|92,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 15	|92,16,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_8	|92,18,/usr/local/share/buzz/include/vec2.bzz
+	tput	|105,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|105,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|105,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|105,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|105,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 16	|105,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_9	|105,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|115,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|115,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|115,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|115,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|115,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 17	|115,17,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_10	|115,19,/usr/local/share/buzz/include/vec2.bzz
+	tput	|3,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+
+@__exitpoint	|0,1,(null)
+	done	|0,1,(null)
+
+@__label_1
+	pusht	|13,11,/usr/local/share/buzz/include/vec2.bzz
+	dup	|13,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|13,12,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|13,20,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|13,26,/usr/local/share/buzz/include/vec2.bzz
+	tput	|13,26,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|14,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|22,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_2
+	pusht	|24,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|24,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|24,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|24,17,/usr/local/share/buzz/include/vec2.bzz
+	gload	|24,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|24,23,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	callc	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	mul	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	tput	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|25,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|25,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|25,17,/usr/local/share/buzz/include/vec2.bzz
+	gload	|25,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|25,23,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|27,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|34,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_3
+	pushs 0	|35,13,/usr/local/share/buzz/include/vec2.bzz
+	gload	|35,13,/usr/local/share/buzz/include/vec2.bzz
+	dup	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 9	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|35,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,26,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	mul	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,32,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|35,35,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,35,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,38,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	mul	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	add	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	callc	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|43,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_4
+	pushs 0	|44,13,/usr/local/share/buzz/include/vec2.bzz
+	gload	|44,13,/usr/local/share/buzz/include/vec2.bzz
+	dup	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 11	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|44,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|44,22,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,22,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|44,25,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|44,27,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,27,/usr/local/share/buzz/include/vec2.bzz
+	pushi 2	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	callc	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|52,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_5
+	pushnil	|53,8,/usr/local/share/buzz/include/vec2.bzz
+	lstore 2	|53,8,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|53,14,/usr/local/share/buzz/include/vec2.bzz
+	gload	|53,14,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|53,19,/usr/local/share/buzz/include/vec2.bzz
+	tget	|53,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	pushs 8	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	tget	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|53,28,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	lstore 2	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	pusht	|55,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|55,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|55,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|55,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|55,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|55,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	div	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	dup	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|56,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|56,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|56,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|56,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	div	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|58,0,/usr/local/share/buzz/include/vec2.bzz
+	lremove 1	|66,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|66,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_6
+	pusht	|68,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|68,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|68,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|68,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|68,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	tget	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	add	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	tput	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	dup	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|69,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|69,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|69,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|69,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|69,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	tget	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	add	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|71,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|79,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_7
+	pusht	|81,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|81,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|81,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|81,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|81,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	tget	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	sub	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	tput	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	dup	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|82,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|82,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|82,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|82,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|82,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	tget	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	sub	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|84,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|92,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_8
+	pusht	|94,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|94,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|94,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|94,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|94,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|94,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	mul	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	dup	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|95,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|95,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|95,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|95,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|97,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|105,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_9
+	lload 1	|106,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|106,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|106,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	mul	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|106,25,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|106,28,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,28,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|106,32,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	tget	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	mul	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	add	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|115,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_10
+	pusht	|117,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|117,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|117,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|117,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,13,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|117,19,/usr/local/share/buzz/include/vec2.bzz
+	gload	|117,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|117,25,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	callc	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	mul	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|117,30,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|117,33,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,33,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|117,39,/usr/local/share/buzz/include/vec2.bzz
+	gload	|117,39,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|117,45,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	callc	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	mul	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	sub	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	tput	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|118,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|118,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|118,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,13,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|118,19,/usr/local/share/buzz/include/vec2.bzz
+	gload	|118,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|118,25,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	callc	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	mul	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|118,30,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|118,33,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,33,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|118,39,/usr/local/share/buzz/include/vec2.bzz
+	gload	|118,39,/usr/local/share/buzz/include/vec2.bzz
+	dup	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|118,45,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	add	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|120,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|3,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+
+@__label_11
+	pushnil	|4,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 19	|4,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|4,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|4,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|4,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|5,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|5,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|5,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	ret0	|7,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+
+@__label_12
+	pushnil	|8,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 21	|8,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|8,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|9,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|9,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|9,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|9,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 22	|9,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|9,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|10,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|10,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|10,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|10,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 19	|10,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|10,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|10,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|10,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|11,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|11,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|11,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	ret0	|13,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+
+@__label_13
+	pushnil	|14,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 24	|14,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|14,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 25	|14,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|14,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 26	|14,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|15,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|15,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|15,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|15,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 21	|15,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|15,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|16,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 22	|16,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|16,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|17,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 19	|17,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|17,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|17,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|17,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|18,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|18,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|18,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	ret0	|20,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+
+@__label_14
+	pushnil	|21,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 24	|21,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|21,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 25	|21,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|21,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 28	|21,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|22,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|22,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|22,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|22,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 21	|22,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|22,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|23,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|23,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|23,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|23,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 22	|23,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|23,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 0	|24,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|24,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|24,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushnil	|24,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushs 19	|24,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	gload	|24,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|24,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushf 0.0	|24,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pushi 2	|25,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	callc	|25,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	pop	|25,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportViconReset.bzz
+	ret0	|0,1,(null)

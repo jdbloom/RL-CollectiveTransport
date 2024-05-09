@@ -1,0 +1,861 @@
+!57
+'math
+'vec2
+'new
+'x
+'y
+'newp
+'cos
+'sin
+'length
+'sqrt
+'angle
+'atan
+'norm
+'add
+'sub
+'scale
+'dot
+'rotate
+'MAX_SPEED
+'MIN_SPEED
+'set_wheels_debug
+'log
+'id
+' speeds: 
+' 
+'set_wheels
+'init
+'R_wheel
+'L_wheel
+'gripped
+'failure
+'angle_buffer
+'counter
+'step
+'vec_to_goal
+'AngleToGoal
+'pi
+'debug
+'rays
+' Gripped 
+'BaseModel
+' Case = 1, error = 
+'abs
+'error
+'L_increase
+'max
+'min
+'R_increase
+'setting gripping
+'gripper_lock
+'turret_disable
+'gripper_unlock
+'setting failure
+'reset
+' reset
+'destroy
+' destroy
+
+	pushs 20
+	pushcn @__label_11
+	gstore
+	pushs 26
+	pushcn @__label_12
+	gstore
+	pushs 33
+	pushcn @__label_13
+	gstore
+	pushs 53
+	pushcn @__label_24
+	gstore
+	pushs 55
+	pushcn @__label_25
+	gstore
+	nop
+
+@__label_0
+	pushs 0	|4,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|4,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|4,10,/usr/local/share/buzz/include/vec2.bzz
+	pusht	|4,13,/usr/local/share/buzz/include/vec2.bzz
+	tput	|12,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|12,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|12,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|12,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|12,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 2	|12,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_1	|12,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|22,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|22,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|22,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|22,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|22,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 5	|22,15,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_2	|22,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|34,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|34,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|34,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|34,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|34,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 8	|34,17,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_3	|34,19,/usr/local/share/buzz/include/vec2.bzz
+	tput	|43,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|43,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|43,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|43,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|43,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 10	|43,16,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_4	|43,18,/usr/local/share/buzz/include/vec2.bzz
+	tput	|52,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|52,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|52,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|52,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|52,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 12	|52,15,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_5	|52,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|66,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|66,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|66,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|66,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|66,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 13	|66,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_6	|66,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|79,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|79,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|79,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|79,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|79,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 14	|79,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_7	|79,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|92,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|92,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|92,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|92,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|92,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 15	|92,16,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_8	|92,18,/usr/local/share/buzz/include/vec2.bzz
+	tput	|105,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|105,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|105,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|105,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|105,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 16	|105,14,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_9	|105,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|115,0,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|115,4,/usr/local/share/buzz/include/vec2.bzz
+	gload	|115,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|115,9,/usr/local/share/buzz/include/vec2.bzz
+	tget	|115,9,/usr/local/share/buzz/include/vec2.bzz
+	pushs 17	|115,17,/usr/local/share/buzz/include/vec2.bzz
+	pushl @__label_10	|115,19,/usr/local/share/buzz/include/vec2.bzz
+	tput	|3,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|3,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 10.0	|3,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|4,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 19	|4,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|6,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|6,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	unm	|6,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|6,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__exitpoint	|0,1,(null)
+	done	|0,1,(null)
+
+@__label_1
+	pusht	|13,11,/usr/local/share/buzz/include/vec2.bzz
+	dup	|13,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|13,12,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	tput	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|13,17,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|13,20,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|13,26,/usr/local/share/buzz/include/vec2.bzz
+	tput	|13,26,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|14,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|22,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_2
+	pusht	|24,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|24,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|24,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|24,17,/usr/local/share/buzz/include/vec2.bzz
+	gload	|24,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|24,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|24,23,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	callc	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	mul	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	tput	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	dup	|24,24,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|25,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|25,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|25,17,/usr/local/share/buzz/include/vec2.bzz
+	gload	|25,17,/usr/local/share/buzz/include/vec2.bzz
+	dup	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|25,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|25,23,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|26,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|27,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|34,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_3
+	pushs 0	|35,13,/usr/local/share/buzz/include/vec2.bzz
+	gload	|35,13,/usr/local/share/buzz/include/vec2.bzz
+	dup	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 9	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,18,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|35,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,26,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	mul	|35,29,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,32,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|35,35,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,35,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|35,38,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	tget	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	mul	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	add	|35,40,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	callc	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|36,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|43,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_4
+	pushs 0	|44,13,/usr/local/share/buzz/include/vec2.bzz
+	gload	|44,13,/usr/local/share/buzz/include/vec2.bzz
+	dup	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 11	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,18,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|44,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|44,22,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,22,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|44,25,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|44,27,/usr/local/share/buzz/include/vec2.bzz
+	tget	|44,27,/usr/local/share/buzz/include/vec2.bzz
+	pushi 2	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	callc	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|45,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|52,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_5
+	pushnil	|53,8,/usr/local/share/buzz/include/vec2.bzz
+	lstore 2	|53,8,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|53,14,/usr/local/share/buzz/include/vec2.bzz
+	gload	|53,14,/usr/local/share/buzz/include/vec2.bzz
+	pushs 1	|53,19,/usr/local/share/buzz/include/vec2.bzz
+	tget	|53,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	pushs 8	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	tget	|53,26,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|53,28,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	lstore 2	|54,2,/usr/local/share/buzz/include/vec2.bzz
+	pusht	|55,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|55,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|55,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|55,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|55,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|55,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	div	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	dup	|55,16,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|56,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|56,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|56,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|56,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	div	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|57,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|58,0,/usr/local/share/buzz/include/vec2.bzz
+	lremove 1	|66,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|66,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_6
+	pusht	|68,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|68,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|68,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|68,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|68,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	tget	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	add	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	tput	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	dup	|68,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|69,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|69,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|69,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|69,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|69,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	tget	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	add	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|70,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|71,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|79,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_7
+	pusht	|81,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|81,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|81,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|81,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|81,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	tget	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	sub	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	tput	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	dup	|81,20,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|82,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|82,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|82,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|82,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|82,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	tget	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	sub	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|83,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|84,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|92,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_8
+	pusht	|94,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|94,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|94,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|94,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|94,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|94,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	mul	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	tput	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	dup	|94,16,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|95,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|95,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|95,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|95,13,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|96,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|97,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|105,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_9
+	lload 1	|106,11,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|106,14,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,14,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|106,18,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	mul	|106,21,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|106,25,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|106,28,/usr/local/share/buzz/include/vec2.bzz
+	tget	|106,28,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|106,32,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	tget	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	mul	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	add	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|107,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|115,0,/usr/local/share/buzz/include/vec2.bzz
+
+@__label_10
+	pusht	|117,4,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,4,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|117,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|117,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|117,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,13,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|117,19,/usr/local/share/buzz/include/vec2.bzz
+	gload	|117,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|117,25,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	callc	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	mul	|117,27,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|117,30,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|117,33,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,33,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|117,39,/usr/local/share/buzz/include/vec2.bzz
+	gload	|117,39,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	tget	|117,43,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|117,45,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	callc	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	mul	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	sub	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	tput	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	dup	|117,46,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|118,5,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|118,10,/usr/local/share/buzz/include/vec2.bzz
+	pushs 3	|118,13,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,13,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|118,19,/usr/local/share/buzz/include/vec2.bzz
+	gload	|118,19,/usr/local/share/buzz/include/vec2.bzz
+	dup	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	pushs 7	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,23,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|118,25,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	callc	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	mul	|118,27,/usr/local/share/buzz/include/vec2.bzz
+	lload 1	|118,30,/usr/local/share/buzz/include/vec2.bzz
+	pushs 4	|118,33,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,33,/usr/local/share/buzz/include/vec2.bzz
+	pushs 0	|118,39,/usr/local/share/buzz/include/vec2.bzz
+	gload	|118,39,/usr/local/share/buzz/include/vec2.bzz
+	dup	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	pushs 6	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	tget	|118,43,/usr/local/share/buzz/include/vec2.bzz
+	lload 2	|118,45,/usr/local/share/buzz/include/vec2.bzz
+	pushi 1	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	callc	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	mul	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	add	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	tput	|119,2,/usr/local/share/buzz/include/vec2.bzz
+	ret1	|120,0,/usr/local/share/buzz/include/vec2.bzz
+	ret0	|3,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__label_11
+	pushnil	|7,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|7,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|7,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 22	|7,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|7,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 23	|7,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	lload 1	|7,26,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 24	|7,28,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	lload 2	|7,39,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 5	|8,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|8,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|8,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|8,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 25	|8,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|8,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	lload 1	|8,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	lload 2	|8,23,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|10,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|10,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|10,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	ret0	|11,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__label_12
+	pushs 27	|13,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|14,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|14,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|14,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|14,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|16,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|16,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|16,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|16,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|16,26,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|16,26,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|16,35,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|16,35,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|17,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 29	|17,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|17,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|18,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 30	|18,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|18,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|19,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 31	|19,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 5.0	|19,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|20,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 32	|20,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|20,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|21,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	ret0	|23,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__label_13
+	pushs 34	|25,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|25,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|25,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 1	|25,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|25,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|25,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 5	|25,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|25,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 1.0	|25,30,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 35	|25,46,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|25,46,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 180.0	|25,47,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	div	|25,52,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|25,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|25,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 36	|25,60,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|25,60,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	mul	|25,60,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|26,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|26,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|26,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 37	|26,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|26,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 38	|26,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|26,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|26,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 13	|26,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|26,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 255	|26,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|26,21,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|26,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 34	|26,38,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|26,38,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 3	|26,40,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|26,40,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 34	|26,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|26,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 4	|26,55,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|26,55,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.1	|26,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 6	|27,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|27,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|27,1,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 37	|27,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|27,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 38	|27,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|27,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|27,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 13	|27,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|27,15,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|27,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|27,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 255	|27,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 1.0	|27,27,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|27,32,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.1	|27,37,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 6	|28,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|28,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|28,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 29	|28,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|28,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jumpz @__label_14	|28,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|30,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|30,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|30,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 22	|30,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|30,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 39	|30,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 40	|30,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|30,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 3	|31,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|31,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|31,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 40	|31,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|31,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|31,21,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	eq	|31,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jumpz @__label_16	|31,23,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|32,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|32,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|32,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 22	|32,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|32,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 41	|32,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|32,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|32,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|32,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 42	|32,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|32,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 35	|32,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|32,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|32,58,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|32,58,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 3	|33,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|33,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|33,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|33,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|33,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|33,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 42	|33,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|33,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 35	|33,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|33,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|33,31,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|33,31,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 31	|33,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|33,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	lt	|33,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jumpz @__label_18	|33,46,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|34,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|34,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|34,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|34,34,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|34,34,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|34,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|34,45,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|35,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|35,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|35,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jump @__label_19	|35,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_18	|35,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 43	|36,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 35	|36,28,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|36,28,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 180	|36,30,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	div	|37,8,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|37,8,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|37,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|37,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 43	|37,32,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,32,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	unm	|37,32,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|37,44,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,44,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	mul	|37,44,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|37,55,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,55,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 4	|37,56,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	div	|37,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	add	|37,57,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 43	|37,65,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,65,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|37,77,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,77,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	mul	|37,77,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|37,88,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|37,88,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 4	|37,89,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	div	|37,90,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	add	|37,90,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|38,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|38,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|38,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_19	|39,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jump @__label_17	|40,8,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_16	|40,8,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|44,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|44,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|44,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 44	|45,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	add	|45,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|45,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|45,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|45,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|45,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 45	|45,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|45,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|45,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|45,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 46	|45,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|45,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|45,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|45,52,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,52,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|45,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|45,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 19	|45,64,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|45,64,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|46,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|46,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|46,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|46,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|46,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|46,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 47	|47,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	add	|47,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|47,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|47,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|47,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|47,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 45	|47,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|47,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 0	|47,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,29,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	dup	|47,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 46	|47,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	tget	|47,33,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|47,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,41,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 18	|47,52,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,52,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|47,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|47,53,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 19	|47,64,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|47,64,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|50,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|50,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|50,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|50,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|50,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|50,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|50,30,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|50,30,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|50,39,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|50,39,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|51,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|51,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|51,4,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_17	|52,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jump @__label_15	|52,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_14	|52,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|53,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|53,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|53,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 48	|53,10,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|54,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|54,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|54,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|54,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|54,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|54,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|54,23,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|54,28,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|55,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|55,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|55,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 28	|55,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|55,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|56,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 27	|56,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|56,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|57,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|57,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 49	|57,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|57,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|58,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|58,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|58,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|58,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 50	|58,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|58,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|59,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|59,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|59,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 32	|59,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 32	|59,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|59,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|59,26,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	add	|60,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|60,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 32	|60,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|60,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 10	|60,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gt	|60,21,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jumpz @__label_20	|60,22,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 29	|61,14,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|61,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gstore	|62,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_20	|63,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_15	|66,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 30	|66,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|66,12,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	jumpz @__label_22	|66,13,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|67,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 51	|67,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|67,17,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|68,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|68,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|68,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|68,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|68,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|68,6,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 52	|68,7,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 1	|69,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|69,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|69,3,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|69,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|69,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|69,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|69,20,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|69,25,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|70,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|70,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|70,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+@__label_22	|71,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	ret0	|73,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__label_24
+	pushnil	|74,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 51	|74,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|74,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|75,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|75,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|75,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|75,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|75,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|75,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|75,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|75,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|76,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|76,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|76,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|76,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 50	|76,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|76,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|77,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|77,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|77,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|77,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|77,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|77,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 22	|77,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|77,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 54	|77,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|78,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|78,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|78,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	ret0	|80,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+
+@__label_25
+	pushnil	|81,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 51	|81,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|81,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|82,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|82,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|82,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|82,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 20	|82,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|82,18,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|82,19,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushf 0.0	|82,24,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|83,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|83,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|83,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|83,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 50	|83,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|83,16,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 0	|84,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|84,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|84,2,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushnil	|84,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 21	|84,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|84,5,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 22	|84,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	gload	|84,9,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushs 56	|84,11,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pushi 2	|85,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	callc	|85,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	pop	|85,0,/home/julian/RL-CollectiveTransport/argos/collectiveRlTransportNetworking.bzz
+	ret0	|0,1,(null)
