@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
+parser.add_argument("--name", default = None)
 parser.add_argument("--gsp_log_scale", default=False, action="store_true")
 parser.add_argument("--IL", default = False, action = "store_true")
 parser.add_argument("--gate", default = False, action = "store_true")
@@ -93,7 +94,10 @@ ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
 ax2.plot(last_10_axis, last_10_success_pct*100, c='k')
 ax2.set_ylabel('Success (%)')
 ax2.set_xlabel('Episodes')
-plt.title('Training Metrics')
+if args.name is not None:
+    plt.title(args.name)
+else:
+    plt.title('Training Metrics')
 plt.savefig(args.data_path+'Training_Metrics.png')
 
 

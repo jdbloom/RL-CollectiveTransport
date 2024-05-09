@@ -1,5 +1,5 @@
 ##----------------- ENV Parameters ------------------------------
-EXP_NAME: DDPG_GSP_2_Obs_bash_testing_2
+EXP_NAME: DQN_RGSP_2_Obs_bash
 ARGOS_FILE_NAME: collectiveRlTransport_bash.argos
 NUM_EPISODES: 100
 NUM_OBSTACLES: 2
@@ -12,7 +12,7 @@ PORT: 55556
 SEED: 123
 
 ##----------------- Actor Parameters -----------------------------
-LEARNING_SCHEME: DDPG
+LEARNING_SCHEME: DQN
 OPTIONS_PER_ACTION: 3
 MIN_MAX_ACTION: 1.0
 META_PARAM_SIZE: 1
@@ -20,7 +20,7 @@ PROX_FILTER_ANGLE_DEG: 60.0
 
 ##----------------- GSP Parameters --------------------------------
 GSP: True
-RECURRENT: False
+RECURRENT: True
 ATTENTION: False
 NEIGHBORS: True
 GSP_INPUT_SIZE: 4

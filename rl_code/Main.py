@@ -300,6 +300,8 @@ while not exp_done:
                 )
                 for i in range(len(gsp_reward)):
                     # print(f'Agent {i} adding {gsp_reward[i]}')
+                    if label > 0.2:
+                        print(f'{label:.2f}, {next_heading_gsp[i]:.2f}, {gsp_reward[i]:.2f}')
                     episode_gsp_rewards[i] += gsp_reward[i] 
 
                 old_cyl_ang = obj_stats[5]
@@ -352,6 +354,8 @@ while not exp_done:
                         new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                         for i in range(Utility.params['num_robots']):
                             # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
+                            if model.gsp_networks['learning_scheme'] == 'attention':
+                                model.store_gsp_transition(states[i], label, 0, 0, 0)
                             state = states[i]
                             action = old_heading_gsp[i]
                             reward = gsp_reward[i]
@@ -359,7 +363,10 @@ while not exp_done:
                             model.store_gsp_transition(state, action, reward, new_state, 0)
                     else:
                         for i in range(Utility.params['num_robots']):
-                            if args.independent_learning:
+                            if model.gsp_networks['learning_scheme'] == 'attention':
+                                state = np.array(old_agent_prox_flags)
+                                model.store_gsp_transition(state, label, 0, 0, 0)
+                            elif args.independent_learning:
                                 state = np.array(old_agent_prox_flags)
                                 action = old_heading_gsp[i]
                                 reward = gsp_reward[i]

@@ -137,9 +137,9 @@ class Agent(Actor):
 
         if heading_gsp is not None:
             if global_knowledge is not None:
-                env_obs = np.concatenate((env_obs, np.array([heading_gsp]), global_knowledge)) 
+                env_obs = np.concatenate((env_obs, np.array([np.degrees(heading_gsp/10)]), global_knowledge)) 
             else:
-                env_obs = np.concatenate((env_obs, np.array([heading_gsp]))) 
+                env_obs = np.concatenate((env_obs, np.array([np.degrees(heading_gsp/10)]))) 
         elif global_knowledge is not None:
             env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs   

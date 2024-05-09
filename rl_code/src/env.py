@@ -3,33 +3,35 @@ import numpy as np
 from collections import namedtuple
 from struct import pack, unpack, Struct
 
+def angle_normalize_unsigned_deg(a):
+  while a < 0: a += 360
+  while a >= 360: a -= 360
+  return a
+
+def angle_normalize_signed_deg(a):
+  while a < -180: a += 360
+  while a >= 180: a -= 360
+  return a
+
 def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots):
     gsp_reward = []
     label = 0
     if GSP:
-        # shift to get between 0 and 2 Pi
-        old_cyl_ang = (math.radians(old_cyl_ang) + math.pi)%(2*math.pi)
-        new_cyl_ang = (math.radians(cyl_ang) + math.pi)%(2*math.pi)
-        # find the angle difference
-        abs_diff = abs(old_cyl_ang-new_cyl_ang)
-        diff = min(abs_diff, 2*math.pi-abs_diff)
-        # find the directional difference
-        if old_cyl_ang < new_cyl_ang:
-            direction = 1 if (new_cyl_ang-old_cyl_ang) <= math.pi else -1
-        else:
-            direction = -1 if (old_cyl_ang-new_cyl_ang) <= math.pi else 1
-        # shift back and apply direction
-        diff *= direction
-        # normalize between -1 and 1
-        label=diff/math.pi
+        old_cyl_ang = angle_normalize_unsigned_deg(old_cyl_ang)
+        new_cyl_ang = angle_normalize_unsigned_deg(cyl_ang)
+        diff = angle_normalize_signed_deg(new_cyl_ang-old_cyl_ang)
+        diff = math.radians(diff)
+        # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
+        diff *= 10
+        label=diff
         x1 = math.cos(diff)
         y1 = math.sin(diff)                        
         for i in range(num_robots):
-            x2 = math.cos(next_heading_gsp[i] * math.pi)
-            y2 = math.sin(next_heading_gsp[i] * math.pi)
+            x2 = math.cos(next_heading_gsp[i]) 
+            y2 = math.sin(next_heading_gsp[i])
             error = np.dot([x1, y1], [x2, y2])
             gsp_reward.append(-1 + error)
-                
+        
     else:
         gsp_reward = [0 for i in range(num_robots)]
     

@@ -7,6 +7,17 @@ import os
 import matplotlib.pyplot as plt
 import pickle
 
+def angle_normalize_unsigned_deg(a):
+  while a < 0: a += 360
+  while a >= 360: a -= 360
+  return a
+
+def angle_normalize_signed_deg(a):
+  while a < -180: a += 360
+  while a >= 180: a -= 360
+  return a
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
 parser.add_argument("--second_path")
@@ -43,22 +54,16 @@ for ep in range(len(file_names)-1):
     gsp = data['gsp_heading']
     predicted_cyl_heading = []
     for i in range(len(data['cyl_angle'])-1):
-        predicted_cyl_heading.append(cyl_angle[i] + math.degrees(gsp[i+1]))
-        # shift to get between 0 and 2 Pi
-        old_cyl_ang = (math.radians(data['cyl_angle'][i]) + math.pi)%(2*math.pi)
-        new_cyl_ang = (math.radians(data['cyl_angle'][i+1]) + math.pi)%(2*math.pi)
-        # find the angle difference
-        abs_diff = abs(old_cyl_ang-new_cyl_ang)
-        diff = min(abs_diff, 2*math.pi-abs_diff)
-        # find the directional difference
-        if old_cyl_ang < new_cyl_ang:
-            direction = 1 if (new_cyl_ang-old_cyl_ang) <= math.pi else -1
-        else:
-            direction = -1 if (old_cyl_ang-new_cyl_ang) <= math.pi else 1
-        # shift back and apply direction
-        diff *= direction
+        predicted_cyl_heading.append(cyl_angle[i] + math.degrees(gsp[i+1]/10))
+        old_cyl_ang = angle_normalize_unsigned_deg(data['cyl_angle'][i])
+        new_cyl_ang = angle_normalize_unsigned_deg(data['cyl_angle'][i+1])
+        diff = angle_normalize_signed_deg(new_cyl_ang-old_cyl_ang)
+        diff = math.radians(diff)
+        # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
+        diff *= 10
+
         # normalize between -1 and 1
-        cyl_heading_diff.append((diff/math.pi))
+        cyl_heading_diff.append(diff)
         
     fig, (ax1, ax2) = plt.subplots(2, figsize=(20, 20), gridspec_kw={'height_ratios': [3, 1]})
     plt.rcParams.update({'font.size': 22})
