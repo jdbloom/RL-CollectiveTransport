@@ -325,12 +325,12 @@ void CCollectiveRLTransport::SimulateObstacles(){
    }
 
    CRange<Real> cXObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/2,
-      0
+      GetSpace().GetArenaLimits().GetMin().GetX()/4 + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetX()/3 - PRISM_PLACEMENT_RADIUS
    );
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
       );
 
    /** Generate Random Positions for the obstacles */

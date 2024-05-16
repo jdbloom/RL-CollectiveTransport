@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path")
+parser.add_argument("--name", default = None)
 parser.add_argument("--gsp_log_scale", default=False, action="store_true")
 parser.add_argument("--IL", default = False, action = "store_true")
 parser.add_argument("--gate", default = False, action = "store_true")
@@ -66,6 +67,9 @@ last_10_std = np.array([np.average(episode_std[i-10:i]) for i in range(10, episo
 last_10_gsp_std = np.array([np.std(episode_gsp_rewards[i-10:i]) for i in range(10, episode_gsp_rewards.shape[0], 10)])
 last_10_axis = np.arange(10, average_episode_rewards.shape[0], 10)
 last_10_success_pct = np.array([np.average(terminals[i-10:i]) for i in range(10, terminals.shape[0], 10)])
+
+for i, ep in enumerate(last_10_axis):
+    print(f'Model {ep} had Average Reward: {last_10_rewards[i]:.2f}, GSP Reward: {last_10_gsp_rewards[i]:.2f}, and Success Rate: {last_10_success_pct[i]}')
 # for i in range(episode_rewards.shape[1]):
 #     plt.plot(episode_rewards[:, i])
 # plt.plot(average_episode_rewards)
@@ -90,7 +94,10 @@ ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
 ax2.plot(last_10_axis, last_10_success_pct*100, c='k')
 ax2.set_ylabel('Success (%)')
 ax2.set_xlabel('Episodes')
-plt.title('Training Metrics')
+if args.name is not None:
+    plt.title(args.name)
+else:
+    plt.title('Training Metrics')
 plt.savefig(args.data_path+'Training_Metrics.png')
 
 

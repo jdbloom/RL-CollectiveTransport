@@ -8,7 +8,7 @@
     <system threads="0" />
     <experiment length="0"
                 ticks_per_second="10"
-                random_seed="$$seed$$" />
+                random_seed="123" />
   </framework>
 
   <!-- *************** -->
@@ -40,28 +40,28 @@
   <loop_functions library="build/argos/libcollectiveRlTransport"
                   label="collective_rl_transport"
                   data_file = "data.csv"
-                  num_robots = "$$num_robots$$"
-                  max_robot_failures = "$$max_robot_failures$$"
+                  num_robots = "4"
+                  max_robot_failures = "0"
 		              latest_failure_time = "1000"
-		              chance_failure = "$$chance_failure$$"
+		              chance_failure = "0.25"
                   goal = "4.5, 0"
                   threshold = "2"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "2"
-                  num_episodes = "$$num_episodes$$"
+                  num_episodes = "100"
                   episode_time = "4500"
                   time_out_reward = "0"
                   goal_reward = "0"
-                  pytorch_url = "tcp://localhost:$$pytorch_port$$"
+                  pytorch_url = "tcp://localhost:55556"
 		              alphabet_size = "1"
                   proximity_range = "1"
-                  num_obstacles = "$$num_obstacles$$"
-                  use_gate = "$$use_gate$$"
-                  gate_curriculum = "$$gate_curriculum$$"
+                  num_obstacles = "2"
+                  use_gate = "0"
+                  gate_curriculum = "0"
                   gate_update_frequency = "50"
                   gate_update_amount = "0.25"
-                  gate_minimum = "$$gate_minimum$$"
+                  gate_minimum = "4"
                   use_base_model = "0"/>
 
 
