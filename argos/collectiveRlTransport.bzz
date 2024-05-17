@@ -2,6 +2,7 @@ include "vec2.bzz"
 
 MAX_SPEED = 20.0
 MIN_SPEED = -MAX_SPEED
+count = 0
 
 function set_wheels_debug(Left, Right){
 	#log(id, " speeds: ", Left, " " , Right)
@@ -51,7 +52,8 @@ function step(){
     }
   }
   else {
-     if (proximity[0].value > 0.7){
+    
+    if (proximity[0].value > 0.7){
       count = count + 1
         if (count > 5) {
         log("setting gripping")

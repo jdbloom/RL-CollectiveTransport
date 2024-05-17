@@ -14,22 +14,22 @@
   <!-- *************** -->
   <!-- * Controllers * -->
   <!-- *************** -->
-  <controllers>
+    <controllers>
 
-    <buzz_controller_footbot id="fgc">
+    <buzz_controller_kheperaiv id="kivc">
       <actuators>
         <differential_steering implementation="default" />
         <range_and_bearing           implementation="default" />
-        <footbot_gripper                implementation="default" />
-        <footbot_turret                   implementation="default" />
+        <kheperaiv_gripper                implementation="default" />
+        <kheperaiv_turret                   implementation="default" />
       </actuators>
       <sensors>
         <range_and_bearing implementation="medium" medium="rab" show_rays="false" />
-        <footbot_proximity implementation = "default" show_rays = "true" />
+        <kheperaiv_proximity implementation = "default" show_rays = "true" />
       </sensors>
       <params bytecode_file = "build/argos/collectiveRlTransport.bo"
                          debug_file = "build/argos/collectiveRlTransport.bdb" />
-    </buzz_controller_footbot>
+    </buzz_controller_kheperaiv>
 
   </controllers>
 
@@ -44,8 +44,8 @@
                   max_robot_failures = "$$max_robot_failures$$"
 		              latest_failure_time = "1000"
 		              chance_failure = "$$chance_failure$$"
-                  goal = "4.5, 0"
-                  threshold = "2"
+                  goal = "1.0, 0"
+                  threshold = "0.424"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "2"
@@ -68,22 +68,21 @@
   <!-- *********************** -->
   <!-- * Arena configuration * -->
   <!-- *********************** -->
-  <arena size="20, 10, 1" center="0,0,0.5">
+  <arena size="3.048, 3.048, 1" center="0,0,0.5">
 
-    <box id="wall_north" size="20,0.1,0.5" movable="false">
-      <body position="0,4.9,0" orientation="0,0,0" />
+    <box id="wall_north" size="3.048,0.05,0.5" movable="false">
+      <body position="0,1.474,0" orientation="0,0,0" />
     </box>
-    <box id="wall_south" size="20,0.1,0.5" movable="false">
-      <body position="0,-4.9,0" orientation="0,0,0" />
+    <box id="wall_south" size="3.048,0.05,0.5" movable="false">
+      <body position="0,-1.474,0" orientation="0,0,0" />
     </box>
-    <box id="wall_east" size="0.1,10,0.5" movable="false">
-      <body position="9.9,0,0" orientation="0,0,0" />
+    <box id="wall_east" size="0.05,3.048,0.5" movable="false">
+      <body position="1.474,0,0" orientation="0,0,0" />
     </box>
-    <box id="wall_west" size="0.1,10,0.5" movable="false">
-      <body position="-9.9,0,0" orientation="0,0,0" />
+    <box id="wall_west" size="0.05,3.048,0.5" movable="false">
+      <body position="-1.474,0,0" orientation="0,0,0" />
     </box>
   </arena>
-
   <!-- ******************* -->
   <!-- * Physics engines * -->
   <!-- ******************* -->
@@ -102,19 +101,16 @@
   <!-- * Visualization * -->
   <!-- ****************** -->
   <visualization>
-    <!--<qt-opengl>
+    <qt-opengl>
         <user_functions label="collective_rl_transport_qtuser_functions" />
         <camera>
           <placements>
-            <placement index="0" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
-            <placement index="1" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
-            <placement index="2" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
-            <placement index="3" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
-            <placement index="4" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
-            <placement index="5" position="-0.0949266,-14.2218,39.2676" look_at="-0.0927412,-13.8906,38.324" up="0.00622709,0.943554,0.331159" lens_focal_length="65" />
+            <placement index="0" position="0.0,-3.82888,9.65782" look_at="0.0,-3.45302,8.73114" up="0.0,0.926654,0.375866" lens_focal_length="65" />
+            <placement index="1" position="3.82726,-3.79865,9.79404" look_at="3.48266,-3.44168,8.92581" up="-0.603008,0.624665,0.496161" lens_focal_length="65" />
+            <placement index="2" position="0.0,0.0,10.0" look_at="0.0,0.0,9.5" up="0.0,0.943554,0.331159" lens_focal_length="65" />
           </placements>
         </camera>
-      </qt-opengl>-->
+      </qt-opengl>
   </visualization>
 
 </argos-configuration>

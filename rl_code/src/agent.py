@@ -73,8 +73,6 @@ class Agent(Actor):
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
-<<<<<<< HEAD
-=======
 
         if self._neighbors:
             self.gsp_observation = []
@@ -82,7 +80,6 @@ class Agent(Actor):
                 self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
         else:
             self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
->>>>>>> master
 
         if self._neighbors:
             self.gsp_observation = []

@@ -201,7 +201,7 @@ void CCollectiveRLTransport::SimulateRobots() {
    CKheperaIVEntity* pcKIV;
    CVector3 cPos;
 
-      CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+   CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
    Real max_length = 0;
    for(size_t i = 0; i < PRISM_POINTS.size(); i++) {
       for(size_t j = 0; j < PRISM_POINTS[0].size(); j++) {
@@ -259,20 +259,20 @@ void CCollectiveRLTransport::SimulateRobots() {
         }
       }
    }
-
+   LOG<<"prism placement radius "<<PRISM_PLACEMENT_RADIUS<<std::endl;
    CRange<Real> cXPrismRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
-      -PRISM_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX()/4 -PRISM_PLACEMENT_RADIUS
       );
       
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + 2*PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - 2*PRISM_PLACEMENT_RADIUS
       );
 
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXPrismRange),
-               m_pcRNG->Uniform(cYRange),
+      cPos.Set(-0.875,
+               0,
                0.0);
       m_vecPrismPos.push_back(cPos);
       //Generate Failure Times for all episodes
@@ -324,13 +324,30 @@ void CCollectiveRLTransport::SimulateObstacles(){
      AddEntity(*pcC);
    }
 
+   CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+   Real max_length = 0;
+   for(size_t i = 0; i < PRISM_POINTS.size(); i++) {
+      for(size_t j = 0; j < PRISM_POINTS[0].size(); j++) {
+         Real point_distance = Distance(origin, PRISM_POINTS[i][j]);
+         LOG<<"point: " << point_distance<<std::endl;
+         if(point_distance > max_length) {
+            max_length = point_distance;
+         }
+      }
+   }
+
+   ROBOT_PRISM_DISTANCE   = max_length + KHEPERAIV_RADIUS;
+   
+   // Adding an offset just makes the robots start slightly farther away
+   PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + KHEPERAIV_RADIUS;
+
    CRange<Real> cXObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/4 + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetX()/3 - PRISM_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX()/4 + CYLINDER_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetX()/3 - CYLINDER_PLACEMENT_RADIUS
    );
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
       );
 
    /** Generate Random Positions for the obstacles */
