@@ -226,16 +226,9 @@ class NetworkAids(Hyperparameters):
         elif not recurrent:
             actions = actions.unsqueeze(1)
 
-        if intention and recurrent:
-            meta_param_obs = self.build_ee_input(states, actions, states_, rewards)
-            meta_param = networks['ee'](meta_param_obs)
-            meta_param_clone = T.clone(meta_param).detach()
-            states = self.build_ac_input(states, meta_param)
-            states_ = self.build_ac_input(states_, meta_param_clone)
-            states_clone = T.clone(states).detach()
-            #reformatting inputs
-            actions = actions[:,-1,:]
-            rewards = rewards[:,-1]
+        if intention:
+            actions = actions[:,0,:2]
+
         if edge_index is not None:
             target_actions = networks['target_actor'](states_, indices)
             q_value_ = networks['target_critic']([states_, target_actions], indices)

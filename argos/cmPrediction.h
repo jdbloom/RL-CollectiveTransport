@@ -14,11 +14,21 @@
 // #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #include <argos3/plugins/robots/kheperaiv/simulator/dynamics2d_kheperaiv_model.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
+#include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_gripping.h>
+#include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_engine.h>
+#include <argos3/plugins/simulator/physics_engines/physics_cylinder_model.h>
+#include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_model.h>
+#include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_stretchable_object_model.h>
+
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
 //#include <server/ModelServerClient.hpp>
 using namespace argos;
+
+namespace argos {
+   class CDynamics2DEngine;
+}
 
 class CCMPrediction : public CBuzzLoopFunctions {
 
@@ -146,6 +156,8 @@ private:
    /** Initial cylinder positions (index = # episode) */
    std::vector<CVector3> m_vecCylinderPos;
 
+   std::vector<CVector3> m_vecCylinderModPos;
+
    /** Initial cylinder Orientations (index = # episode) */
    std::vector<CQuaternion> m_vecCylinderOrient;
 
@@ -244,6 +256,8 @@ private:
 
    bool m_bSendZMQ;
 
+   cpConstraint* cmModMerger;
+
 
 
 private:
@@ -257,6 +271,8 @@ private:
    bool IsEpisodeFinished();
 
    Real PredictionDistance(int robot_index);
+
+   CVector2 CoM();
 
    void GetObservations(EEpisodeState e_state);
 

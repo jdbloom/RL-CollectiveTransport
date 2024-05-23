@@ -38,17 +38,22 @@ print('. . . Plotting Data')
 
 pos_x_cyl = np.asarray(data['cyl_x_cm'])
 pos_y_cyl = np.asarray(data['cyl_y_cm'])
-pos_x_robots = np.empty([len(data['robots_x_pos']),args.num_robots])
-pos_y_robots = np.empty([len(data['robots_y_pos']),args.num_robots])
-pred_x_robots = np.empty([len(data['agent_predictions_x']),args.num_robots])
-pred_y_robots = np.empty([len(data['agent_predictions_y']),args.num_robots])
-vec_robot_force = np.empty([len(data['agent_predictions_y']),args.num_robots,2])
-dis_x_t = np.empty([len(data['agent_predictions_y']),args.num_robots])
-dis_y_t = np.empty([len(data['agent_predictions_y']),args.num_robots])
+pos_mx_cyl = np.asarray(data['cyl_mod_x'])
+pos_my_cyl = np.asarray(data['cyl_mod_y'])
+pos_ax_cyl = np.asarray(data['cyl_center_x'])
+pos_ay_cyl = np.asarray(data['cyl_center_y'])
+n_robots = int(args.num_robots)
+pos_x_robots = np.empty([len(data['robots_x_pos']),n_robots])
+pos_y_robots = np.empty([len(data['robots_y_pos']),n_robots])
+pred_x_robots = np.empty([len(data['agent_predictions_x']),n_robots])
+pred_y_robots = np.empty([len(data['agent_predictions_y']),n_robots])
+vec_robot_force = np.empty([len(data['agent_predictions_y']),n_robots,2])
+dis_x_t = np.empty([len(data['agent_predictions_y']),n_robots])
+dis_y_t = np.empty([len(data['agent_predictions_y']),n_robots])
 avg_forces = np.empty([len(data['agent_predictions_y'])])
 std_forces = np.empty([len(data['agent_predictions_y'])])
-mag_forces = np.empty([len(data['agent_predictions_y']),args.num_robots])
-# vec_robot_dir = np.empty([len(data['agent_predictions_y']),args.num_robots])
+mag_forces = np.empty([len(data['agent_predictions_y']),n_robots])
+# vec_robot_dir = np.empty([len(data['agent_predictions_y']),n_robots])
 
 for i in range(len(pos_x_robots)):
     # print(data['robots_x_pos'][i])
@@ -63,7 +68,7 @@ for i in range(len(pos_x_robots)):
     # print("Mag", mag)
     # print("ang", ang)
     vrf_temp = []
-    for j in range(args.num_robots):
+    for j in range(n_robots):
         vrf_temp.append(np.array([math.cos(ang[j]), math.sin(ang[j])]) * mag[j])
         # print(vrf_temp[-1], mag[j])
     vec_robot_force[i] = vrf_temp
@@ -98,8 +103,10 @@ opacity_change = int(visible_interval / opaqueness)
 
 
 cyl = axs0.plot([],[], c=CB_color_cycle[0], linewidth=3)
-pos_r = [[] for i in range(args.num_robots)]
-pos_p = [[] for i in range(args.num_robots)]
+cylm = axs0.plot([],[], c=CB_color_cycle[1], linewidth=3)
+cyla = axs0.plot([],[], c=CB_color_cycle[2], linewidth=3)
+pos_r = [[] for i in range(n_robots)]
+pos_p = [[] for i in range(n_robots)]
 dis_x = axs1.plot([],[], c='r')
 dis_y = axs1.plot([],[], c='b')
 std_dis_x = [axs1.fill_between([],[],[], color='r', alpha=0.25)]
@@ -108,7 +115,7 @@ force_sum = axs2.plot([],[],c='r')
 force_std = [axs2.fill_between([],[],[], color='r', alpha = 0.25)]
 forces_robots = []
 vec_rob_f = []
-for i in range(args.num_robots):
+for i in range(n_robots):
     vec_rob_f.append(axs0.quiver([],[],[],[], color=CB_color_cycle[1]))
     forces_robots.append(axs2.plot([],[],c=CB_color_cycle[i]))
     for j in range(opaqueness):
@@ -132,6 +139,8 @@ plt.title('Robot Positions and Predictions in relation to Center of Mass')
 
 def animate(i):
     cyl[0].set_data(pos_x_cyl[max(i-visible_interval, 0):i],pos_y_cyl[max(i-visible_interval, 0):i])
+    cylm[0].set_data(pos_mx_cyl[max(i-visible_interval, 0):i],pos_y_cyl[max(i-visible_interval, 0):i])
+    cyla[0].set_data(pos_ax_cyl[max(i-visible_interval, 0):i],pos_y_cyl[max(i-visible_interval, 0):i])
     std_dis_x[0].remove()
     std_dis_y[0].remove()
     dis_x[0].set_data(np.linspace(0,i,i),dis_x_t[:i])
@@ -143,7 +152,7 @@ def animate(i):
     force_sum[0].set_data(np.linspace(0,i,i),avg_forces[:i])
     force_std[0].remove()
     force_std[0] = axs2.fill_between(np.linspace(0,i,i),avg_forces[:i]-std_forces[:i],avg_forces[:i]+std_forces[:i],color='r', alpha = 0.25)
-    for j in range(args.num_robots):
+    for j in range(n_robots):
         vec_rob_f[j].remove()
         forces_robots[j][0].set_data(np.linspace(0,i,i),mag_forces[:i,j])
         for k in range(opaqueness):
@@ -151,18 +160,18 @@ def animate(i):
             end = max(i - (opacity_change * (1 + k)), 0)
             pos_r[j][k].set_data(pos_x_robots[end:start,j],pos_y_robots[end:start,j])
             pos_p[j][k].set_data(pred_x_robots[end:start,j],pred_y_robots[end:start,j])
-        vec_rob_f[j] = axs0.quiver(pos_x_robots[i,j],pos_y_robots[i,j],*vec_robot_force[i,j], color=CB_color_cycle[4], width=0.005, scale_units='xy', scale=1)
+        vec_rob_f[j] = axs0.quiver(pos_x_robots[i,j],pos_y_robots[i,j],*vec_robot_force[i,j], color=CB_color_cycle[4], width=0.005)
         # vec_rob_f[j] = axs0.quiver(pos_x_robots[i,j],pos_y_robots[i,j],*vec_robot_force[i,j], color=CB_color_cycle[4], width=0.005, scale_units='xy', scale=1000)
-    return cyl[0], *list(chain.from_iterable(pos_r)), *list(chain.from_iterable(pos_p)), *vec_rob_f, dis_x[0], dis_y[0], std_dis_x[0], std_dis_y[0], force_sum[0], force_std[0], *list(chain.from_iterable(forces_robots))
+    return cyl[0], cylm[0],cyla[0], *list(chain.from_iterable(pos_r)), *list(chain.from_iterable(pos_p)), *vec_rob_f, dis_x[0], dis_y[0], std_dis_x[0], std_dis_y[0], force_sum[0], force_std[0], *list(chain.from_iterable(forces_robots))
             
 ani = animation.FuncAnimation(fig, animate, interval=20, blit=True, frames = len(pos_x_robots)-1, repeat = False)
 
 axs0.set_xlim([-1,1])
-axs0.set_ylim([-0.25,1.75])
+axs0.set_ylim([-0.75,1.25])
 axs1.set_xlim([0,len(pos_x_robots)])
 axs1.set_ylim([0,0.5])
 axs2.set_xlim([0,len(pos_x_robots)])
-axs2.set_ylim([0,2000])
+axs2.set_ylim([0,150])
 
 # writer = animation.PillowWriter(fps=15, metadata=dict(artist='Chandler Garcia'), bitrate=1800)
 

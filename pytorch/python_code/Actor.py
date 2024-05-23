@@ -42,9 +42,9 @@ class Actor(NetworkAids):
 
         self.network_input_size = self.n_obs
         if self.intention:
-            self.network_input_size += 1  
+            self.network_input_size += 2
         if self.intention_neighbors:
-            self.intention_network_input = 2+2*2  # [own prox, neighbors prox, own prev gsp, neighbors prev gsp]
+            self.intention_network_input = 4+3*2  # [own pred ang, neighbors pred ang, own prev gsp, neighbors prev gsp, own pred len]
             if self.attention_intention:
                 self.attention_observation = [[0 for _ in range(self.intention_network_input)] for _ in range(self.seq_len)]
             #TODO write logic for recurrent and attention
@@ -121,35 +121,35 @@ class Actor(NetworkAids):
                 if self.recurrent_intention:
                     self.intention_networks = self.build_RDDPG_intention()
                     self.intention_networks['learning_scheme'] = 'RDDPG'
-                    self.intention_networks['n_actions'] = 1
-                    self.intention_networks['replay'] = SequenceReplayBuffer(max_sequence=100, num_observations = self.intention_network_input, num_actions = 1, seq_len = 5)
+                    self.intention_networks['n_actions'] = 2
+                    self.intention_networks['replay'] = SequenceReplayBuffer(max_sequence=100, num_observations = self.intention_network_input, num_actions = 2, seq_len = 5)
                     self.intention_networks['learn_step_counter'] = 0
                 else:
                     self.intention_networks = self.build_DDPG_intention()
                     self.intention_networks['learning_scheme'] = 'DDPG'
-                    self.intention_networks['n_actions'] = 1
-                    self.intention_networks['replay'] = ReplayBuffer(self.mem_size, self.intention_network_input, 1, 'Continuous', use_intention = True)
+                    self.intention_networks['n_actions'] = 2
+                    self.intention_networks['replay'] = ReplayBuffer(self.mem_size, self.intention_network_input, 2, 'Continuous', use_intention = True)
                     self.intention_networks['learn_step_counter'] = 0
             elif learning_scheme == 'TD3':
                 if self.recurrent_intention:
                     self.intention_networks = self.build_RTD3_intention()
                     self.intention_networks['learning_scheme'] = 'RTD3'
-                    self.intention_networks['n_actions']  = 1
-                    self.intention_networks['replay'] = SequenceReplayBuffer(max_sequence=100, num_observations = self.intention_network_input, num_actions = 1, seq_len = 5)
+                    self.intention_networks['n_actions']  = 2
+                    self.intention_networks['replay'] = SequenceReplayBuffer(max_sequence=100, num_observations = self.intention_network_input, num_actions = 2, seq_len = 5)
                     self.intention_networks['learn_step_counter'] = 0
                 else:
                     self.intention_networks = self.build_TD3_intention()
                     self.intention_networks['learning_scheme'] = 'TD3'
-                    self.intention_networks['n_actions'] = 1
-                    self.intention_networks['replay'] = ReplayBuffer(self.mem_size, self.intention_network_input, 1, 'Continuous', use_intention = True)
+                    self.intention_networks['n_actions'] = 2
+                    self.intention_networks['replay'] = ReplayBuffer(self.mem_size, self.intention_network_input, 2, 'Continuous', use_intention = True)
                     self.intention_networks['learn_step_counter'] = 0
             else:
                 raise Exception('[Error] Intention learning scheme is not recognised: '+learning_scheme)
 
     def build_DDPG_intention(self):
-        actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.intention_network_input,
+        actor_nn_args = {'id':self.id, 'num_actions':2, 'observation_size':self.intention_network_input,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
-        critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.intention_network_input}
+        critic_nn_args = {'id':self.id, 'num_actions':2, 'lr': self.lr, 'observation_size':self.intention_network_input}
         if self.gnn_intention:
             actor_nn_args['hidden_channels'] = self.hidden_channels
             actor_nn_args['num_heads'] = self.num_heads
@@ -158,9 +158,9 @@ class Actor(NetworkAids):
         return self.make_DDPG_networks(actor_nn_args, critic_nn_args, self.gnn_intention)
     
     def build_RDDPG_intention(self):
-        actor_nn_args = {'id':self.id, 'num_actions':1, 'observation_size':self.recurrent_intention_network_input,
+        actor_nn_args = {'id':self.id, 'num_actions':2, 'observation_size':self.recurrent_intention_network_input,
                          'lr': self.lr, 'min_max_action':self.min_max_action}
-        critic_nn_args = {'id':self.id, 'num_actions':1, 'lr': self.lr, 'observation_size':self.recurrent_intention_network_input}
+        critic_nn_args = {'id':self.id, 'num_actions':2, 'lr': self.lr, 'observation_size':self.recurrent_intention_network_input}
         ee_nn_args = {'observation_size': 18, 'hidden_size':self.meta_param_size, 'meta_param_size': self.meta_param_size, 'batch_size': self.batch_size, 'num_layers':1, 'lr': self.ee_lr}
         Networks = self.make_DDPG_networks(actor_nn_args, critic_nn_args)
         Networks['ee'] = self.make_EE_networks(ee_nn_args)
@@ -195,6 +195,7 @@ class Actor(NetworkAids):
         elif networks['learning_scheme'] in {'DDPG', 'RDDPG'}:
             actions = self.DDPG_choose_action(observation, networks, edge_index)
             if not test:
+                norm = T.normal(0.0, self.noise, size = (1, networks['n_actions']))
                 actions+=T.normal(0.0, self.noise, size = (1, networks['n_actions'])).to(networks['actor'].device)
             actions = T.clamp(actions, -self.min_max_action, self.min_max_action)
             return actions[0].cpu().detach().numpy()

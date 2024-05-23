@@ -11,7 +11,7 @@ using namespace argos;
 /****************************************/
 
 static const std::string KIV_CONTROLLER = "kivc";
-static const Real CYLINDER_RADIUS           = 0.12;  // m
+static const Real CYLINDER_RADIUS           = 0.32;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
 static const Real OBSTACLE_RADIUS           = 0.15;  // m
@@ -38,6 +38,17 @@ static const std::string ACTIONS_DESCRIPTIONS[] = {
    "lwheel",
    "rwheel"
 };
+
+int BeginFunc(cpArbiter* pt_arb,
+               cpSpace* pt_space,
+               void* p_data) {
+   /* Get the shapes involved */
+   CP_ARBITER_GET_SHAPES(pt_arb, ptShape_1, ptShape_2);
+   auto* cyl_1 = reinterpret_cast<CDynamics2DGrippable*>(ptShape_1->data);
+   auto* cyl_2 = reinterpret_cast<CDynamics2DGrippable*>(ptShape_2->data);
+   
+   return cyl_1->GetEmbodiedEntity().GetRootEntity().GetId() != "Cylinder_2" || cyl_2->GetEmbodiedEntity().GetRootEntity().GetId() != "Cylinder_2";
+}
 
 /****************************************/
 /****************************************/
@@ -86,7 +97,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       LOG << "Attributes taken from argos file" << std::endl;
 
       /* Stats to be sent to Data: */
-      m_unNumStats = 6; // two I think useless variables, robot velocity x and y, robot prediction x and y
+      m_unNumStats = 8; // two I think useless variables, robot velocity x and y, robot prediction x and y
 
       /*
        * Connect to PyTorch
@@ -130,7 +141,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
-      m_vecObjStats.resize(6, 0.0);
+      m_vecObjStats.resize(8, 0.0);
       // DEBUG("Resized vectors for observations, rewards, stats, and robot stats\n");
 
       // m_xOffsetFromRobot.resize(m_unNumRobots);
@@ -191,21 +202,48 @@ void CCMPrediction::SimulateRobots() {
           CQuaternion(),
           true,
           CYLINDER_RADIUS,
-          CYLINDER_HEIGHT,
+          CYLINDER_HEIGHT/2,
           CYLINDER_MASS);
        AddEntity(*m_pcCylinder);
        /* Create the center of mass CM modifier Cylinder */
-      //  m_pcCylinderCMModifier = new CCylinderEntity(
-      //    "Cylinder_2",
-      //    CVector3(),
-      //    CQuaternion(),
-      //    true,
-      //    CYLINDER_RADIUS / 8,
-      //    CYLINDER_HEIGHT / 8,
-      //    CYLINDER_MASS);
+       m_pcCylinderCMModifier = new CCylinderEntity(
+         "Cylinder_2",
+         CVector3(),
+         CQuaternion(),
+         true,
+         CYLINDER_RADIUS / 8,
+         CYLINDER_HEIGHT,
+         CYLINDER_MASS);
       //  m_pcCylinderCMModifier->u = 1.0;
-      //  AddEntity(*m_pcCylinderCMModifier);
+       AddEntity(*m_pcCylinderCMModifier);
+       
+      CDynamics2DModel& cModel = *reinterpret_cast<CDynamics2DModel*>(dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinder->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody()->data);
+
+       cpSpaceAddCollisionHandler(
+         cModel.GetDynamics2DEngine().GetPhysicsSpace(), 
+         CDynamics2DEngine::SHAPE_GRIPPABLE, 
+         CDynamics2DEngine::SHAPE_GRIPPABLE, 
+         BeginFunc, 
+         nullptr, 
+         nullptr, 
+         nullptr, 
+         nullptr);
+
+      cpBody* grippable_cyl_body = dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinder->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody();
+
+      cpBody* modifier_body = dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinderCMModifier->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody();
+      
+      // m_fRestLength = cpvdist(cpBodyGetPos(ptGripperBody),
+      //                         m_tGrippeeAnchor);
+
+      cmModMerger = cpSpaceAddConstraint(cModel.GetDynamics2DEngine().GetPhysicsSpace(),
+                              cpPinJointNew(
+                                 grippable_cyl_body,
+                                 modifier_body,
+                                 cpvzero,
+                                 cpvzero));
    }
+                              
 
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
@@ -263,6 +301,9 @@ void CCMPrediction::SimulateRobots() {
       m_yEstimate.push_back(0.0);
    }
 
+   /* Radius for CoM distribution offset :  */
+   CRange<Real> CoMDistOffset(0.0, CYLINDER_RADIUS - CYLINDER_RADIUS /8);
+
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
@@ -270,6 +311,16 @@ void CCMPrediction::SimulateRobots() {
                0.0,
                0.0);
       m_vecCylinderPos.push_back(cPos);
+
+      CRadians cModRot = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
+      Real fRadiusOffset = m_pcRNG->Uniform(CoMDistOffset);
+      CVector3 cModPos(
+            CVector3(fRadiusOffset,
+                     CRadians::PI_OVER_TWO,
+                     cModRot));
+      cModPos.SetZ(CYLINDER_HEIGHT);
+      m_vecCylinderModPos.push_back(cModPos);
+
       CQuaternion cCylOrient(cOffset + CRadians::PI, CVector3::Z);
       m_vecCylinderOrient.push_back(cCylOrient);
 
@@ -305,24 +356,44 @@ void CCMPrediction::PlaceRobots(UInt32 un_episode){
        m_cOldCylinderPos = m_vecCylinderPos[un_episode];
        /* The placements we chose are collision-free by construction, no need to
         * check for collisions */
-       MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
-                  m_vecCylinderPos[un_episode],      // position
-                  CQuaternion(),                     // orientation
-                  false,                             // not a check
-                  true);                             // ignore collisions
+
+      CDynamics2DModel& cModel = *reinterpret_cast<CDynamics2DModel*>(dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinder->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody()->data);
+
+      cpSpaceRemoveConstraint(cModel.GetDynamics2DEngine().GetPhysicsSpace(), cmModMerger);
+
+      MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
+                 m_vecCylinderPos[un_episode],      // position
+                 CQuaternion(),                     // orientation
+                 false,                             // not a check
+                 true);                             // ignore collisions
+
+      MoveEntity(m_pcCylinderCMModifier->GetEmbodiedEntity(),
+                m_vecCylinderModPos[un_episode],
+                CQuaternion(),
+                false,
+                true);
+
+   cpBody* grippable_cyl_body = dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinder->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody();
+
+   cpBody* modifier_body = dynamic_cast<CDynamics2DSingleBodyObjectModel&>(m_pcCylinderCMModifier->GetEmbodiedEntity().GetPhysicsModel(0)).GetBody();
+       
+      // m_fRestLength = cpvdist(cpBodyGetPos(ptGripperBody),
+      //                         m_tGrippeeAnchor);
+
+      cmModMerger = cpSpaceAddConstraint(cModel.GetDynamics2DEngine().GetPhysicsSpace(),
+                              cpPinJointNew(
+                                 grippable_cyl_body,
+                                 modifier_body,
+                                 cpvzero,
+                                 cpvzero));
       
-      //  MoveEntity(m_pcBox->GetEmbodiedEntity(), // body
-      //             m_vecCylinderPos[un_episode],      // position
-      //             m_vecCylinderOrient[un_episode],   // orientation
-      //             false,                             // not a check
-      //             true);                             // ignore collisions
-       for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      for(size_t i = 0; i < m_vecRobots.size(); ++i) {
 //          DEBUG("Placing Robot %d : x %f, y %f, z %f, theta %f \n", m_vecRobots[i]->GetEmbodiedEntity().GetContext(), m_vecRobotPos[un_episode][i].GetX(), m_vecRobotPos[un_episode][i].GetY(), m_vecRobotPos[un_episode][i].GetZ(), m_vecRobotOrient[un_episode][i].GetZ());
-          MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
-                     m_vecRobotPos[un_episode][i],        // position
-                     m_vecRobotOrient[un_episode][i],     // orientation
-                     false,                               // not a check
-                     true);                               // ignore collisions
+         MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
+                    m_vecRobotPos[un_episode][i],        // position
+                    m_vecRobotOrient[un_episode][i],     // orientation
+                    false,                               // not a check
+                    true);                               // ignore collisions
        }
        LOG<<"Placed Robots in Simulation"<<std::endl;
     } else{
@@ -418,10 +489,8 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
    CQuaternion cCylinderOrient =
       m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
-   // CVector3& cCylinderPos =
-   //    m_pcBox->GetEmbodiedEntity().GetOriginAnchor().Position;
-   // CQuaternion cCylinderOrient =
-   //    m_pcBox->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+   CVector3& cCylinderModPos = 
+      m_pcCylinderCMModifier->GetEmbodiedEntity().GetOriginAnchor().Position;
    
    CRadians cObjZ, cObjY, cObjX;
 
@@ -433,6 +502,8 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+   m_vecObjStats[6] = cCylinderModPos.GetX();
+   m_vecObjStats[7] = cCylinderModPos.GetY();
    // DEBUG("Positions and Orientations Found\n");
 
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
@@ -658,48 +729,6 @@ bool CCMPrediction::IsExperimentFinished() {
 /****************************************/
 /****************************************/
 
-/*
-Real CCMPrediction::PredictionDistance(int robot_index){
- // Returns a value between 0 and 1 of the distance between how good the guess is, the reward for a guess farther than 0.5 should be 0
-    // Math to get vector of robot to gripper anchor and then robot anchor to what the predicted object center
-    // of mass is, then the euclidian distance between the predicted and actual
-    CVector3& cCMObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position; // TODO : This is the entity's origin anchor, not center of mass, when using Julian's code, change it to be the center of mass of the object
-
-    CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
-
-    CVector2 cPredictionModifier = CVector2(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index]);
-
-//    CVector2 cPredictedCM = cForceVector + cPredictionModifier;
-    CVector2 cRobotToObject = CVector2(cCMObject.GetX(), cCMObject.GetY()) - CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
-    CRadians angleToRobot = cRobotToObject.Angle();
-    cPredictionModifier.Rotate(angleToRobot);
-    CVector2 cGripAnchor = cRobotToObject - CVector2(CYLINDER_RADIUS, 0).Rotate(angleToRobot); // NOTE : This is the hotfix for not being perpendicular to object at all times
-    CVector2 cGlobalFrameGripAnchor = cGripAnchor + CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
-    CVector2 cPredictedCM = cGlobalFrameGripAnchor + cPredictionModifier;
-//    CVector2 cPredictedCM = CVector2(cCenterRobot.Getx(), cCenterRobot.GetY()) + cPredictionModifier;
-    CVector2 cPredictedFromActual = CVector2(cCMObject.GetX(), cCMObject.GetY()) - cPredictedCM;
-    Real dis = cPredictedFromActual.Length();
-//    DEBUG("ROBOT ID %d, Modifier X : %f, Modifier Y %f \n Difference Vector : %f, %f, \n distance : %f\n", robot_index, m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index], cPredictedFromActual.GetX(), cPredictedFromActual.GetY(), dis);
-    dis = std::min(dis, 0.99);
-    return dis;
-}
-*/
-
-
-// Real CCMPrediction::PredictionDistance(int robot_index){
-//    CVector3& cCenterObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-//    CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
-//    CVector2 cPredictionModifier = CVector2(m_xOffsetFromRobot[robot_index], m_yOffsetFromRobot[robot_index]);
-//    CQuaternion cCylinderOrient =
-//       m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
-//    CRadians cObjZ, cObjY, cObjX;
-//    cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
-//    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
-//    CRadians cOffset = robot_index * cSlice + cObjZ;
-//    cPredictionModifier.Rotate(cOffset);
-//    CVector2 cPredictedFromActual = CVector2(cCenterRobot.GetX(), cCenterRobot.GetY());
-// }
-
 Real CCMPrediction::PredictionDistance(int robot_index){
    CVector3& cCenterRobot = m_vecRobots[robot_index]->GetEmbodiedEntity().GetOriginAnchor().Position;
    CVector3& cCenterObject = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
@@ -715,7 +744,8 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    CRadians guessAngleModified = (cVecRobot2Cylinder.Angle() + m_AngleFromRCV[robot_index]).SignedNormalize();
    CVector2 cVecGuess(m_LengthOffsetFromRobot[robot_index], guessAngleModified);
    CVector2 cVecPrediction(cCenterRobot.GetX() + cVecGuess.GetX(), cCenterRobot.GetY() + cVecGuess.GetY());
-   CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCenterObject.GetX(), cVecPrediction.GetY() - cCenterObject.GetY());
+   CVector2 cCoMVec = CoM();
+   CVector2 cVecPredictedFromActual(cVecPrediction.GetX() - cCoMVec.GetX(), cVecPrediction.GetY() - cCoMVec.GetY());
    m_yEstimate[robot_index] = cVecPrediction.GetY();
    m_xEstimate[robot_index] = cVecPrediction.GetX();
    Real dis = cVecPredictedFromActual.Length();
@@ -724,10 +754,20 @@ Real CCMPrediction::PredictionDistance(int robot_index){
    return dis;
 }
 
-
-
 /****************************************/
 /****************************************/
+
+CVector2 CCMPrediction::CoM(){
+   CVector3& cCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector3& cModPos = m_pcCylinderCMModifier->GetEmbodiedEntity().GetOriginAnchor().Position;
+   Real x = (cCylinderPos.GetX() * CYLINDER_MASS + cModPos.GetX() * CYLINDER_MASS) / (CYLINDER_MASS + CYLINDER_MASS);
+   if(x == NULL){
+      CVector2 ret(0,0);
+      return ret;}
+   Real y = (cCylinderPos.GetY() * CYLINDER_MASS + cModPos.GetY() * CYLINDER_MASS) / (CYLINDER_MASS + CYLINDER_MASS);
+   CVector2 cCoM(x,y);
+   return cCoM;
+}
 
 /**
  * Executes user-defined logic when the experiment finishes.
@@ -860,12 +900,16 @@ void CCMPrediction::CalculateRobotStats(){
      Real magnitude = Sqrt((cRobotPos.GetX() - deltaX)*(cRobotPos.GetX() - deltaX)
                             + (cRobotPos.GetY() - deltaY)*(cRobotPos.GetY() - deltaY));
 
+      CVector2 pos = CoM();
+
      m_vecStats[i * m_unNumStats + 0] = magnitude;
      m_vecStats[i * m_unNumStats + 1] = ToDegrees(cRobotZ).GetValue();
      m_vecStats[i * m_unNumStats + 2] = deltaX;
      m_vecStats[i * m_unNumStats + 3] = deltaY;
      m_vecStats[i * m_unNumStats + 4] = m_xEstimate[i];
      m_vecStats[i * m_unNumStats + 5] = m_yEstimate[i];
+     m_vecStats[i * m_unNumStats + 6] = pos.GetX();
+     m_vecStats[i * m_unNumStats + 7] = pos.GetY();
    }
 }
 

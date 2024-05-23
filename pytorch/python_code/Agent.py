@@ -60,9 +60,9 @@ class Agent(Actor):
     def make_agent_state(self, env_obs, heading_intention=None, global_knowledge=None):
         if heading_intention is not None:
             if global_knowledge is not None:
-                env_obs = np.concatenate((env_obs, np.array([heading_intention]), global_knowledge)) 
+                env_obs = np.concatenate((env_obs, heading_intention, global_knowledge)) 
             else:
-                env_obs = np.concatenate((env_obs, np.array([heading_intention]))) 
+                env_obs = np.concatenate((env_obs, heading_intention)) 
         elif global_knowledge is not None:
             env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs   
@@ -161,65 +161,26 @@ class Agent(Actor):
                 observation = observation.reshape(1, observation.shape[0]).repeat(self.n_agents, axis = 0)
             return self.choose_action(observation, self.intention_networks, edge_index, test) 
 
-    def filter_prox_values(self, prox_values, angle_to_cyl):
-        if angle_to_cyl > 0:
-            if angle_to_cyl > 180-self.prox_filter_angle:
-                cw_lim = angle_to_cyl + self.prox_filter_angle - 360
-            else:
-                cw_lim = angle_to_cyl+self.prox_filter_angle
-            ccw_lim = angle_to_cyl - self.prox_filter_angle
-        elif angle_to_cyl < 0:
-            if angle_to_cyl < -180 +self.prox_filter_angle:
-                ccw_lim = angle_to_cyl-self.prox_filter_angle+360
-            else:
-                ccw_lim = angle_to_cyl - self.prox_filter_angle
-            cw_lim = angle_to_cyl + self.prox_filter_angle
-        else:
-            cw_lim = self.prox_filter_angle
-            ccw_lim = -self.prox_filter_angle
-
-        index = []
-        filtered_prox_values = []
-        if angle_to_cyl > 180 - self.prox_filter_angle:
-            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
-                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
-                    index.append(i)
-                elif self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i])
-        elif angle_to_cyl < -180+self.prox_filter_angle:
-            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
-                if self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                elif self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i]) 
-        else:
-            for i in range(len(self.ROBOT_PROXIMITY_ANGLES)):
-                if self.ROBOT_PROXIMITY_ANGLES[i] > ccw_lim and self.ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i])
-        return filtered_prox_values, index
-
     def build_neighbors(self):
         agents_available = np.arange(self.n_agents)
         for agent in range(self.n_agents):
             self.neighbors[agent] = [agents_available[agent-1], agents_available[(agent+1)%self.n_agents]]
     
-    def build_intention_states(self, agent_prox_values, agent_prev_intention):
+    def build_intention_states(self, agent_len, agent_pred_values, agent_prev_intention):
         states = []
         for agent in self.neighbors.keys():
             agent_state = np.zeros(self.intention_network_input)
             n1, n2 = self.neighbors[agent]
-            agent_state[0] = agent_prox_values[agent]
-            agent_state[1] = agent_prox_values[n1]
-            agent_state[2] = agent_prox_values[n2]
-            agent_state[3] = agent_prev_intention[agent]
-            agent_state[4] = agent_prev_intention[n1]
-            agent_state[5] = agent_prev_intention[n2]
+            agent_state[0] = agent_pred_values[agent]
+            agent_state[1] = agent_pred_values[n1]
+            agent_state[2] = agent_pred_values[n2]
+            agent_state[3] = agent_prev_intention[agent][0]
+            agent_state[4] = agent_prev_intention[agent][1]
+            agent_state[5] = agent_prev_intention[n1][0]
+            agent_state[6] = agent_prev_intention[n1][1]
+            agent_state[7] = agent_prev_intention[n2][0]
+            agent_state[8] = agent_prev_intention[n2][1]
+            agent_state[9] = agent_len
             states.append(agent_state)
         return states
 
