@@ -18,6 +18,12 @@ static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
+static const Real PRISM_HEIGHT           = 0.25; // m
+// static const std::vector<Real> PRISM_MASS = 100;
+// static const  std::vector<std::vector<CVector2>> CONVEX_PRISM_POINTS{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.4)};
+
+static const std::vector<Real> PRISM_MASSES{75.0,25.0};
+static const  std::vector<std::vector<CVector2>> COMPOSITE_PRISM_POINTS{{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.2)}, {CVector2(-0.2,0.2),CVector2(-0.4,0.2),CVector2(-0.4,-0.3),CVector2(-0.2,-0.2)}};
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
@@ -25,9 +31,9 @@ static const std::string OBS_DESCRIPTIONS[] = {
    "robot2goal_angle",
    "lwheel",
    "rwheel",
-   "robot2cylinder_dist",
-   "robot2cylinder_angle",
-   "cylinder2goal_dist",
+   "robot2object_dist",
+   "robot2object_angle",
+   "object2goal_dist",
    "reward"
 };
 
@@ -150,25 +156,92 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 /****************************************/
 
 void CCollectiveRLTransport::CreateEntities() {
-   /* Create the cylinder */
-   m_pcCylinder = new CCylinderEntity(
-      "c1",
+   /** Choose object*/
+    CRange<UInt32> ObjectRange(0,3);
+   //  m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
+   m_unObjectChoice = 2;
+   /* Create the object */
+   Real max_length = 0;
+   // if(m_unObjectChoice == 0){
+   //    m_pcCylinder = new CCylinderEntity(
+   //       "c1",
+   //       CVector3(),
+   //       CQuaternion(),
+   //       true,
+   //       CYLINDER_RADIUS,
+   //       CYLINDER_HEIGHT,
+   //       CYLINDER_MASS);
+   //    AddEntity(*m_pcCylinder);
+   //    max_length = CYLINDER_RADIUS;
+   //    m_pcEmbodiedEntity = m_pcCylinder->GetEmbodiedEntity();
+   // }
+   // else if(m_unObjectChoice == 1) {
+   //    m_pcConvexPrism = new CConvexPrismEntity(
+   //       "Prism_1",
+   //       CVector3(),
+   //       CQuaternion(),
+   //       true,
+   //       CONVEX_PRISM_POINTS,
+   //       PRISM_HEIGHT,
+   //       PRISM_MASS);
+   //    AddEntity(*m_pcConvexPrism);
+
+   //    CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+   
+   //    for(size_t i = 0; i < CONVEX_PRISM_POINTS.size(); i++) {
+   //       Real point_distance = Distance(origin, CONVEX_PRISM_POINTS[i]);
+   //       LOG<<"point: " << point_distance<<std::endl;
+   //       if(point_distance > max_length) {
+   //          max_length = point_distance;
+   //       }
+   //    }
+
+   //    m_pcEmbodiedEntity = m_pcConvexPrism->GetEmbodiedEntity();
+   // }
+   // else {
+
+// }
+   m_pcComposite = new CCompositeEntity(
+      "Prism_1",
       CVector3(),
       CQuaternion(),
       true,
-      CYLINDER_RADIUS,
-      CYLINDER_HEIGHT,
-      CYLINDER_MASS);
-   AddEntity(*m_pcCylinder);
+      PRISM_MASSES,
+      COMPOSITE_PRISM_POINTS,
+      PRISM_HEIGHT);
+   AddEntity(*m_pcComposite);
+
+   CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+
+   for(size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); i++) {
+      for(size_t j = 0; j < COMPOSITE_PRISM_POINTS[0].size(); j++) {
+         Real point_distance = Distance(origin, COMPOSITE_PRISM_POINTS[i][j]);
+         LOG<<"point: " << point_distance<<std::endl;
+         if(point_distance > max_length) {
+            max_length = point_distance;
+         }
+      }
+   }
+   // m_pcEmbodiedEntity = m_pcComposite->GetEmbodiedEntity();
+
+   
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
    std::ostringstream cFBId;
    CFootBotEntity* pcFB;
    CVector3 cPos;
+
+   
+   Real ROBOT_PRISM_DISTANCE   = max_length + FOOTBOT_RADIUS;
+   
+   // Adding an offset just makes the robots start slightly farther away
+   Real PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS;
+
+
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cFBId.str("");
       cFBId << "fb" << i;
-      cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
+      cPos.FromSphericalCoords(ROBOT_PRISM_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
@@ -212,22 +285,22 @@ void CCollectiveRLTransport::CreateEntities() {
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
    CRange<Real> cXCylinderRange(
-      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS
       );
    CRange<Real> cXObstacleRange(
       GetSpace().GetArenaLimits().GetMin().GetX()/2,
       0
    );
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
                m_pcRNG->Uniform(cYRange),
                0.0);
-      m_vecCylinderPos.push_back(cPos);
+      m_vecObjectPos.push_back(cPos);
       //Generate Failure Times for all episodes
       m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
@@ -243,7 +316,7 @@ void CCollectiveRLTransport::CreateEntities() {
                      CRadians::PI_OVER_TWO,
                      j * cSlice + cOffset));
          /* Translate to actual cylinder center */
-         cPos += m_vecCylinderPos[i];
+         cPos += m_vecObjectPos[i];
          /* Add position */
          m_vecRobotPos.back().push_back(cPos);
          /* Calculate orientation to cylinder center */
@@ -350,12 +423,12 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    if(un_episode >= m_unNumEpisodes) {
       THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
    }
-   /* Get the old position of the cylinder*/
-   m_cOldCylinderPos = m_vecCylinderPos[un_episode];
+   /* Get the old position of the object*/
+   m_cOldObjectPos = m_vecObjectPos[un_episode];
    /* The placements we chose are collision-free by construction, no need to
     * check for collisions */
-   MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
-              m_vecCylinderPos[un_episode],      // position
+   MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
               false,                             // not a check
               true);                             // ignore collisions
@@ -518,16 +591,16 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
-   CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector3& cObjectPos =
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
    CQuaternion cCylinderOrient =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Orientation;
    CRadians cObjZ, cObjY, cObjX;
    cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
    /** Store object position and orientation to send to python*/
-   m_vecObjStats[0] = cCylinderPos.GetX();
-   m_vecObjStats[1] = cCylinderPos.GetY();
-   m_vecObjStats[2] = cCylinderPos.GetZ();
+   m_vecObjStats[0] = cObjectPos.GetX();
+   m_vecObjStats[1] = cObjectPos.GetY();
+   m_vecObjStats[2] = cObjectPos.GetZ();
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
@@ -565,20 +638,20 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          m_cGoal.GetX() - cRobotPos.GetX(),
          m_cGoal.GetY() - cRobotPos.GetY());
       cVecRobot2Goal.Rotate(-cRobotZ);
-      /* Get vector from robot to cylinder (robot-local) */
-      CVector2 cVecRobot2Cylinder(
-         cCylinderPos.GetX() - cRobotPos.GetX(),
-         cCylinderPos.GetY() - cRobotPos.GetY());
-      cVecRobot2Cylinder.Rotate(-cRobotZ);
-      /* Get vector from cylinder to goal (robot-local) */
-      CVector2 cVecCylinder2Goal
-         (m_cGoal.GetX() - cCylinderPos.GetX(), m_cGoal.GetY() - cCylinderPos.GetY());
-      /* Get the cosine similarity of the cylinder */
-      CVector2 cMotion(cCylinderPos.GetX() - m_cOldCylinderPos.GetX(), cCylinderPos.GetY() - m_cOldCylinderPos.GetY());
+      /* Get vector from robot to object (robot-local) */
+      CVector2 cVecRobot2Object(
+         cObjectPos.GetX() - cRobotPos.GetX(),
+         cObjectPos.GetY() - cRobotPos.GetY());
+      cVecRobot2Object.Rotate(-cRobotZ);
+      /* Get vector from object to goal (robot-local) */
+      CVector2 cVecObject2Goal
+         (m_cGoal.GetX() - cObjectPos.GetX(), m_cGoal.GetY() - cObjectPos.GetY());
+      /* Get the cosine similarity of the object */
+      CVector2 cMotion(cObjectPos.GetX() - m_cOldObjectPos.GetX(), cObjectPos.GetY() - m_cOldObjectPos.GetY());
       Real fDirection = 0;
       if(cMotion.Length()>1e-4){
-        fDirection= cVecCylinder2Goal.DotProduct(cMotion) /
-                          (cVecCylinder2Goal.Length()*cMotion.Length());
+        fDirection= cVecObject2Goal.DotProduct(cMotion) /
+                          (cVecObject2Goal.Length()*cMotion.Length());
 
       }
 
@@ -610,9 +683,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       }
 
 
-      //DEBUG("cMotion = (%f,%f)\n", cMotion.GetX(), cMotion.GetY());
-      //DEBUG("cVecCylinder2Goal = (%f,%f)\n", cVecCylinder2Goal.GetX(), cVecCylinder2Goal.GetY());
-      //DEBUG("fDirection = %f\n", fDirection);
+
       /* Get the wheel speeds*/
       GetWheelSpeeds cGWS;
       BuzzForeachVM(cGWS);
@@ -623,11 +694,11 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 1] = ToDegrees(cVecRobot2Goal.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 2] = fLWheel;
       m_vecObs[i * m_unNumObs + 3] = fRWheel;
-      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
-      m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
-      m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
-      /* Adding cylinder angle to goal for MME*/
-      m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Object.Length();
+      m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Object.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 6] = cVecObject2Goal.Length();
+      /* Adding object angle to goal for MME*/
+      m_vecObjStats[6] = ToDegrees(cVecObject2Goal.Angle()).GetValue();
       // Get the proximity sensor values
       const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
@@ -648,18 +719,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
-   m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   /*for(size_t i = 0; i < m_unNumRobots; ++i) {
-      for(size_t j = 0; j < m_unNumObs; ++j) {
-         DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
-               m_unEpisodeCounter,
-               GetSpace().GetSimulationClock(),
-               i,
-               OBS_DESCRIPTIONS[j].c_str(),
-               m_vecObs[i * m_unNumObs + j]);
-      }
-   }
-   DEBUG("\n");*/
+   m_cOldObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
@@ -746,8 +807,8 @@ void CCollectiveRLTransport::PostExperiment() {
 void CCollectiveRLTransport::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
-   /* Check if the cylinder reached the goal */
-   m_bReachedGoal = CylinderAtTarget();
+   /* Check if the object reached the goal */
+   m_bReachedGoal = ObjectAtTarget();
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
@@ -800,13 +861,13 @@ void CCollectiveRLTransport::PostStep() {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::CylinderAtTarget() {
-   CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CVector2 cCylinder2Goal(
-      m_cGoal.GetX() - cCylinderPos.GetX(),
-      m_cGoal.GetY() - cCylinderPos.GetY());
-   return cCylinder2Goal.Length() < m_fThreshold;
+bool CCollectiveRLTransport::ObjectAtTarget() {
+   CVector3& cObjectPos =
+      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector2 cObject2Goal(
+      m_cGoal.GetX() - cObjectPos.GetX(),
+      m_cGoal.GetY() - cObjectPos.GetY());
+   return cObject2Goal.Length() < m_fThreshold;
 }
 
 /****************************************/

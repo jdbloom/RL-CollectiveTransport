@@ -65,6 +65,11 @@ function step(){
       turret_disable()
       gripped = 1
     }
+    else {
+      set_wheels_debug(7.0, 7.0)
+      L_wheel = 7.0
+      R_wheel = 7.0
+    }
   }
   # If the robot fails, open the gripper and set the wheel speeds to 0.
   if(failure){
