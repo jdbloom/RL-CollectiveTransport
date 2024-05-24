@@ -21,12 +21,12 @@ class ZMQ_Utility:
         self.OBS_FMT = '13f'
         self.REWARDS_FIELDS = ['reward']
         self.REWARDS_FMT = '1f'
-        self.STATS_FIELDS = ['magnitude', 'angle', 'deltaX', 'deltaY', 'predictionX', 'predictionY', 'x_cm', 'y_cm']
-        self.STATS_FMT = '8f'
+        self.STATS_FIELDS = ['magnitude', 'angle', 'deltaX', 'deltaY', 'predictionX', 'predictionY', 'x_cm', 'y_cm', 'robot_global_force_angle']
+        self.STATS_FMT = '9f'
         self.ROBOT_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.ROBOT_STATS_FMT = '6f'
-        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'mod_pos_x', 'mod_pos_y']
-        self.OBJ_STATS_FMT = '8f'
+        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'mod_pos_x', 'mod_pos_y', 'radius']
+        self.OBJ_STATS_FMT = '9f'
 
         self.ACTIONS_FIELDS = ['radius', 'angle']
         self.ACTIONS_FMT = '2f'

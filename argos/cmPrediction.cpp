@@ -97,7 +97,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       LOG << "Attributes taken from argos file" << std::endl;
 
       /* Stats to be sent to Data: */
-      m_unNumStats = 8; // two I think useless variables, robot velocity x and y, robot prediction x and y
+      m_unNumStats = 9; // two I think useless variables, robot velocity x and y, robot prediction x and y, robot global force angle
 
       /*
        * Connect to PyTorch
@@ -141,7 +141,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
-      m_vecObjStats.resize(8, 0.0);
+      m_vecObjStats.resize(9, 0.0);
       // DEBUG("Resized vectors for observations, rewards, stats, and robot stats\n");
 
       // m_xOffsetFromRobot.resize(m_unNumRobots);
@@ -504,6 +504,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
    m_vecObjStats[6] = cCylinderModPos.GetX();
    m_vecObjStats[7] = cCylinderModPos.GetY();
+   m_vecObjStats[8] = CYLINDER_RADIUS;
    // DEBUG("Positions and Orientations Found\n");
 
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
@@ -568,7 +569,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       Real fTargetDirection = ToDegrees(Intended_Dir).GetValue();
 
       const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVGripperForceSensor> ("kheperaiv_gripper_force")->GetReadings();
-      CRadians forceAngle = cForceVector.Angle();
+      CRadians forceAngle = NormalizedDifference(cRobotZ, cForceVector.Angle());
       Real forceMagnitude = cForceVector.Length();
       Real forceCos = Cos(forceAngle);
       Real forceSin = Sin(forceAngle);
@@ -910,6 +911,10 @@ void CCMPrediction::CalculateRobotStats(){
      m_vecStats[i * m_unNumStats + 5] = m_yEstimate[i];
      m_vecStats[i * m_unNumStats + 6] = pos.GetX();
      m_vecStats[i * m_unNumStats + 7] = pos.GetY();
+
+     const CVector2& cForceVector = m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_KheperaIVGripperForceSensor> ("kheperaiv_gripper_force")->GetReadings();
+     CRadians forceAngle = cForceVector.Angle();
+     m_vecStats[i * m_unNumStats + 8] = forceAngle.GetValue();
    }
 }
 

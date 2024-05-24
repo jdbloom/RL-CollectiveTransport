@@ -77,7 +77,7 @@ data_file_path = recording_path + '/Data/'
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
 elif args.global_knowledge:
-    num_obs = Utility.params['num_obs']+(Utility.params['num_robots']-1)*4  #need to account for the x and y positions and the x and y velocitis for each robot
+    num_obs = Utility.params['num_obs']+(Utility.params['num_robots']-1)*6  #need to account for the x and y positions and the x and y velocitis for each robot and the angle, and sum of forcest for each robot
 else:
     num_obs = Utility.params['num_obs']
 
@@ -174,7 +174,7 @@ while not exp_done:
         # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
         # 'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y'
         writer.writerow(['reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm', 'cyl_center_x', 'cyl_center_y', 'cyl_mod_x', 'cyl_mod_y',
-                         'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
+                         'intention_reward', 'intention_angle', 'intention_radius', 'run_time', 'robots_x_pos', 'robots_y_pos',
                          'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
                          'force_angle', 'force_magnitude'])
 
@@ -222,12 +222,15 @@ while not exp_done:
                 agent_pred_flags.append(0.0)
             
             #Define Global Knowledge: [positions, velocities]
-            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
+            global_knowledge=np.zeros((Utility.params['num_robots'])*6)
             for i in range(Utility.params['num_robots']):
                 global_knowledge[i*4] = robot_stats[i][0]           #x position
                 global_knowledge[i*4+1] = robot_stats[i][1]         #y position
                 global_knowledge[i*4+2] = stats[i][2]               #velocity X
                 global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+                global_knowledge[i*4+4] = env_observations[i][0]    #force angle
+                global_knowledge[i*4+5] = env_observations[i][1]    #force magnitude
+                
 
             for i in range(Utility.params['num_robots']):
                 g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
@@ -238,6 +241,8 @@ while not exp_done:
                         g_knowledge[counter*4+1] = global_knowledge[j*4+1]
                         g_knowledge[counter*4+2] = global_knowledge[j*4+2]
                         g_knowledge[counter*4+3] = global_knowledge[j*4+3]
+                        g_knowledge[counter*4+2] = global_knowledge[j*4+4]
+                        g_knowledge[counter*4+3] = global_knowledge[j*4+5]
                         counter+=1
                 if args.independent_learning:
                     running_reward.append(0)
@@ -322,7 +327,7 @@ while not exp_done:
                         robot_x_prediction.append(stats[i][4])
                         robot_y_prediction.append(stats[i][5])
                         robot_target_angle_offset.append(env_observations[i][6])
-                        force_angle.append(env_observations[i][0])
+                        force_angle.append(stats[i][8])
                         force_magnitude.append(env_observations[i][1])
 
                     intention_reward = []
@@ -354,12 +359,12 @@ while not exp_done:
                                 
                                 # NOTE : next_heading_intention is changing to prediction_intention
                                 rob_to_cyl_ang = np.arctan2(obj_stats[1] - robot_stats[i][1], obj_stats[0] - robot_stats[i][0])
-                                angle_modified = rob_to_cyl_ang + prediction_intention[i][1]
-                                x_est = np.cos(angle_modified) * prediction_intention[i][0] + robot_stats[i][0]
-                                y_est = np.sin(angle_modified) * prediction_intention[i][0] + robot_stats[i][1]
-                                error = math.sqrt(math.pow(stats[0][6] - x_est, 2) + math.pow(stats[0][7] - y_est, 2))
+                                angle_modified = rob_to_cyl_ang + prediction_intention[i][1] * math.pi / 2
+                                x_est = np.cos(angle_modified) * prediction_intention[i][0] * obj_stats[8] + robot_stats[i][0]
+                                y_est = np.sin(angle_modified) * prediction_intention[i][0] * obj_stats[8] + robot_stats[i][1]
+                                error = math.sqrt(math.pow((stats[0][6] - x_est), 2) + math.pow(stats[0][7] - y_est, 2)) / obj_stats[8]
 
-                                intention_reward.append(-1 + error)
+                                intention_reward.append(math.pow((1 - error) * 4 / 3, 2))
                                 episode_intention_rewards[i] += intention_reward[i]
 
                     else:
@@ -560,12 +565,12 @@ while not exp_done:
                         tmp_epsilon = model.epsilon
 
                     # Subject to change : 'reward', 'epsilon', 'termination', 'loss', 'cyl_x_cm', 'cyl_y_cm', 'cyl_center_x', 'cyl_center_y', 'cyl_mod_x', 'cyl_mod_y', 
-                    # 'intention_reward', 'intention_heading', 'run_time', 'robots_x_pos', 'robots_y_pos',
+                    # 'intention_reward', 'intention_angle', 'intention_radius', 'run_time', 'robots_x_pos', 'robots_y_pos',
                     # 'robot_target_angle_offset', 'env_observations', 'agent_predictions_x', 'agent_predictions_y',
                     # 'force_angle', force_magnitude']
                     writer.writerow([r, tmp_epsilon, reached_goal, loss,
                                     stats[0][6], stats[0][7], obj_stats[0], obj_stats[1], obj_stats[6], obj_stats[7],
-                                    intention_reward, prediction_intention[0],
+                                    intention_reward, prediction_intention[0], prediction_intention[1],
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_target_angle_offset, 
                                     env_observations, robot_x_prediction, robot_y_prediction,
                                     force_angle, force_magnitude])
