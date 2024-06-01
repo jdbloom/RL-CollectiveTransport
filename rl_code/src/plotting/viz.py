@@ -75,7 +75,10 @@ for i, ep in enumerate(last_10_axis):
 # plt.plot(average_episode_rewards)
 
 fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=(8, 5))
-
+if args.name is not None:
+    ax1.set_title(args.name)
+else:
+    ax1.set_title('Training Metrics')
 
 ax1.set_ylabel('Reward', c='b')
 ax1.tick_params(axis='y', labelcolor='b')
@@ -94,10 +97,6 @@ ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
 ax2.plot(last_10_axis, last_10_success_pct*100, c='k')
 ax2.set_ylabel('Success (%)')
 ax2.set_xlabel('Episodes')
-if args.name is not None:
-    plt.title(args.name)
-else:
-    plt.title('Training Metrics')
 plt.savefig(args.data_path+'Training_Metrics.png')
 
 
