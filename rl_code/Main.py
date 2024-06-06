@@ -298,10 +298,9 @@ while not exp_done:
                     next_heading_gsp, 
                     Utility.params['num_robots']
                 )
+                # print('[MAIN] GSP Reward', gsp_reward)
+                # print('[MAIN] GSP Label ', label)
                 for i in range(len(gsp_reward)):
-                    # print(f'Agent {i} adding {gsp_reward[i]}')
-                    if label > 0.2:
-                        print(f'{label:.2f}, {next_heading_gsp[i]:.2f}, {gsp_reward[i]:.2f}')
                     episode_gsp_rewards[i] += gsp_reward[i] 
 
                 old_cyl_ang = obj_stats[5]
@@ -356,11 +355,16 @@ while not exp_done:
                             # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
                             if model.gsp_networks['learning_scheme'] == 'attention':
                                 model.store_gsp_transition(states[i], label, 0, 0, 0)
-                            state = states[i]
-                            action = old_heading_gsp[i]
-                            reward = gsp_reward[i]
-                            new_state = new_states[i]
-                            model.store_gsp_transition(state, action, reward, new_state, 0)
+                            else:
+                                state = states[i]
+                                action = old_heading_gsp[i]
+                                reward = gsp_reward[i]
+                                new_state = new_states[i]
+                                # print('[MAIN] Transition State:', state)
+                                # print('[MAIN] Transition Action:', action)
+                                # print('[MAIN] Transition Reward:', reward)
+                                # print('[MAIN] Transition New State:', new_state)
+                                model.store_gsp_transition(state, action, reward, new_state, 0)
                     else:
                         for i in range(Utility.params['num_robots']):
                             if model.gsp_networks['learning_scheme'] == 'attention':
@@ -378,6 +382,10 @@ while not exp_done:
                                 action = old_heading_gsp[i]
                                 reward = gsp_reward[i]
                                 new_state = np.array(agent_prox_flags)
+                                # print('[MAIN] Transition State:', state)
+                                # print('[MAIN] Transition Action:', action)
+                                # print('[MAIN] Transition Reward:', reward)
+                                # print('[MAIN] Transition New State:', new_state)
                             model.store_gsp_transition(state, action, reward, new_state, 0)
 
 

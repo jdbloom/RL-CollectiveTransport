@@ -70,6 +70,14 @@ last_10_success_pct = np.array([np.average(terminals[i-10:i]) for i in range(10,
 
 for i, ep in enumerate(last_10_axis):
     print(f'Model {ep} had Average Reward: {last_10_rewards[i]:.2f}, GSP Reward: {last_10_gsp_rewards[i]:.2f}, and Success Rate: {last_10_success_pct[i]}')
+print("-------------------------------")
+print()
+print("Total EXP Success: ", np.average(terminals))
+print("Average Reward:    ", np.average(episode_rewards))
+print("Reward STD:        ", np.std(episode_rewards))
+print("Average GSP Reward:", np.average(episode_gsp_rewards))
+print("GSP Reward STD:    ", np.std(episode_gsp_rewards))
+      
 # for i in range(episode_rewards.shape[1]):
 #     plt.plot(episode_rewards[:, i])
 # plt.plot(average_episode_rewards)

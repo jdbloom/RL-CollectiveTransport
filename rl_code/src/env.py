@@ -22,15 +22,24 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         diff = angle_normalize_signed_deg(new_cyl_ang-old_cyl_ang)
         diff = math.radians(diff)
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
-        diff *= 10
+        diff = np.clip(diff*100, -1, 1)
         label=diff
         x1 = math.cos(diff)
         y1 = math.sin(diff)                        
         for i in range(num_robots):
-            x2 = math.cos(next_heading_gsp[i]) 
-            y2 = math.sin(next_heading_gsp[i])
-            error = np.dot([x1, y1], [x2, y2])
-            gsp_reward.append(-1 + error)
+            # x2 = math.cos(next_heading_gsp[i]) 
+            # y2 = math.sin(next_heading_gsp[i])
+            # error = np.dot([x1, y1], [x2, y2])
+            # gsp_reward.append(-1 + error)
+            # print('GSP:', next_heading_gsp[i])
+            # print(f'Diff: {diff:.2f}, next_heading_gsp: {next_heading_gsp[i]:.2f}')
+            reward = diff - next_heading_gsp[i]
+            # print('reward', reward)
+            # norm_reward = reward / next_heading_gsp[i]
+            # print('norm_reward', norm_reward)
+            abs_reward = abs(reward)**2
+            # print('abs reward', abs_reward)
+            gsp_reward.append(np.clip(-1*abs_reward, -2, 0))
         
     else:
         gsp_reward = [0 for i in range(num_robots)]

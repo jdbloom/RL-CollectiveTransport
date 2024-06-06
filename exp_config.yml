@@ -1,18 +1,18 @@
-TEST: True
-MODEL_NUM: 290
+TEST: False
+MODEL_NUM: 980
 
 ##----------------- ENV Parameters ------------------------------
-EXP_NAME: DQN_2_Obstacles
+EXP_NAME: DQN_GSP_2_Obstacles_diff_reward_100_offset_500
 ARGOS_FILE_NAME: collectiveRlTransport_bash.argos
-NUM_EPISODES: 100
-NUM_OBSTACLES: 4
+NUM_EPISODES: 1000
+NUM_OBSTACLES: 2
 USE_GATE: 0
 GATE_MIN: 4
 GATE_CURRICULUM: 0
 NUM_ROBOTS: 4
 MAX_NUM_ROBOT_FAILURES: 0
 CHANCE_FAILURE: 0.25
-PORT: 55555
+PORT: 55558
 SEED: 123
 
 ##----------------- Actor Parameters -----------------------------
@@ -24,7 +24,7 @@ PROX_FILTER_ANGLE_DEG: 60.0
 
 ##----------------- GSP Parameters --------------------------------
 GLOBAL_KNOWLEDGE: False
-GSP: False
+GSP: True
 RECURRENT: False
 ATTENTION: False
 NEIGHBORS: False
@@ -59,5 +59,5 @@ UPDATE_ACTOR_ITER: 2
 WARMUP: 1000
 
 # GSP
-GSP_LEARNING_FREQUENCY: 1000
+GSP_LEARNING_FREQUENCY: 500
 GSP_BATCH_SIZE: 16

@@ -60,7 +60,7 @@ for ep in range(len(file_names)-1):
         diff = angle_normalize_signed_deg(new_cyl_ang-old_cyl_ang)
         diff = math.radians(diff)
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
-        diff *= 10
+        diff = np.clip(diff*100, -1, 1)
 
         # normalize between -1 and 1
         cyl_heading_diff.append(diff)

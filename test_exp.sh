@@ -20,6 +20,7 @@ python generate_argos.py --num_obstacles $num_obstacles --num_robots $num_robots
 cd ..
 mkdir rl_code/Data/$file_name/testing_model_$model_num
 mkdir rl_code/Data/$file_name/testing_model_$model_num/Data
+mkdir rl_code/Data/$file_name/testing_model_$model_num/plots
 echo rl_code/Data/$file_name/testing_model_$model_num
 cp exp_config.yml rl_code/Data/$file_name/testing_model_$model_num/agent_config.yml
 cp argos/$argos_filename rl_code/Data/$file_name/testing_model_$model_num/$argos_filename
@@ -30,3 +31,4 @@ python Main.py Data/$file_name/testing_model_$model_num --test --model_path Data
 wait $!
 cd src/plotting
 python viz.py ../../Data/$file_name/testing_model_$model_num/ >> ../../Data/$file_name/testing_model_$model_num/testing_data.txt
+python make_cylinder_trajectory.py ../../Data/$file_name/testing_model_$model_num/
