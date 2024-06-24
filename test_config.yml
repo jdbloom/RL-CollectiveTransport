@@ -1,10 +1,10 @@
-TEST: False
-MODEL_NUM: 980
+TEST: True
+MODEL_NUM: 100
 
 ##----------------- ENV Parameters ------------------------------
-EXP_NAME: DQN_GSP_Neighbors_Gate
+EXP_NAME: DDQN_GSP_Neighbors_2_Obstacles_2
 ARGOS_FILE_NAME: collectiveRlTransport_bash.argos
-NUM_EPISODES: 1600
+NUM_EPISODES: 100
 NUM_OBSTACLES: 2
 USE_GATE: 0
 GATE_MIN: 4
@@ -12,11 +12,11 @@ GATE_CURRICULUM: 1
 NUM_ROBOTS: 4
 MAX_NUM_ROBOT_FAILURES: 0
 CHANCE_FAILURE: 0.25
-PORT: 55562
-SEED: 123
+PORT: 55560
+SEED: 124
 
 ##----------------- Actor Parameters -----------------------------
-LEARNING_SCHEME: DQN
+LEARNING_SCHEME: DDQN
 OPTIONS_PER_ACTION: 3
 MIN_MAX_ACTION: 1.0
 META_PARAM_SIZE: 1
