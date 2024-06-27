@@ -32,3 +32,6 @@ cp argos/$argos_filename rl_code/Data/$file_name/$argos_filename
 argos3 -c argos/$argos_filename &
 cd rl_code 
 python Main.py Data/$file_name
+wait $!
+cd src/plotting
+python viz.py ../../Data/$file_name/ --name $file_name >> ../../Data/$file_name/training_data.txt

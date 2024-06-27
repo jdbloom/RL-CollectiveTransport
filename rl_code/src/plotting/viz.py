@@ -70,12 +70,23 @@ last_10_success_pct = np.array([np.average(terminals[i-10:i]) for i in range(10,
 
 for i, ep in enumerate(last_10_axis):
     print(f'Model {ep} had Average Reward: {last_10_rewards[i]:.2f}, GSP Reward: {last_10_gsp_rewards[i]:.2f}, and Success Rate: {last_10_success_pct[i]}')
+print("-------------------------------")
+print()
+print("Total EXP Success: ", np.average(terminals))
+print("Average Reward:    ", np.average(episode_rewards))
+print("Reward STD:        ", np.std(episode_rewards))
+print("Average GSP Reward:", np.average(episode_gsp_rewards))
+print("GSP Reward STD:    ", np.std(episode_gsp_rewards))
+      
 # for i in range(episode_rewards.shape[1]):
 #     plt.plot(episode_rewards[:, i])
 # plt.plot(average_episode_rewards)
 
 fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=(8, 5))
-
+if args.name is not None:
+    ax1.set_title(args.name)
+else:
+    ax1.set_title('Training Metrics')
 
 ax1.set_ylabel('Reward', c='b')
 ax1.tick_params(axis='y', labelcolor='b')
@@ -94,10 +105,6 @@ ax1.plot(last_10_axis, last_10_rewards, c='b', label='Reward')
 ax2.plot(last_10_axis, last_10_success_pct*100, c='k')
 ax2.set_ylabel('Success (%)')
 ax2.set_xlabel('Episodes')
-if args.name is not None:
-    plt.title(args.name)
-else:
-    plt.title('Training Metrics')
 plt.savefig(args.data_path+'Training_Metrics.png')
 
 

@@ -153,7 +153,7 @@ class Agent(Actor):
             agent_state[1] = agent_prev_gsp[agent]
             i=2
             for neighbor in neighbors:
-                agent_state[i] = agent_prev_gsp[neighbor]
+                agent_state[i] = agent_prox_values[neighbor]
                 agent_state[i+1] = agent_prev_gsp[neighbor]
                 i+=2
             self.gsp_observation[agent].pop(0)
