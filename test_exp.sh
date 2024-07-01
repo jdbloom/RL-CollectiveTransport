@@ -18,7 +18,7 @@ cd argos
 python generate_argos.py --num_obstacles $num_obstacles --num_robots $num_robots --max_num_robot_failures $max_num_robot_failures --chance_failure $chance_failure --num_episodes $num_episodes --pytorch_port $port --use_gate $gate --gate_curriculum $gate_curriculum --seed $seed --argos_filename $argos_filename --gate_minimum $gate_minimum
 
 cd ..
-test_file_path=testing_model_${model_num}_num_obstacles_${num_obstacles}_gate_$gate
+test_file_path=testing_model_${model_num}_num_robots_${num_robots}_num_obstacles_${num_obstacles}_gate_$gate
 mkdir rl_code/Data/$file_name/$test_file_path
 mkdir rl_code/Data/$file_name/$test_file_path/Data
 mkdir rl_code/Data/$file_name/$test_file_path/plots

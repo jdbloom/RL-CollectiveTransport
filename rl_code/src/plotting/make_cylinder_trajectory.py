@@ -131,6 +131,7 @@ for ep in range(len(file_names)-1):
     plt.plot(data['gsp_heading'], c= 'lightblue')
     last_10_gsp = np.array([np.average(data['gsp_heading'][i-10:i]) for i in range(10, len(data['gsp_heading']), 10)])
     last_10_gsp_index = np.arange(10, len(data['gsp_heading']), 10)
+    plt.ylim(-1, 1)
     plt.plot(last_10_gsp_index, last_10_gsp, c='b', label='GSP')
     plt.plot(cyl_heading_diff, c='r', label='Actual Heading Change')
     plt.legend()

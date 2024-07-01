@@ -144,21 +144,26 @@ class Agent(Actor):
             env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs   
     
-    def make_gsp_states(self, agent_prox_values, agent_prev_gsp):
+    def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags = False):
         states = []
+        prox_flags = []
         for agent in range(self._n_agents):
             agent_state = np.zeros(self.gsp_network_input)
             neighbors = self.neighbors_dict[agent]
             agent_state[0] = agent_prox_values[agent]
             agent_state[1] = agent_prev_gsp[agent]
+            prox_flags.append(agent_prox_values[agent])
             i=2
             for neighbor in neighbors:
                 agent_state[i] = agent_prox_values[neighbor]
                 agent_state[i+1] = agent_prev_gsp[neighbor]
+                prox_flags.append(agent_prox_values[neighbor])
                 i+=2
             self.gsp_observation[agent].pop(0)
             self.gsp_observation[agent].append(agent_state)
             states.append(agent_state)
+        if return_prox_flags:
+            return states, prox_flags
         return states
     
     def filter_prox_values(self, prox_values, angle_to_cyl):
