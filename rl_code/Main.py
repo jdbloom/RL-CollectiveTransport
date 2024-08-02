@@ -346,47 +346,58 @@ while not exp_done:
                                 next_heading_gsp[i] = ctde_gsp[i][-1].item()
                             else:
                                 next_heading_gsp[i] = ctde_gsp[-1].item()
+                    # print("-------------------------------------------------")
+                    # print('[GSP]', next_heading_gsp)
 
                     # Store GSP Transition
                     if model.gsp_neighbors:
-                        states = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp)
+                        states, state_prox_flags = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp, True)
                         new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                         for i in range(Utility.params['num_robots']):
-                            # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
-                            if model.gsp_networks['learning_scheme'] == 'attention':
-                                model.store_gsp_transition(states[i], label, 0, 0, 0)
-                            else:
-                                state = states[i]
-                                action = old_heading_gsp[i]
-                                reward = gsp_reward[i]
-                                new_state = new_states[i]
-                                # print('[MAIN] Transition State:', state)
-                                # print('[MAIN] Transition Action:', action)
-                                # print('[MAIN] Transition Reward:', reward)
-                                # print('[MAIN] Transition New State:', new_state)
-                                model.store_gsp_transition(state, action, reward, new_state, 0)
+                            # print(f'[AGENT] {i} PROX FLAGS:', state_prox_flags[i])
+                            # only store if state has value
+                            if np.sum(state_prox_flags[i]) > 0:
+                                # print(f'[AGENT] {i} Has Value, Storing GSP State: {states[i]}')
+                                if model.gsp_networks['learning_scheme'] == 'attention':
+                                    model.store_gsp_transition(states[i], label, 0, 0, 0)
+                                else:
+                                    state = states[i]
+                                    action = old_heading_gsp[i]
+                                    reward = gsp_reward[i]
+                                    new_state = new_states[i]
+                                    # print('[MAIN] Transition State:', state)
+                                    # print('[MAIN] Transition Action:', action)
+                                    # print('[MAIN] Transition Reward:', reward)
+                                    # print('[MAIN] Transition New State:', new_state)
+                                    model.store_gsp_transition(state, action, reward, new_state, 0)
                     else:
                         for i in range(Utility.params['num_robots']):
                             if model.gsp_networks['learning_scheme'] == 'attention':
                                 state = np.array(old_agent_prox_flags)
-                                model.store_gsp_transition(state, label, 0, 0, 0)
+                                # only store the state if it has value
+                                if np.sum(state) > 0:
+                                    model.store_gsp_transition(state, label, 0, 0, 0)
                             elif args.independent_learning:
                                 state = np.array(old_agent_prox_flags)
-                                action = old_heading_gsp[i]
-                                reward = gsp_reward[i]
-                                new_state = np.array(agent_prox_flags)
-                                models[i].store_gsp_transition(state, action, reward, new_state, 0)
+                                # only store the state if it has value
+                                if np.sum(state) > 0:
+                                    action = old_heading_gsp[i]
+                                    reward = gsp_reward[i]
+                                    new_state = np.array(agent_prox_flags)
+                                    models[i].store_gsp_transition(state, action, reward, new_state, 0)
                             else:
                                 # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
                                 state = np.array(old_agent_prox_flags)
-                                action = old_heading_gsp[i]
-                                reward = gsp_reward[i]
-                                new_state = np.array(agent_prox_flags)
-                                # print('[MAIN] Transition State:', state)
-                                # print('[MAIN] Transition Action:', action)
-                                # print('[MAIN] Transition Reward:', reward)
-                                # print('[MAIN] Transition New State:', new_state)
-                            model.store_gsp_transition(state, action, reward, new_state, 0)
+                                # only store the state if it has value
+                                if np.sum(state) > 0:
+                                    action = old_heading_gsp[i]
+                                    reward = gsp_reward[i]
+                                    new_state = np.array(agent_prox_flags)
+                                    # print('[MAIN] Transition State:', state)
+                                    # print('[MAIN] Transition Action:', action)
+                                    # print('[MAIN] Transition Reward:', reward)
+                                    # print('[MAIN] Transition New State:', new_state)
+                                    model.store_gsp_transition(state, action, reward, new_state, 0)
 
 
                 #Define Global Knowledge: [positions, velocities]
