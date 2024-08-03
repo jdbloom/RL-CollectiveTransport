@@ -166,6 +166,9 @@ private:
    /** Position of the object from the previous time step*/
    CVector3 m_cOldObjectPos;
 
+   /** Position of the center of mass of the object offset from the origin */
+   CVector2 m_cObjCOMOffsetPos;
+
    /** Initial robot positions (index = # episode, # robot) */
    std::vector< std::vector<CVector3> > m_vecRobotPos;
 
@@ -173,11 +176,10 @@ private:
    std::vector< std::vector<CQuaternion> > m_vecRobotOrient;
 
    /** The objects */
-   // CCylinderEntity* m_pcCylinder;
+   CCylinderEntity* m_pcCylinder;
    CConvexPrismEntity* m_pcConvexPrism;
    CCompositeEntity* m_pcComposite;
-   /**Chosen Entity*/
-   // CEmbodiedEntity m_pcEmbodiedEntity;
+
 
    /** Onject choice: randomly selected object*/
    UInt32 m_unObjectChoice = 0;
@@ -273,6 +275,11 @@ private:
 
 
 private:
+
+   CVector2 GetCoM(std::vector<CVector2> vec_vertices);
+
+   CVector2 GetCoMComposite(std::vector<Real> vec_masses,
+                       std::vector<std::vector<CVector2>> vec_vertices);
 
    void CreateEntities();
 

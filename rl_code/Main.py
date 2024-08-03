@@ -161,6 +161,8 @@ while not exp_done:
         env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
         object_positions.append([obj_stats[0], obj_stats[1]])
         old_cyl_ang = obj_stats[5]
+        com_X_poses = obj_stats[7]
+        com_Y_poses = obj_stats[8]
 
         if Utility.params['num_obstacles'] > 0:
             obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
@@ -511,7 +513,7 @@ while not exp_done:
                                 [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                 obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp[0], 
                                 time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
-                                robot_failures)
+                                robot_failures, com_X_poses, com_Y_poses)
 
                 if episode_done:
                     run_time = time.time() - episode_start_time

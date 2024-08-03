@@ -1,8 +1,8 @@
 TEST: False
-MODEL_NUM: 980
+MODEL_NUM: 180
 
 ##----------------- ENV Parameters ------------------------------
-EXP_NAME: DQN_GSP_Composite
+EXP_NAME: DDPG_NO_GSP_Composite
 ARGOS_FILE_NAME: collectiveRlTransport_bash.argos
 NUM_EPISODES: 500
 NUM_OBSTACLES: 2
@@ -16,7 +16,7 @@ PORT: 55562
 SEED: 123
 
 ##----------------- Actor Parameters -----------------------------
-LEARNING_SCHEME: DQN
+LEARNING_SCHEME: DDPG
 OPTIONS_PER_ACTION: 3
 MIN_MAX_ACTION: 1.0
 META_PARAM_SIZE: 1
@@ -24,7 +24,7 @@ PROX_FILTER_ANGLE_DEG: 60.0
 
 ##----------------- GSP Parameters --------------------------------
 GLOBAL_KNOWLEDGE: False
-GSP: True
+GSP: False
 RECURRENT: False
 ATTENTION: False
 NEIGHBORS: True

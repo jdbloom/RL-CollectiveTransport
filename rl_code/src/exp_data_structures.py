@@ -22,6 +22,8 @@ class data_logger:
         self.robots_y_pos:list = []
         self.robot_angle:list = []
         self.robot_failures:list = []
+        self.com_X_pos:list = []
+        self.com_Y_pos:list = []
 
     def writerow(
             self,
@@ -42,7 +44,9 @@ class data_logger:
             robots_x_poses,
             robots_y_poses,
             robot_angles,
-            robot_failure
+            robot_failure,
+            com_X_poses,
+            com_Y_poses
     ):
         self.reward.append(rewards)
         self.epsilon.append(epsilons)
@@ -63,6 +67,8 @@ class data_logger:
         self.robots_y_pos.append(robots_y_poses)
         self.robot_angle.append(robot_angles)
         self.robot_failures.append(robot_failure)
+        self.com_X_pos.append(com_X_poses)
+        self.com_Y_pos.append(com_Y_poses)
     
     def write_to_file(self):
         data = {
@@ -85,6 +91,8 @@ class data_logger:
             'robot_y_pos': self.robots_y_pos,
             'robot_angle': self.robot_angle,
             'robot_failure':self.robot_failures,
+            'comX' :self.com_X_pos,
+            'comY':self.com_Y_pos
         }
 
         with open(self.data_file_path, 'wb') as file:

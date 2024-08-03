@@ -1,11 +1,11 @@
 TEST: True
-MODEL_NUM: 100
+MODEL_NUM: 260
 
 ##----------------- ENV Parameters ------------------------------
-EXP_NAME: DDQN_GSP_Neighbors_2_Obstacles_2
+EXP_NAME: TD3_NO_GSP_Composite
 ARGOS_FILE_NAME: collectiveRlTransport_bash.argos
 NUM_EPISODES: 100
-NUM_OBSTACLES: 2
+NUM_OBSTACLES: 4
 USE_GATE: 0
 GATE_MIN: 4
 GATE_CURRICULUM: 1
@@ -13,10 +13,10 @@ NUM_ROBOTS: 4
 MAX_NUM_ROBOT_FAILURES: 0
 CHANCE_FAILURE: 0.25
 PORT: 55560
-SEED: 124
+SEED: 120
 
 ##----------------- Actor Parameters -----------------------------
-LEARNING_SCHEME: DDQN
+LEARNING_SCHEME: TD3
 OPTIONS_PER_ACTION: 3
 MIN_MAX_ACTION: 1.0
 META_PARAM_SIZE: 1
@@ -24,7 +24,7 @@ PROX_FILTER_ANGLE_DEG: 60.0
 
 ##----------------- GSP Parameters --------------------------------
 GLOBAL_KNOWLEDGE: False
-GSP: True
+GSP: False
 RECURRENT: False
 ATTENTION: False
 NEIGHBORS: True

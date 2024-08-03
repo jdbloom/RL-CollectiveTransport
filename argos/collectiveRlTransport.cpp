@@ -19,11 +19,13 @@ static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
 static const Real PRISM_HEIGHT           = 0.25; // m
-// static const std::vector<Real> PRISM_MASS = 100;
-// static const  std::vector<std::vector<CVector2>> CONVEX_PRISM_POINTS{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.4)};
+static const Real PRISM_MASS = 100;
+static const  std::vector<CVector2> CONVEX_PRISM_POINTS{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.4)};
 
-static const std::vector<Real> PRISM_MASSES{75.0,25.0};
-static const  std::vector<std::vector<CVector2>> COMPOSITE_PRISM_POINTS{{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.2)}, {CVector2(-0.2,0.2),CVector2(-0.4,0.2),CVector2(-0.4,-0.3),CVector2(-0.2,-0.2)}};
+std::vector<Real> PRISM_MASSES{75.0,25.0};
+static const std::vector<Real> TEST_PRISM_MASSES{75.0,25.0,15.0};
+std::vector<std::vector<CVector2>> COMPOSITE_PRISM_POINTS{{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.2)}, {CVector2(-0.2,0.2),CVector2(-0.4,0.2),CVector2(-0.5,-0.4),CVector2(-0.2,-0.2)}};
+static const  std::vector<std::vector<CVector2>> TEST_PRISM_POINTS{{CVector2(-0.1,-0.2),CVector2(0.1,-0.2),CVector2(0.1,0.2),CVector2(-0.1,0.2)},{CVector2(-0.1,0.2),CVector2(-0.3,0.2),CVector2(-0.3,-0.1),CVector2(-0.1,-0.2)},{CVector2(0.1,-0.2),CVector2(0.3,-0.3),CVector2(0.3,0.0),CVector2(0.1,0.2)}};
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
@@ -58,7 +60,7 @@ CCollectiveRLTransport::CCollectiveRLTransport() :
 void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
    try {
       /* Parse XML tree */
-      LOG<<"Initiating"<<std::endl;
+       LOG<<"Initiating"<<std::endl;
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
@@ -125,7 +127,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
-      m_vecObjStats.resize(7, 0.0);
+      m_vecObjStats.resize(9, 0.0);
       m_vecGateStats.resize(4, 0.0);
       if (m_unNumObstacles > 0){
           m_vecObstacleStats.resize(m_unNumObstacles*2, 0.0);
@@ -158,71 +160,74 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 void CCollectiveRLTransport::CreateEntities() {
    /** Choose object*/
     CRange<UInt32> ObjectRange(0,3);
-   //  m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
+    m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
    m_unObjectChoice = 2;
    /* Create the object */
    Real max_length = 0;
-   // if(m_unObjectChoice == 0){
-   //    m_pcCylinder = new CCylinderEntity(
-   //       "c1",
-   //       CVector3(),
-   //       CQuaternion(),
-   //       true,
-   //       CYLINDER_RADIUS,
-   //       CYLINDER_HEIGHT,
-   //       CYLINDER_MASS);
-   //    AddEntity(*m_pcCylinder);
-   //    max_length = CYLINDER_RADIUS;
-   //    m_pcEmbodiedEntity = m_pcCylinder->GetEmbodiedEntity();
-   // }
-   // else if(m_unObjectChoice == 1) {
-   //    m_pcConvexPrism = new CConvexPrismEntity(
-   //       "Prism_1",
-   //       CVector3(),
-   //       CQuaternion(),
-   //       true,
-   //       CONVEX_PRISM_POINTS,
-   //       PRISM_HEIGHT,
-   //       PRISM_MASS);
-   //    AddEntity(*m_pcConvexPrism);
+   if(m_unObjectChoice == 0){
+      m_pcCylinder = new CCylinderEntity(
+         "c1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         CYLINDER_RADIUS,
+         CYLINDER_HEIGHT,
+         CYLINDER_MASS);
+      AddEntity(*m_pcCylinder);
+      max_length = CYLINDER_RADIUS;
+      m_cObjCOMOffsetPos = CVector2::ZERO;
+   }
+   else if(m_unObjectChoice == 1) {
+      m_pcConvexPrism = new CConvexPrismEntity(
+         "Prism_1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         CONVEX_PRISM_POINTS,
+         PRISM_HEIGHT,
+         PRISM_MASS);
+      AddEntity(*m_pcConvexPrism);
 
-   //    CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-   
-   //    for(size_t i = 0; i < CONVEX_PRISM_POINTS.size(); i++) {
-   //       Real point_distance = Distance(origin, CONVEX_PRISM_POINTS[i]);
-   //       LOG<<"point: " << point_distance<<std::endl;
-   //       if(point_distance > max_length) {
-   //          max_length = point_distance;
-   //       }
-   //    }
-
-   //    m_pcEmbodiedEntity = m_pcConvexPrism->GetEmbodiedEntity();
-   // }
-   // else {
-
-// }
-   m_pcComposite = new CCompositeEntity(
-      "Prism_1",
-      CVector3(),
-      CQuaternion(),
-      true,
-      PRISM_MASSES,
-      COMPOSITE_PRISM_POINTS,
-      PRISM_HEIGHT);
-   AddEntity(*m_pcComposite);
-
-   CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-
-   for(size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); i++) {
-      for(size_t j = 0; j < COMPOSITE_PRISM_POINTS[0].size(); j++) {
-         Real point_distance = Distance(origin, COMPOSITE_PRISM_POINTS[i][j]);
-         LOG<<"point: " << point_distance<<std::endl;
+      CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+      for(size_t i = 0; i < CONVEX_PRISM_POINTS.size(); i++) {
+         Real point_distance = Distance(origin, CONVEX_PRISM_POINTS[i]);
          if(point_distance > max_length) {
             max_length = point_distance;
          }
       }
+      m_cObjCOMOffsetPos = GetCoM(CONVEX_PRISM_POINTS);
+
    }
-   // m_pcEmbodiedEntity = m_pcComposite->GetEmbodiedEntity();
+   else if(m_unObjectChoice == 2) {
+      PRISM_MASSES = TEST_PRISM_MASSES;
+      COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
+      m_pcComposite = new CCompositeEntity(
+         "Prism_1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         PRISM_MASSES,
+         COMPOSITE_PRISM_POINTS,
+         PRISM_HEIGHT);
+      AddEntity(*m_pcComposite);
+
+      CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+
+      for(size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); i++) {
+         for(size_t j = 0; j < COMPOSITE_PRISM_POINTS[0].size(); j++) {
+            Real point_distance = Distance(origin, COMPOSITE_PRISM_POINTS[i][j]);
+            LOG<<"point: " << point_distance<<std::endl;
+            if(point_distance > max_length) {
+               max_length = point_distance;
+            }
+         }
+      }
+      m_cObjCOMOffsetPos = GetCoMComposite(PRISM_MASSES,COMPOSITE_PRISM_POINTS);
+
+   }
+  
+
+
 
    
    /* Create robots */
@@ -232,10 +237,10 @@ void CCollectiveRLTransport::CreateEntities() {
    CVector3 cPos;
 
    
-   Real ROBOT_PRISM_DISTANCE   = max_length + FOOTBOT_RADIUS;
+   Real ROBOT_PRISM_DISTANCE   = 2*max_length + 2*FOOTBOT_RADIUS;
    
    // Adding an offset just makes the robots start slightly farther away
-   Real PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS;
+   Real PRISM_PLACEMENT_RADIUS = 2*(WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS);
 
 
    for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -427,11 +432,28 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    m_cOldObjectPos = m_vecObjectPos[un_episode];
    /* The placements we chose are collision-free by construction, no need to
     * check for collisions */
-   MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
+   if(m_unObjectChoice == 0) {
+      MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
               m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
               false,                             // not a check
               true);                             // ignore collisions
+   }
+   else if(m_unObjectChoice == 1) {
+      MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
+              CQuaternion(),                     // orientation
+              false,                             // not a check
+              true);                             // ignore collisions
+   }
+   else if(m_unObjectChoice == 2) {
+      MoveEntity(m_pcComposite->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
+              CQuaternion(),                     // orientation
+              false,                             // not a check
+              true);                             // ignore collisions
+   }
+   
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
       MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                  m_vecRobotPos[un_episode][i],        // position
@@ -466,9 +488,37 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
 
 
 }
+/****************************************/
+/****************************************/
+
+CVector2 CCollectiveRLTransport::GetCoM(std::vector<CVector2> vec_vertices) {
+   CVector2 sum = CVector2::ZERO;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      sum += vec_vertices[i];
+   }
+   CVector2 com_offset = sum / vec_vertices.size();
+   return com_offset;
+}
 
 /****************************************/
 /****************************************/
+
+CVector2 CCollectiveRLTransport::GetCoMComposite(std::vector<Real> vec_masses, std::vector<std::vector<CVector2>> vec_vertices) {
+   std::vector<CVector2> prism_coms;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      CVector2 prism_com = GetCoM(vec_vertices[i]);
+      prism_coms.push_back(prism_com);
+   }
+   Real mass_sum = vec_masses[0];
+   CVector2 overall_com = prism_coms[0];
+   for(size_t i = 1; i < prism_coms.size(); ++i) {
+      Real new_mass_sum = mass_sum + vec_masses[i];
+      overall_com = (overall_com*mass_sum + prism_coms[i]*vec_masses[i])/new_mass_sum;
+      mass_sum = new_mass_sum; 
+   }
+
+   return overall_com;
+}
 
 std::vector<SInt32> CCollectiveRLTransport::GenerateRobotFailure(){
   /*
@@ -591,19 +641,33 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
-   CVector3& cObjectPos =
-      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CQuaternion cCylinderOrient =
-      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+   CVector3 cObjectPos = CVector3::ZERO;
+   CQuaternion cCylinderOrient;
+   if(m_unObjectChoice == 0) {
+      cObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;       
+   }
+   else if(m_unObjectChoice == 1) {
+      cObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Orientation;  
+   }
+   else if(m_unObjectChoice == 2) {
+      cObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Orientation;  
+   }
+   
    CRadians cObjZ, cObjY, cObjX;
    cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
    /** Store object position and orientation to send to python*/
+   CVector2 COMPos = CVector2(m_cObjCOMOffsetPos.GetX() + cObjectPos.GetX(), m_cObjCOMOffsetPos.GetY() + cObjectPos.GetY()).Rotate(cObjZ);
    m_vecObjStats[0] = cObjectPos.GetX();
    m_vecObjStats[1] = cObjectPos.GetY();
    m_vecObjStats[2] = cObjectPos.GetZ();
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+   m_vecObjStats[7] = COMPos.GetX();
+   m_vecObjStats[8] = COMPos.GetY();
    if(m_unUseGate == 1){
      m_vecGateStats[0] = m_vecGateWallPos[m_unEpisodeCounter][0].GetX();
      m_vecGateStats[1] = m_vecGateWallSize[m_unEpisodeCounter][0].GetY();
@@ -719,7 +783,16 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
-   m_cOldObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   
+   if(m_unObjectChoice == 0) {
+      m_cOldObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;   
+   }
+   else if(m_unObjectChoice == 1) {
+      m_cOldObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   }
+   else if(m_unObjectChoice == 2) {
+      m_cOldObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position; 
+   }
 
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
@@ -862,8 +935,16 @@ void CCollectiveRLTransport::PostStep() {
 /****************************************/
 
 bool CCollectiveRLTransport::ObjectAtTarget() {
-   CVector3& cObjectPos =
-      m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   CVector3 cObjectPos = CVector3::ZERO;
+   if(m_unObjectChoice == 0) {
+      cObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;   
+   }
+   else if(m_unObjectChoice == 1) {
+      cObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   }
+   else if(m_unObjectChoice == 2) {
+      cObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position; 
+   }
    CVector2 cObject2Goal(
       m_cGoal.GetX() - cObjectPos.GetX(),
       m_cGoal.GetY() - cObjectPos.GetY());
