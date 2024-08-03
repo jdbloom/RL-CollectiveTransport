@@ -85,6 +85,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_frequency", m_unGateUpdateFrequency);
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
+      GetNodeAttribute(t_tree, "use_prisms", m_unUsePrisms);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
@@ -117,6 +118,10 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Send parameters */
       ZMQSendParams();
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
+      if(m_unUsePrisms){
+         ZMQSendNumPrisms();
+         ZMQSendPrismPoints();
+      }
       /* Initialize episode-related variables */
       m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
@@ -199,8 +204,8 @@ void CCollectiveRLTransport::CreateEntities() {
 
    }
    else if(m_unObjectChoice == 2) {
-      PRISM_MASSES = TEST_PRISM_MASSES;
-      COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
+      // PRISM_MASSES = TEST_PRISM_MASSES;
+      // COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
       m_pcComposite = new CCompositeEntity(
          "Prism_1",
          CVector3(),
@@ -225,10 +230,6 @@ void CCollectiveRLTransport::CreateEntities() {
       m_cObjCOMOffsetPos = GetCoMComposite(PRISM_MASSES,COMPOSITE_PRISM_POINTS);
 
    }
-  
-
-
-
    
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
@@ -1078,8 +1079,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
      maxDist = dist4;
    }
    vecParams.push_back(maxDist);
-
-
+   vecParams.push_back(COMPOSITE_PRISM_POINTS.size());
 
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
@@ -1095,6 +1095,48 @@ void CCollectiveRLTransport::ZMQSendParams() {
    }
    /* Wait for acknowledgment */
    ZMQGetAck();
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendNumPrisms(){
+   std::vector<int> m_vecNumPrismPoints;
+   for (size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); ++i){
+      m_vecNumPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i].size());
+   }
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<int*>(&m_vecNumPrismPoints[0]), // data pointer
+         sizeof(float) * m_vecNumPrismPoints.size(),  // data size in bytes
+         0)                      // another message will follow (rewards)
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+   ZMQGetAck();
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendPrismPoints(){
+   std::vector<float> m_vecPrismPoints;
+   for (size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); ++i){
+      for (size_t j = 0; j < COMPOSITE_PRISM_POINTS[i].size(); ++j){
+         m_vecPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i][j].GetX());
+         m_vecPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i][j].GetY());
+      }
+   }
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<float*>(&m_vecPrismPoints[0]), // data pointer
+         sizeof(float) * m_vecPrismPoints.size(),  // data size in bytes
+         0)                      // another message will follow (rewards)
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+   ZMQGetAck();
+
 }
 
 /****************************************/

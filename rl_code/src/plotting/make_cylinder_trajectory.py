@@ -29,6 +29,7 @@ parser.add_argument("--orientation", default=False, action='store_true')
 parser.add_argument("--intention", default=False, action='store_true')
 parser.add_argument("--failures", default=False, action='store_true')
 parser.add_argument("--plot_robots", default=False, action = 'store_true')
+parser.add_argument("--plot_COM", default=False, action='store_true')
 parser.add_argument("--label_1")
 parser.add_argument("--label_2")
 
@@ -106,7 +107,31 @@ for ep in range(len(file_names)-1):
                 ax1.add_patch(plt.Circle((np.float64(data['obstacle_stats'][0][i*2]), np.float64(data['obstacle_stats'][0][i*2+1])), 0.5, color = 'black'))
         ax1.add_patch(plt.Circle((data['cyl_x_pos'][0], data['cyl_y_pos'][0]), 0.5, facecolor = 'lightgray', edgecolor='black'))
         ax1.add_patch(plt.Circle((data['cyl_x_pos'][-1], data['cyl_y_pos'][-1]), 0.5, facecolor = 'lightgray', edgecolor='black'))
-
+        if args.plot_COM:
+            ax1.add_patch(plt.Circle((data['comX'][0], data['comY'][0]), 0.125, facecolor = 'black', edgecolor='black'))
+            print(data['comX'][0], data['comY'][0])
+        if args.plot_robots:
+            colors = ['orange', 'pink', 'mediumseagreen', 'cornflowerblue']
+            for robot in range(len(data['robot_x_pos'][0])):
+                ax1.add_patch(plt.Circle((data['robot_x_pos'][0][robot], data['robot_y_pos'][0][robot]), 0.125, facecolor = colors[robot], edgecolor='black', label = f'robot {robot}'))
+            for robot in range(len(data['robot_x_pos'][-1])):
+                ax1.add_patch(plt.Circle((data['robot_x_pos'][-1][robot], data['robot_y_pos'][-1][robot]), 0.125, facecolor = colors[robot], edgecolor='black'))
+            first_index = math.floor(len(data['robot_x_pos'])/3)
+            ax1.add_patch(plt.Circle((data['cyl_x_pos'][first_index], data['cyl_y_pos'][first_index]), 0.5, facecolor = 'lightgray', edgecolor='black'))
+            for robot in range(len(data['robot_x_pos'][-1])):
+                ax1.add_patch(plt.Circle((data['robot_x_pos'][first_index][robot], data['robot_y_pos'][first_index][robot]), 0.125, facecolor = colors[robot], edgecolor='black'))
+            if args.plot_COM:
+                ax1.add_patch(plt.Circle((data['comX'][first_index], data['comY'][first_index]), 0.125, facecolor = 'black', edgecolor='black'))
+                print(data['comX'][first_index], data['comY'][first_index])
+            ax1.add_patch(plt.Circle((data['cyl_x_pos'][first_index*2], data['cyl_y_pos'][first_index*2]), 0.5, facecolor = 'lightgray', edgecolor='black'))
+            for robot in range(len(data['robot_x_pos'][-1])):
+                ax1.add_patch(plt.Circle((data['robot_x_pos'][first_index*2][robot], data['robot_y_pos'][first_index*2][robot]), 0.125, facecolor = colors[robot], edgecolor='black'))
+            if args.plot_COM:
+                ax1.add_patch(plt.Circle((data['comX'][first_index*2], data['comY'][first_index*2]), 0.125, facecolor = 'black', edgecolor='black'))
+                print(data['comX'][first_index*2], data['comY'][first_index*2])
+        if args.plot_COM:
+            ax1.add_patch(plt.Circle((data['comX'][-1], data['comY'][-1]), 0.125, facecolor = 'black', edgecolor='black'))
+            print(data['comX'][-1], data['comY'][-1])
     ax1.plot(data['cyl_x_pos'], data['cyl_y_pos'], c='r', linewidth=5)
     
     if data['gate_stats'][0] != 0:
@@ -115,22 +140,25 @@ for ep in range(len(file_names)-1):
        ax1.plot((-10, 10), (0, 0), c='r', linestyle='--')
 
     ax1.text(data['cyl_x_pos'][0]-0.5, data['cyl_y_pos'][0]+1, 'START', fontsize = 20.0)
-    
+    ax1.legend(loc='upper right')
     ax2.plot(data['cyl_angle'], c='b', label = 'Swarm Heading')
     ax2.plot(np.arange(10, len(predicted_cyl_heading), 10), np.array([np.average(predicted_cyl_heading[i-10:i]) for i in range(10, len(predicted_cyl_heading), 10)]), c='r', label = 'Predicted Swarm Heading')
 
     ax2.set_yticks(np.arange(-180, 185, 90))
     ax2.set_title("Swarm Heading")
     ax2.legend(loc='upper right')
-    print('saving ... Trajectory'+'_'+str(ep)+'.png')
-    plt.savefig(args.data_path+'/plots/Trajectory'+'_'+str(ep)+'.png')
+    print('saving ... Trajectory'+'_'+str(ep)+'.png: ', args.data_path+'/test_plots/Robots_Trajectory'+'_'+str(ep)+'.png')
+    plt.savefig(args.data_path+'/plots/Robots_Trajectory'+'_'+str(ep)+'.png')
     plt.close()
 
+
+    #----------------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(20, 10))
     plt.rcParams.update({'font.size': 22})
     plt.plot(data['gsp_heading'], c= 'lightblue')
     last_10_gsp = np.array([np.average(data['gsp_heading'][i-10:i]) for i in range(10, len(data['gsp_heading']), 10)])
     last_10_gsp_index = np.arange(10, len(data['gsp_heading']), 10)
+    plt.ylim(-1, 1)
     plt.plot(last_10_gsp_index, last_10_gsp, c='b', label='GSP')
     plt.plot(cyl_heading_diff, c='r', label='Actual Heading Change')
     plt.legend()

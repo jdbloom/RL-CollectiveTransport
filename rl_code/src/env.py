@@ -50,8 +50,8 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
 class ZMQ_Utility:
     def __init__(self):
         self.PARAMS_FIELDS = ['num_robots','num_obstacles', 'num_obs','num_actions', 'num_stats', 'alphabet_size',
-                               'use_gate', 'distance_to_goal_normalization_factor']
-        self.PARAMS_FMT = '8f'
+                               'use_gate', 'distance_to_goal_normalization_factor', 'num_prisms']
+        self.PARAMS_FMT = '9f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',
@@ -78,7 +78,8 @@ class ZMQ_Utility:
         self.GATE_STATS_FMT = '4f'
         # Need to account for differing numbers of obstacles
         self.OBSTACLE_STATS_FIELDS = []
-
+        self.PRISM_SIZE_FIELDS = []
+        self.PRISM_POINT_FIELDS = []
 
         self.ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
         self.ACTIONS_FMT = '3f'
@@ -98,6 +99,21 @@ class ZMQ_Utility:
         self.params['num_stats'] = int(self.params['num_stats'])
         self.params['alphabet_size'] = int(self.params['alphabet_size'])
         self.params['use_gate'] = int(self.params['use_gate'])
+        self.params['num_prisms'] = int(self.params['num_prisms'])
+        if self.params['num_prisms'] > 0:
+            self.set_prism_sizes()
+    
+    def set_prism_sizes(self):
+        for i in range(self.params['num_prisms']):
+            self.PRISM_SIZE_FIELDS.append(f'prism_{i}_size')
+        self.PRISM_SIZE_FMT = str(self.params['num_prisms'])+'I'
+    
+    def set_prism_points(self, prism_sizes):
+        for i in range(len(prism_sizes)):
+            for j in range(prism_sizes[i]):
+                self.PRISM_POINT_FIELDS.append(f'prism_{i}_point_{j}_x')
+                self.PRISM_POINT_FIELDS.append(f'prism_{i}_point_{j}_y')
+        self.PRISM_POINT_FMT = str(np.sum(prism_sizes)*2)+'f'
 
     def set_obstacles_fields(self):
         for i in range(self.params['num_obstacles']):
@@ -208,6 +224,20 @@ class ZMQ_Utility:
         # Make a numpy array
         obj_stats = np.fromiter(data.values(), dtype=np.float32, count = len(data))
         return obj_stats
+
+    def parse_prism_sizes(self, msg):
+        # Parse the bytes into a dictionary
+        data = self.parse_msg(msg, 'prism_sizes', self.PRISM_SIZE_FIELDS, self.PRISM_SIZE_FMT)
+        # Make a numpy array
+        prism_sizes = np.fromiter(data.values(), dtype=np.int32, count=len(data))
+        self.set_prism_points(prism_sizes)
+        return prism_sizes
+
+    def parse_prism_points(self, msg):
+        # Parse the bytes into a dictionary
+        data = self.parse_msg(msg, 'prism_points', self.PRISM_POINT_FIELDS, self.PRISM_POINT_FMT)
+        # return the dictionary for external parsing
+        return data
 
     def parse_gate_stats(self, msg):
         # Parse the bytes into a dictionary

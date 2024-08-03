@@ -252,6 +252,9 @@ private:
    /** Minimum gate separation */
    Real m_fGateMinimum;
 
+   /** Use the composit prism as the object */
+   UInt32 m_unUsePrisms;
+
    /** vector to keep track of the current offset (not used other than to print) */
    std::vector<Real> m_vecOffset;
 
@@ -320,6 +323,10 @@ private:
    void ZMQSendObstacleStats();
 
    void ZMQSendRobotStats();
+   
+   void ZMQSendNumPrisms();
+   
+   void ZMQSendPrismPoints();
 
    void ZMQGetAck();
 

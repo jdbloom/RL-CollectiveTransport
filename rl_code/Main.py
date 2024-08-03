@@ -69,6 +69,7 @@ if not args.no_print:
     print("  alphabet_size -", Utility.params['alphabet_size'])
     print("  num_actions ---", Utility.params['num_actions'])
     print("  num_stats -----", Utility.params['num_stats'])
+    print("  num_prisms ----", Utility.params['num_prisms'])
 
 Utility.set_obstacles_fields()
 # Path to save data
@@ -116,9 +117,24 @@ else:
     if test_mode:
         model.load_model(model_file_path)
 
-
 # Send acknowledgment
 socket.send(b"ok")
+
+# get the prism sizes and prism points
+if Utility.params['num_prisms'] > 0:
+    prism_sizes = Utility.parse_prism_sizes(socket.recv())
+    print(f'\n\n[PRISM SIZES] {prism_sizes}\n\n')
+    # Send acknowledgment
+    socket.send(b"ok")
+    prism_points = Utility.parse_prism_points(socket.recv())
+    print(f'\n\n[PRISM POINTS] {prism_points}\n\n')
+    # Send acknowledgment
+    socket.send(b"ok")
+
+
+
+
+
 
 #######################################################################
 #                           MAIN LOOP

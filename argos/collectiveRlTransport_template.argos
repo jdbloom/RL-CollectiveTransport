@@ -62,6 +62,7 @@
                   gate_update_frequency = "50"
                   gate_update_amount = "0.25"
                   gate_minimum = "$$gate_minimum$$"
+                  use_prisms = "1"
                   use_base_model = "0"/>
 
 
