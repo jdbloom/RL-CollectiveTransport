@@ -29,7 +29,7 @@ parser.add_argument("--orientation", default=False, action='store_true')
 parser.add_argument("--intention", default=False, action='store_true')
 parser.add_argument("--failures", default=False, action='store_true')
 parser.add_argument("--plot_robots", default=False, action = 'store_true')
-parser.add_argument("--plot_COM", defualt=False, action='store_true')
+parser.add_argument("--plot_COM", default=False, action='store_true')
 parser.add_argument("--label_1")
 parser.add_argument("--label_2")
 
@@ -136,7 +136,7 @@ for ep in range(len(file_names)-1):
     ax2.set_title("Swarm Heading")
     ax2.legend(loc='upper right')
     print('saving ... Trajectory'+'_'+str(ep)+'.png: ', args.data_path+'/test_plots/Robots_Trajectory'+'_'+str(ep)+'.png')
-    plt.savefig(args.data_path+'/test_plots/Robots_Trajectory'+'_'+str(ep)+'.png')
+    plt.savefig(args.data_path+'/plots/Robots_Trajectory'+'_'+str(ep)+'.png')
     plt.close()
 
 
