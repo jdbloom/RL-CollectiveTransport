@@ -98,6 +98,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /*
        * Connect to PyTorch
        */
+      LOG << "[INFO] SETTING UP SERVICE " << std::endl;
+      // DEBUG("AT INIT ----------------------------\n");
       /* Create context */
       m_ptZMQContext = zmq_ctx_new();
       if(m_ptZMQContext == nullptr) {
@@ -117,6 +119,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
          THROW_ARGOSEXCEPTION("Cannot connect to " << strPyTorchURL << ": " << zmq_strerror(errno));
       }
       /* Send parameters */
+      // DEBUG("AT Sending Params ----------------------------\n")
       ZMQSendParams();
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
       /* Initialize episode-related variables */
@@ -138,30 +141,37 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Create a new RNG */
       LOG<<"[INFO] Creating RNG for Training"<<std::endl;
       m_pcRNG = CRandom::CreateRNG("argos");
+      // DEBUG("AT Generating Things in world ----------------------------\n")
       /* Create and place stuff */
       if(m_bSimulateRobots){
+      //   DEBUG("AT ROBOTS_SIMULATED ----------------------------\n")
         SimulateRobots();
         LOG<<"Robots Simulated"<<std::endl;
       } else {
+      //   DEBUG("AT ROBOTS TAKEN FROM FIELD ----------------------------\n")
         SimulateRobots();
         LOG<<"Robots taken from field"<<std::endl;
       }
+
       if(m_bSimulateObstacles){
+      //   DEBUG("AT SIMULATE OBSTACLES ----------------------------\n")
         SimulateObstacles();
         LOG<<"Simulated Obstacles"<<std::endl;} else{
         LOG<<"Obstacles taken from field"<<std::endl;
         }
       if(m_bSimulateGate){
+      //   DEBUG("AT SIMULATE GATE ----------------------------\n")
         SimulateGate();
         LOG<<"Simulated Gate"<<std::endl;} else{
         LOG<<"Gate taken from field"<<std::endl;
         }
       //Print first failure set
+      // DEBUG("AT GENERATE FAILURES ----------------------------\n")
       for(size_t i = 0; i < m_unNumRobots; i++){
         LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
       }
       LOG<<std::endl;
-
+      // DEBUG("AT Placing thins in World ----------------------------\n")
       PlaceRobots(0);
       PlaceObstacles(0);
       PlaceGate(0);
@@ -181,6 +191,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 
 void CCollectiveRLTransport::SimulateRobots() {
    /* Create the cylinder */
+   DEBUG("AT Creating Cylinder ----------------------------\n")
    m_pcCylinder = new CCylinderEntity(
       "Cylinder_1",
       CVector3(),
@@ -189,9 +200,11 @@ void CCollectiveRLTransport::SimulateRobots() {
       CYLINDER_RADIUS,
       CYLINDER_HEIGHT,
       CYLINDER_MASS);
+   DEBUG("AT Adding cylinder ----------------------------\n")
    AddEntity(*m_pcCylinder);
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
+   DEBUG("AT Creating Robot ----------------------------\n")
    std::ostringstream cKIVId;
    CKheperaIVEntity* pcKIV;
    CVector3 cPos;
@@ -211,25 +224,30 @@ void CCollectiveRLTransport::SimulateRobots() {
        if (ss.peek() == ',')
            ss.ignore();
    }
-
+   // DEBUG("AT Building Robots ----------------------------\n")
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cKIVId.str("");
-      cKIVId << "Khepera_" << vect[i];
+      cKIVId << "Khepera_" << i;
+      // DEBUG("AT Building Robot %u ---------------------------\n", i)
       LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
       cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
+      // DEBUG("AT Generating Robots ----------------------------\n")
       pcKIV = new CKheperaIVEntity(
          cKIVId.str(),
-         KIV_CONTROLLER,
+         "kivc",
          cPos,
          CQuaternion(-cSlice, CVector3::Z)
          );
+      // DEBUG("AT Pushing Robots ----------------------------\n")
       m_vecRobots.push_back(pcKIV);
       /** Need to chage the range of the proximity sensor
           If m_fProximityRange = 0 then the sensor range will
           stay at default */
+      
+      // DEBUG("AT Adding Robots ----------------------------\n")
       AddEntity(*pcKIV);
       CDynamics2DKheperaIVModel& cModel = dynamic_cast<CDynamics2DKheperaIVModel&>(pcKIV->GetEmbodiedEntity().GetPhysicsModel(0));
       cpConstraint* wheel = cModel.m_cDiffSteering.GetAngularConstraint();
@@ -243,7 +261,7 @@ void CCollectiveRLTransport::SimulateRobots() {
         }
       }
    }
-
+   // DEBUG("AT Done with Robots ----------------------------\n")
    CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
       GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
@@ -563,6 +581,7 @@ std::vector<SInt32> CCollectiveRLTransport::GenerateRobotFailure(){
 /****************************************/
 
 void CCollectiveRLTransport::Reset() {
+   // DEBUG("AT RESET ----------------------------\n")
    for(size_t i = 0; i < m_unNumRobots; i++){
      LOG << m_vecRobotFailures[m_unEpisodeCounter][i]<<" ";
    }
@@ -774,6 +793,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 /****************************************/
 
 void CCollectiveRLTransport::PreStep() {
+   // DEBUG("AT PreStep ----------------------------\n")
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
    m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
@@ -872,6 +892,7 @@ void CCollectiveRLTransport::PostExperiment() {
 /****************************************/
 
 void CCollectiveRLTransport::PostStep() {
+   // DEBUG("AT START OF POST STEP ----------------------------")
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
    /* Check if the cylinder reached the goal */

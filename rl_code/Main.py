@@ -31,7 +31,7 @@ parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
-parser.add_argument("--port", default = "55556")
+parser.add_argument("--port", default = "55560")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
@@ -269,7 +269,7 @@ while not exp_done:
                     actions.append(action_num)
 
                 old_failures = failures[:]
-                # Take Step
+                # Take Step]
                 socket.send(Utility.serialize_actions(actions_to_take))
                 msgs = socket.recv_multipart()
 

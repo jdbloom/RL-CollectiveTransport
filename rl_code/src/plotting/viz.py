@@ -93,7 +93,15 @@ ax2.set_xlabel('Episodes')
 plt.title('Training Metrics')
 plt.savefig(args.data_path+'Training_Metrics.png')
 
-
+for i, ep in enumerate(last_10_axis):
+    print(f'Model {ep} had Average Reward: {last_10_rewards[i]:.2f}, GSP Reward: {last_10_gsp_rewards[i]:.2f}, and Success Rate: {last_10_success_pct[i]}')
+print("-------------------------------")
+print()
+print("Total EXP Success: ", np.average(terminals))
+print("Average Reward:    ", np.average(episode_rewards))
+print("Reward STD:        ", np.std(episode_rewards))
+print("Average GSP Reward:", np.average(episode_gsp_rewards))
+print("GSP Reward STD:    ", np.std(episode_gsp_rewards))
     
     # rewards = []
     # gsp_reward = []

@@ -37,12 +37,12 @@ for ep in range(len(file_names)-1):
     with open(data_path+name, 'rb') as f:
         data = pickle.load(f)
         
-    fig, ax = plt.subplots(figsize=(20, 10))
+    fig, ax = plt.subplots(figsize=(10, 10))
     plt.rcParams.update({'font.size': 22})
-    plt.plot((-10, 10, 10, -10, -10), (-5, -5, 5, 5, -5), c= 'k')
-    ax.add_patch(plt.Circle((4.5, 0), 2, color='black', fill = False, linestyle = '--', linewidth=3.0))
-    ax.add_patch(plt.Circle((data['cyl_x_pos'][0], data['cyl_y_pos'][0]), 0.5, facecolor = 'lightgray', edgecolor='black'))
-    ax.add_patch(plt.Circle((data['cyl_x_pos'][-1], data['cyl_y_pos'][-1]), 0.5, facecolor = 'lightgray', edgecolor='black'))
+    plt.plot((-3.048, 3.048, 3.048, -3.048, -3.048), (-3.048, -3.048, 3.048, 3.048, -3.048), c= 'k')
+    ax.add_patch(plt.Circle((1, 0), 0.424, color='black', fill = False, linestyle = '--', linewidth=3.0))
+    ax.add_patch(plt.Circle((data['cyl_x_pos'][0], data['cyl_y_pos'][0]), 0.12, facecolor = 'lightgray', edgecolor='black'))
+    ax.add_patch(plt.Circle((data['cyl_x_pos'][-1], data['cyl_y_pos'][-1]), 0.12, facecolor = 'lightgray', edgecolor='black'))
     ax.plot(data['cyl_x_pos'], data['cyl_y_pos'], c='r', linewidth=5)
     
 
@@ -52,14 +52,14 @@ for ep in range(len(file_names)-1):
        plt.plot((-10, 10), (0, 0), c='r', linestyle='--')
     if data['obstacle_stats'][0] != 0:
         for i in range(int(len(data['obstacle_stats'][0])/2)):
-            ax.add_patch(plt.Circle((np.float64(data['obstacle_stats'][0][i*2]), np.float64(data['obstacle_stats'][0][i*2+1])), 0.5, color = 'black'))
+            ax.add_patch(plt.Circle((np.float64(data['obstacle_stats'][0][i*2]), np.float64(data['obstacle_stats'][0][i*2+1])), 0.15, color = 'black'))
 
     plt.text(data['cyl_x_pos'][0]-0.5, data['cyl_y_pos'][0]+1, 'START', fontsize = 20)
-    plt.text(4, -0.25, 'GOAL', fontsize=20)
-    plt.xlim(-11, 11)
-    plt.xticks(np.arange(-11, 12, 1), fontsize = 18)
-    plt.ylim(-6, 6)
-    plt.yticks(np.arange(-6, 7, 1), fontsize = 18)
+    plt.text(1, -0.25, 'GOAL', fontsize=20)
+    plt.xlim(-4, 4)
+    plt.xticks(np.arange(-4, 4, 1), fontsize = 18)
+    plt.ylim(-4, 4)
+    plt.yticks(np.arange(-4, 4, 1), fontsize = 18)
     plt.axis('off')
     print('saving ... Trajectory'+'_'+str(ep)+'.png')
     plt.savefig(args.data_path+'/plots/Trajectory'+'_'+str(ep)+'.png')
