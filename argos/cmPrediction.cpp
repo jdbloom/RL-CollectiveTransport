@@ -11,14 +11,14 @@ using namespace argos;
 /****************************************/
 
 static const std::string KIV_CONTROLLER = "kivc";
-static const Real CYLINDER_RADIUS           = 0.32;  // m
+static const Real CYLINDER_RADIUS           = 0.12;  // m
 static const Real CYLINDER_HEIGHT           = 0.25; // m
-static const Real CYLINDER_MASS             = 100;  // kg
+static const Real CYLINDER_MASS             = 1;  // kg
 static const Real OBSTACLE_RADIUS           = 0.15;  // m
 static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real KHEPERAIV_RADIUS          = 0.09855f; // m
-static const Real CYLINDER_OFFSET           = 0.0;
+static const Real CYLINDER_OFFSET           =-0.003;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
@@ -56,8 +56,8 @@ int BeginFunc(cpArbiter* pt_arb,
 CCMPrediction::CCMPrediction() :
    // m_unNumObs(10+8), // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation, 8 proximity sensors
    // m_unNumObs(10); // PF, PLF, LW, RW, SizeCyl, VecCylAnch, RobDirFrmWntdDir,RobDir, xEstimation, yEstimation
-   m_unNumObs(13), // force angle, |force|, cos force, sin force, 1/|f|, |robot to cylinder|, angle robot to cylinder, cos angle robot to cylinder, sin angle robot to cylinder, angle robot target direction to way we are going, sin cos angle robot target direction to way we are going, drive magnitude
-   // NOTE : IF YOU EVER CHANGE HOW THE ROBOTS CALIBRATE i.e allow them to drive in a continuous circle, send the angular velocity which is the following equation : (f_right_wheel - f_left_wheel) / m_fInterwheelDistance
+   m_unNumObs(15), // force angle, |force|, cos force, sin force, 1/|f|, |robot to cylinder|, angle robot to cylinder, cos angle robot to cylinder, sin angle robot to cylinder, angle robot target direction to way we are going, sin cos angle robot target direction to way we are going, drive magnitude
+   // NOTE : IF YOU EVER CHANGE HOW THE ROBOTS CALIBRATE i.e allow them to drive in a continuous circle, send the angular velocity which is the following equation : (f_right_wheel - f_left_wheel) / m_fInterwheelDistance, and the prediction
    m_unNumActions(3),
    m_ptZMQContext(nullptr),
    m_ptZMQSocket(nullptr) {
@@ -74,6 +74,7 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "threshold",       m_fThreshold);
       GetNodeAttribute(t_tree, "num_episodes",    m_unNumEpisodes);
+      GetNodeAttribute(t_tree, "object_radius",    m_fObjectRadius);
       GetNodeAttribute(t_tree, "episode_time",    m_unEpisodeTime);
       GetNodeAttribute(t_tree, "time_out_reward", m_fTimeOutReward);
       GetNodeAttribute(t_tree, "threshold_freq", m_unDecThresholdTime);
@@ -98,6 +99,9 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
 
       /* Stats to be sent to Data: */
       m_unNumStats = 9; // two I think useless variables, robot velocity x and y, robot prediction x and y, robot global force angle
+
+      // Update placement sizes and radius'
+      m_fRobotCylinderDistance = m_fObjectRadius + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 
       /*
        * Connect to PyTorch
@@ -186,24 +190,15 @@ void CCMPrediction::SimulateRobots() {
    if(m_bSimulateObjectMO){
        // TODO Use Julian's code here
    } else {
-       // TODO : Change this to a square to allow robot to always be perfectly perpendicular
-      // m_pcBox = new CBoxEntity("Box_1",
-      //                          CVector3(),
-      //                          CQuaternion(),
-      //                          true,
-      //                          CVector3(CYLINDER_RADIUS*2,CYLINDER_RADIUS*2,CYLINDER_HEIGHT),
-      //                          CYLINDER_MASS);
-      // AddEntity(*m_pcBox); // TODO : Make this code work
-
        /* Create the cylinder */
        m_pcCylinder = new CCylinderEntity(
           "Cylinder_1",
           CVector3(),
           CQuaternion(),
           true,
-          CYLINDER_RADIUS,
+          m_fObjectRadius,
           CYLINDER_HEIGHT/2,
-          CYLINDER_MASS);
+          CYLINDER_MASS/2);
        AddEntity(*m_pcCylinder);
        /* Create the center of mass CM modifier Cylinder */
        m_pcCylinderCMModifier = new CCylinderEntity(
@@ -211,9 +206,9 @@ void CCMPrediction::SimulateRobots() {
          CVector3(),
          CQuaternion(),
          true,
-         CYLINDER_RADIUS / 8,
+         m_fObjectRadius / 8,
          CYLINDER_HEIGHT,
-         CYLINDER_MASS);
+         CYLINDER_MASS/2);
       //  m_pcCylinderCMModifier->u = 1.0;
        AddEntity(*m_pcCylinderCMModifier);
        
@@ -266,7 +261,7 @@ void CCMPrediction::SimulateRobots() {
       cKIVId.str("");
       cKIVId << "Khepera_" << vect[i];
       LOG<<"Adding "<<cKIVId.str()<<" to Environment"<<std::endl;
-      cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
+      cPos.FromSphericalCoords(m_fRobotCylinderDistance,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
@@ -302,7 +297,7 @@ void CCMPrediction::SimulateRobots() {
    }
 
    /* Radius for CoM distribution offset :  */
-   CRange<Real> CoMDistOffset(0.0, CYLINDER_RADIUS - CYLINDER_RADIUS /8);
+   CRange<Real> CoMDistOffset(0.0, m_fObjectRadius - m_fObjectRadius /8);
 
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
@@ -329,7 +324,7 @@ void CCMPrediction::SimulateRobots() {
       for(size_t j = 0; j < m_unNumRobots; ++j) {
          /* Create offset wrt cylinder center */
          CVector3 cPos(
-            CVector3(ROBOT_CYLINDER_DISTANCE,
+            CVector3(m_fRobotCylinderDistance,
                      CRadians::PI_OVER_TWO,
                      j * cSlice + cOffset));
          /* Translate to actual cylinder center */
@@ -504,7 +499,7 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
    m_vecObjStats[6] = cCylinderModPos.GetX();
    m_vecObjStats[7] = cCylinderModPos.GetY();
-   m_vecObjStats[8] = CYLINDER_RADIUS;
+   m_vecObjStats[8] = m_fObjectRadius;
    // DEBUG("Positions and Orientations Found\n");
 
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
@@ -596,7 +591,9 @@ void CCMPrediction::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 9] = robotOrientToTargetDirection.GetValue();
       m_vecObs[i * m_unNumObs + 10] = Cos(robotOrientToTargetDirection);
       m_vecObs[i * m_unNumObs + 11] = Sin(robotOrientToTargetDirection);
-      m_vecObs[i * m_unNumObs + 12] = TotalDriveMag; 
+      m_vecObs[i * m_unNumObs + 12] = TotalDriveMag;
+      m_vecObs[i * m_unNumObs + 13] = m_AngleFromRCV[i] / (CRadians::PI / 2);
+      m_vecObs[i * m_unNumObs + 14] = (m_LengthOffsetFromRobot[i] - m_fObjectRadius - KHEPERAIV_RADIUS) / m_fObjectRadius;; 
       // TODO : provide the robot its actuation ~ a deltax,deltay to know how the robot moved instead of the drive magnitude
 
 
@@ -678,8 +675,8 @@ void CCMPrediction::PreStep() {
       // DEBUG("Received %f. %f\n", pfAction[0], pfAction[1]);
       // m_xOffsetFromRobot[i] = std::min(std::max(std::abs(m_xOffsetFromRobot[i] + pfAction[0] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
       // m_yOffsetFromRobot[i] = std::min(std::max(std::abs(m_yOffsetFromRobot[i] + pfAction[1] + CYLINDER_RADIUS*2), 0.0),CYLINDER_RADIUS*4) - CYLINDER_RADIUS*2;
-      m_LengthOffsetFromRobot[i] = pfAction[0] * CYLINDER_RADIUS + CYLINDER_RADIUS + KHEPERAIV_RADIUS; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
-      m_AngleFromRCV[i] = pfAction[1] * CRadians::PI / 2;
+      m_LengthOffsetFromRobot[i] = pfAction[0] * m_fObjectRadius + m_fObjectRadius + KHEPERAIV_RADIUS; // Receiving the offset of x and y for each individual robot for prediction of cm robot to object
+      m_AngleFromRCV[i] = pfAction[1] * CRadians::PI;
       // DEBUG("Dis : %f Angle : %f\n", m_LengthOffsetFromRobot[i], m_AngleFromRCV[i]);
       vecBaseModel[i] = m_unBaseModel;
    }
@@ -699,7 +696,13 @@ void CCMPrediction::PreStep() {
          // DEBUG("ROBOT %i is gripped", i);
       // }
 //      DEBUG("Robot ID %d, Intended Direction %f, Current Direction %f, Error %f\n", i, ToDegrees(Intended_Dir).GetValue(), m_vecRobotStats[i*6+5], error);
-      if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < 40){
+      if(m_unEpisodeTime - m_unEpisodeTicksLeft < 500){
+         m_unTurnTime = m_unTicksPerDuration;
+      } else{
+         m_unTurnTime = 100;
+      }
+
+      if((m_unEpisodeTime - m_unEpisodeTicksLeft) % m_unTicksPerDuration < m_unTurnTime){
          vecWheelSpeedL[i] = (error * wheel_gain);
          vecWheelSpeedR[i] = - (error * wheel_gain);
          m_bSendZMQ = false;

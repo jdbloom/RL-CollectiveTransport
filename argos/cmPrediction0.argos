@@ -7,7 +7,7 @@
   <framework>
     <system threads="0" />
     <experiment length="0"
-                ticks_per_second="30"
+                ticks_per_second="400"
                 random_seed="123" />
   </framework>
 
@@ -28,8 +28,8 @@
         <kheperaiv_proximity implementation = "default" show_rays = "true" />
         <kheperaiv_gripper_force implementation="default"/>
       </sensors>
-      <params bytecode_file = "cm_build/argos/cmPrediction.bo"
-                         debug_file = "cm_build/argos/cmPrediction.bdb" />
+      <params bytecode_file = "build/argos/cmPrediction.bo"
+                         debug_file = "build/argos/cmPrediction.bdb" />
     </buzz_controller_kheperaiv>
 
   </controllers>
@@ -38,24 +38,25 @@
   <!-- * Loop functions * -->
   <!-- ****************** -->
   <!-- Setting proximity_range = 0 will keep it at default -->
-  <loop_functions library="cm_build/argos/libcmPrediction"
+  <loop_functions library="build/argos/libcmPrediction"
                   label="cm_prediction"
                   data_file = "data.csv"
                   num_robots = "4"
+                  object_radius = "0.12"
                   goal = "4.5, 0"
                   threshold = "2"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
                   min_threshold = "2"
-                  num_episodes = "1000"
-                  episode_time = "1200"
+                  num_episodes = "500"
+                  episode_time = "2400"
                   time_out_reward = "0"
                   prediction_reward = "4"
                   pytorch_url = "tcp://localhost:55555"
 		              alphabet_size = "1"
                   proximity_range = "2"
                   use_base_model = "0"
-                  ticks_per_direction_switch = "100"
+                  ticks_per_direction_switch = "300"
                   robots_used="0,1,2,3,4,5,6,7"/>
 
   <!-- *********************** -->

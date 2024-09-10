@@ -15,23 +15,25 @@ parser = argparse.ArgumentParser()
 # parser.add_argument("figure_path")
 # parser.add_argument("figure_name")
 parser.add_argument("--source_path")
-parser.add_argument("--Episode")
+parser.add_argument("--episode")
 parser.add_argument("--num_robots", default = 4)
+parser.add_argument("--object_radius", default = 0.12)
 
 args = parser.parse_args()
 
-episodes = args.Episode
+episodes = args.episode
+object_radius = int(args.object_radius)
 
 CB_color_cycle = ['#377eb8', '#8e41e0', '#e04161', '#cf6730','#c91818', '#ff7f00', '#4daf4a',
     '#f781bf', '#a65628', '#984ea3',
     '#999999', '#dede00']
 
-print('\n. . . Live Plotting Episode '+args.Episode+' . . .')
+print('\n. . . Live Plotting Episode '+args.episode+' . . .')
 if args.source_path is not None:
     print('. . . Loading Model Data')
     data_path = args.source_path
     file_names = []
-    file_path = data_path+'Data/Data_Episode_'+str(args.Episode)+'.csv'
+    file_path = data_path+'Data/Data_Episode_'+str(args.episode)+'.csv'
     print(file_path)
     data = pd.read_csv(file_path)
 print('. . . Plotting Data')

@@ -132,6 +132,12 @@ private:
    /* Number of episodes */
    UInt32 m_unNumEpisodes;
 
+   /* Object radius */
+   Real m_fObjectRadius;
+
+   /* Robot Placement Distance */
+   Real m_fRobotCylinderDistance;
+
    /* Time limit of each episode */
    UInt32 m_unEpisodeTime;
 
@@ -252,7 +258,9 @@ private:
 
    Real wheel_gain = 0.005;
 
-   Real m_fWheelSpeed = 5.0;
+   Real m_fWheelSpeed = 10.0;
+
+   Real m_unTurnTime;
 
    bool m_bSendZMQ;
 

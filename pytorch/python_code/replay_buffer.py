@@ -29,8 +29,8 @@ class ReplayBuffer():
                 self.action_memory[mem_index] = action[0]
             elif self.action_type == 'Continuous':
                 self.action_memory[mem_index] = action[1][0:2]
-        if self.use_intention:
-            self.action_memory[mem_index] = action[0:2]
+        # if self.use_intention:
+        #     self.action_memory[mem_index] = action[0:2]
         self.reward_memory[mem_index] = reward
         self.new_state_memory[mem_index] = state_
         self.terminal_memory[mem_index] = done
