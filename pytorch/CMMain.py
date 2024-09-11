@@ -347,7 +347,7 @@ while not exp_done:
 
                                 intention_error.append(error)
                                 # intention_reward.append(math.pow((1 - error) * 4 / 3, 2))
-                                intention_reward.append(800 - (error / obj_stats[8] * 400))
+                                intention_reward.append(2 - error)
                                 episode_intention_rewards[i] += intention_reward[i]
 
                     else:
