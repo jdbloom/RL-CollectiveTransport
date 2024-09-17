@@ -1,0 +1,12 @@
+We are saving nuclear launch codes.
+
+1. Nonuniform Object Generation
+2. Connecting to Nonuniform Object with khepera's
+3. Modifying khepera sends to cmLearning model to only send under certain conditions (connected and not turning)
+4. Update CoM solver with the nonuniform object's center of mass
+5. Update Distance Solver using geometrical center of object
+
+
+
+6. Train
+7. Gather Results 
