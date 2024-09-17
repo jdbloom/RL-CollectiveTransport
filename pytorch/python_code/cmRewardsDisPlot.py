@@ -77,6 +77,7 @@ for episode in df_list:
         if args.intention:
             # intention_angle = np.fromstring(episode[1]['intention_angle'][i].strip(']['), sep=' ')
             intention_radius = np.fromstring(episode[1]['intention_radius'][i].strip(']['), sep=' ')[0]
+            print(episode[1]['intention_error'][i].strip('[]'), "\n")
             intention_error_cm = np.fromstring(episode[1]['intention_error'][i].strip(']['), sep=' ')
 
             pos_x_robots[i] = np.fromstring(episode[1]['robots_x_pos'][i].strip('[]'), sep=',')
@@ -116,7 +117,9 @@ intention_std = np.asarray(intention_std)
 prediction_offset = np.asarray(prediction_offset)
 prediction_offset_std = np.asarray(prediction_offset_std) 
 i_prediction_offset = np.asarray(i_prediction_offset)
+print(np.argmin(i_prediction_offset))
 i_prediction_offset_std = np.asarray(i_prediction_offset_std) 
+
 
 print('\n. . . Live Plotting Full Experiment From Episodes 0 to '+ str(args.episodes) +' . . .')
 
