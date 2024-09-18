@@ -63,6 +63,8 @@
                   gate_update_amount = "0.25"
                   gate_minimum = "$$gate_minimum$$"
                   use_prisms = "1"
+                  random_objs = "1"
+                  test_prism = "1"
                   use_base_model = "0"/>
 
 

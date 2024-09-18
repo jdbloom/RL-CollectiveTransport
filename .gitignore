@@ -1,5 +1,7 @@
 build
+build_vicon
 rl_code/Data/*
+rl_code/real_testing
 rl_code/*/__pycache__/*
 rl_code/__pycache__
 #*~ excludes emacs auto-gen'd backup files

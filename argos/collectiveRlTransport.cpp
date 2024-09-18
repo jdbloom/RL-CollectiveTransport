@@ -86,6 +86,8 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
       GetNodeAttribute(t_tree, "use_prisms", m_unUsePrisms);
+      GetNodeAttribute(t_tree, "test_prism", m_unUseTestPrism);
+      GetNodeAttribute(t_tree, "random_objs", m_unRandomizeObjects);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
@@ -164,9 +166,15 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 
 void CCollectiveRLTransport::CreateEntities() {
    /** Choose object*/
-    CRange<UInt32> ObjectRange(0,3);
-    m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
-   m_unObjectChoice = 2;
+   m_unObjectChoice = 0;
+   if(m_unUsePrisms == 1) {
+       m_unObjectChoice = 2;
+   }
+   if(m_unRandomizeObjects == 1) {
+      CRange<UInt32> ObjectRange(0,3);
+      m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
+   }
+    
    /* Create the object */
    Real max_length = 0;
    if(m_unObjectChoice == 0){
@@ -204,8 +212,11 @@ void CCollectiveRLTransport::CreateEntities() {
 
    }
    else if(m_unObjectChoice == 2) {
-      // PRISM_MASSES = TEST_PRISM_MASSES;
-      // COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
+      // uses the alternate composite prism object for testing
+      if(m_unUseTestPrism == 1) {
+         PRISM_MASSES = TEST_PRISM_MASSES;
+         COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
+      }
       m_pcComposite = new CCompositeEntity(
          "Prism_1",
          CVector3(),

@@ -252,8 +252,14 @@ private:
    /** Minimum gate separation */
    Real m_fGateMinimum;
 
-   /** Use the composit prism as the object */
+   /** Use the composite prism as the object */
    UInt32 m_unUsePrisms;
+
+   /** Randomize object between cylinder, convex, and composite prisms*/
+   UInt32 m_unRandomizeObjects;
+
+   /** Use different prism for testing*/
+   UInt32 m_unUseTestPrism;
 
    /** vector to keep track of the current offset (not used other than to print) */
    std::vector<Real> m_vecOffset;
