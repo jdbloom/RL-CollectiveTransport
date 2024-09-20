@@ -86,7 +86,7 @@
   <!-- ****************** -->
   <visualization>
     
-   <!-- <qt-opengl>
+   <qt-opengl>
        <user_functions label="cmPrediction_qtuser_functions" />
        <camera>
          <placements>
@@ -96,7 +96,7 @@
            <placement index="4" position="0,-0.850703,2.31515" look_at="0,-0.474844,1.38847" up="0,0.926671,0.375873" lens_focal_length="65" />
          </placements>
        </camera>
-     </qt-opengl> -->
+     </qt-opengl>
       
   </visualization>
   

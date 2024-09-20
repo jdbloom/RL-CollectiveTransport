@@ -22,6 +22,10 @@ static const Real CYLINDER_OFFSET           =-0.003;
 static const Real ROBOT_CYLINDER_DISTANCE   = CYLINDER_RADIUS + KHEPERAIV_RADIUS + CYLINDER_OFFSET;
 // Adding an offset just makes the robots start slightly farther away
 static const Real CYLINDER_PLACEMENT_RADIUS = ROBOT_CYLINDER_DISTANCE + KHEPERAIV_RADIUS;
+static const Real PRISM_HEIGHT           = 0.25; // m
+static const std::vector<Real> PRISM_MASSES{0.75,0.25};
+static const  std::vector<std::vector<CVector2>> COMPOSITE_PRISM_POINTS{{CVector2(-0.1,-0.1),CVector2(0.1,-0.1),CVector2(0.1,0.1),CVector2(-0.1,0.1)}, {CVector2(-0.1,0.1),CVector2(-0.3,0.1),CVector2(-0.3,-0.2),CVector2(-0.1,-0.1)}};
+
 
 static const std::string OBS_DESCRIPTIONS[] = {
    "parallel_force",
@@ -188,7 +192,36 @@ void CCMPrediction::Init(TConfigurationNode& t_tree) {
 
 void CCMPrediction::SimulateRobots() {
    if(m_bSimulateObjectMO){
-       // TODO Use Julian's code here
+      Real max_length = 0;
+       m_pcComposite = new CCompositeEntity(
+         "Prism_1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         PRISM_MASSES,
+         COMPOSITE_PRISM_POINTS,
+         PRISM_HEIGHT);
+      AddEntity(*m_pcComposite);
+
+      CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+
+      for(size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); i++) {
+         for(size_t j = 0; j < COMPOSITE_PRISM_POINTS[0].size(); j++) {
+            Real point_distance = Distance(origin, COMPOSITE_PRISM_POINTS[i][j]);
+            LOG<<"point: " << point_distance<<std::endl;
+            if(point_distance > max_length) {
+               max_length = point_distance;
+            }
+         }
+      }
+      m_cObjCOMOffsetPos = GetCoMComposite(PRISM_MASSES,COMPOSITE_PRISM_POINTS);
+      m_cObjGeoCenterOffsetPos = GetGeoCenter(COMPOSITE_PRISM_POINTS);
+      //change placement radius
+      Real ROBOT_PRISM_DISTANCE   = 2*max_length + 2*KHEPERAIV_RADIUS;
+   
+      // Adding an offset just makes the robots start slightly farther away
+      Real PRISM_PLACEMENT_RADIUS = 2*(ROBOT_PRISM_DISTANCE + KHEPERAIV_RADIUS);
+      m_fRobotCylinderDistance = PRISM_PLACEMENT_RADIUS;
    } else {
        /* Create the cylinder */
        m_pcCylinder = new CCylinderEntity(
@@ -337,6 +370,52 @@ void CCMPrediction::SimulateRobots() {
       }
    }
 }
+/****************************************/
+/****************************************/
+
+CVector2 CCMPrediction::GetCoM(std::vector<CVector2> vec_vertices) {
+   CVector2 sum = CVector2::ZERO;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      sum += vec_vertices[i];
+   }
+   CVector2 com_offset = sum / vec_vertices.size();
+   return com_offset;
+}
+
+/****************************************/
+/****************************************/
+
+CVector2 CCMPrediction::GetCoMComposite(std::vector<Real> vec_masses, std::vector<std::vector<CVector2>> vec_vertices) {
+   std::vector<CVector2> prism_coms;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      CVector2 prism_com = GetCoM(vec_vertices[i]);
+      prism_coms.push_back(prism_com);
+   }
+   Real mass_sum = vec_masses[0];
+   CVector2 overall_com = prism_coms[0];
+   for(size_t i = 1; i < prism_coms.size(); ++i) {
+      Real new_mass_sum = mass_sum + vec_masses[i];
+      overall_com = (overall_com*mass_sum + prism_coms[i]*vec_masses[i])/new_mass_sum;
+      mass_sum = new_mass_sum; 
+   }
+
+   return overall_com;
+}
+
+/****************************************/
+/****************************************/
+
+CVector2 CCMPrediction::GetGeoCenter(std::vector<std::vector<CVector2>> vec_vertices) {
+   CVector2 com_sum = CVector2::ZERO;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      CVector2 prism_com = GetCoM(vec_vertices[i]);
+      com_sum += prism_com;
+   }
+   CVector2 geo_center = com_sum/vec_vertices.size();
+
+   return geo_center;
+}
+
 /****************************************/
 /****************************************/
 

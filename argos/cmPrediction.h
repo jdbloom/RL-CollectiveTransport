@@ -19,6 +19,7 @@
 #include <argos3/plugins/simulator/physics_engines/physics_cylinder_model.h>
 #include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_model.h>
 #include <argos3/plugins/simulator/physics_engines/dynamics2d/dynamics2d_stretchable_object_model.h>
+#include <argos3/plugins/simulator/entities/composite_entity.h>
 
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
@@ -138,6 +139,12 @@ private:
    /* Robot Placement Distance */
    Real m_fRobotCylinderDistance;
 
+   /** Position of the center of mass of the object offset from the origin */
+   CVector2 m_cObjCOMOffsetPos;
+
+   /** Position of the geometric center of the object offset from the origin */
+   CVector2 m_cObjGeoCenterOffsetPos;
+
    /* Time limit of each episode */
    UInt32 m_unEpisodeTime;
 
@@ -178,6 +185,9 @@ private:
 
    /** The cylinder */
    CCylinderEntity* m_pcCylinder;
+
+    /** The prism */
+   CCompositeEntity* m_pcComposite;
 
    /** The weight that modifies the center of mass of the object */
    CCylinderEntity* m_pcCylinderCMModifier;
@@ -269,6 +279,14 @@ private:
 
 
 private:
+
+   CVector2 GetCoM(std::vector<CVector2> vec_vertices);
+
+   CVector2 GetCoMComposite(std::vector<Real> vec_masses,
+                       std::vector<std::vector<CVector2>> vec_vertices);
+
+   CVector2 GetGeoCenter(std::vector<std::vector<CVector2>> vec_vertices);
+
    /** Takes care of object simulation as well */
    void SimulateRobots();
 

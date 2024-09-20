@@ -2,6 +2,7 @@ include "vec2.bzz"
 
 MAX_SPEED = 10.0
 MIN_SPEED = -MAX_SPEED
+count = 0
 
 function set_wheels_debug(Left, Right){
 	#log(id, " speeds: ", Left, " " , Right)
@@ -54,13 +55,22 @@ function step(){
   }
   else {
     if (proximity[0].value > 0.6){
-			log("setting gripping")
-      set_wheels_debug(0.0, 0.0)
-      L_wheel = 0.0
-      R_wheel = 0.0
-      gripper_lock()
-      turret_disable()
-      gripped = 1
+			count = count + 1
+      if(count > 5) {
+        set_wheels_debug(0.0, 0.0)
+        L_wheel = 0.0
+        R_wheel = 0.0
+        gripper_lock()
+        turret_disable()
+        gripped = 1
+      }
+    }
+    else {
+      left = proximity[1].value
+	    right = proximity[7].value
+      set_wheels_debug(5.0+(5*right), 5.0+(5*left))
+      L_wheel = 7.0+(5*right)
+      R_wheel = 7.0+(5*left)
     }
   }
 }
