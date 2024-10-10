@@ -68,7 +68,7 @@ function step(){
     else {
       left = proximity[1].value
 	    right = proximity[7].value
-      set_wheels_debug(5.0+(5*right), 5.0+(5*left))
+      set_wheels_debug(7.0+(5*right), 7.0+(5*left))
       L_wheel = 7.0+(5*right)
       R_wheel = 7.0+(5*left)
     }
