@@ -524,10 +524,10 @@ while not exp_done:
                     tmp_epsilon = models[0].epsilon
                 else:
                     tmp_epsilon = model.epsilon
-
+                # print("GSP", next_heading_gsp)
                 data_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs, 
                                 [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
-                                obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp[0], 
+                                obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp, 
                                 time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle, 
                                 robot_failures, com_X_poses, com_Y_poses)
 

@@ -5,7 +5,7 @@ import os
 def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="1",
                    chance_failure="0.25", num_episodes="1000",
                    pytorch_port="tcp://localhost:55555",
-                   argos_filename="collectiveRlTransport.argos",
+                   argos_filename="collectiveRlTransport_bash.argos",
                    use_gate = "0", gate_curriculum = "0",
                    seed = "123", gate_minimum="4"):
 

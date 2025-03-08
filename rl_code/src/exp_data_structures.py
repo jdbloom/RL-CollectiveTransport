@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 
 class data_logger:
     def __init__(self, data_file_path):
@@ -61,6 +62,8 @@ class data_logger:
         self.gate_stats.append(gate_stats)
         self.obstacle_stats.append(obstacle_stats)
         self.gsp_reward.append(gsp_rewards)
+        if isinstance(gsp_headings, np.ndarray):
+            gsp_headings = gsp_headings.tolist()
         self.gsp_heading.append(gsp_headings)
         self.run_time.append(run_times)
         self.robots_x_pos.append(robots_x_poses)

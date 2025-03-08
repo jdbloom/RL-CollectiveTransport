@@ -14,6 +14,8 @@ model_nums=$(awk -F': ' '/MODEL_NUMS/{print $2}' test_config.yml)
 
 # Store original directory
 BASE_DIR=$(pwd)
+MODEL_DIR=/home/jbloom/Documents/CTRL/RL-CollectiveTransport
+
 
 # Strip quotes and leading/trailing spaces from model_nums
 model_nums=${model_nums#\"}
@@ -23,20 +25,20 @@ model_nums=$(echo $model_nums | xargs)
 echo "Processing models: $model_nums"
 
 for model_num in $model_nums; do
-    test_file_path="testing_model_${model_num}_num_obstacles_${num_obstacles}_gate_$gate"
+    test_file_path="testing_model_${model_num}_num_obstacles_${num_obstacles}_gate_${gate}_Non_Uniform"
     
     # Create directories with -p to avoid errors if they exist
-    mkdir -p "rl_code/Data/$file_name/$test_file_path/"{Data,plots}
+    mkdir -p "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/"{Data,plots}
     
     echo "Created directory: rl_code/Data/$file_name/$test_file_path"
     
-    cp test_config.yml "rl_code/Data/$file_name/$test_file_path/agent_config.yml"
+    cp test_config.yml "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/agent_config.yml"
 
 done
 
 for model_num in $model_nums; do
     echo "Starting processing for model: $model_num"
-    test_file_path="testing_model_${model_num}_num_obstacles_${num_obstacles}_gate_$gate"
+    test_file_path="testing_model_${model_num}_num_obstacles_${num_obstacles}_gate_${gate}_Non_Uniform"
     cd "$BASE_DIR/argos" || exit 1
     python generate_argos.py \
         --num_obstacles "$num_obstacles" \
@@ -53,23 +55,23 @@ for model_num in $model_nums; do
 
     cd "$BASE_DIR" || exit 1
     
-    cp "argos/$argos_filename" "rl_code/Data/$file_name/$test_file_path/$argos_filename"
+    cp "argos/$argos_filename" "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/$argos_filename"
 
     # Start argos in background and capture PID
     argos3 -c "argos/$argos_filename" &
     ARGOS_PID=$!
 
-    cd "$BASE_DIR/rl_code" || exit 1
-    python Main.py "Data/$file_name/$test_file_path" --test --model_path "Data/$file_name/Models/Episode_$model_num"
+    cd "rl_code" || exit 1
+    python Main.py "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path" --test --model_path "$MODEL_DIR/rl_code/Data/$file_name/Models/Episode_$model_num"
     
     # Wait for argos to finish
     if ! wait $ARGOS_PID; then
         echo "Warning: argos3 process failed for model $model_num"
     fi
 
-    cd "$BASE_DIR/rl_code/src/plotting" || exit 1
-    python viz.py "../../Data/$file_name/$test_file_path/" >> "../../Data/$file_name/$test_file_path/testing_data.txt"
-    python make_cylinder_trajectory.py "../../Data/$file_name/$test_file_path/"
+    cd "src/plotting" || exit 1
+    python viz.py "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/" >> "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/testing_data.txt"
+    python make_cylinder_trajectory.py "$MODEL_DIR/rl_code/Data/$file_name/$test_file_path/"
     
     # Return to base directory
     cd "$BASE_DIR" || exit 1

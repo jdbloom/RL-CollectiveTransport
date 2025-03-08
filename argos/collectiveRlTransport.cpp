@@ -2,6 +2,7 @@
 #include <buzz/buzzvm.h>
 #include <zmq.h>
 #include <cmath>
+#include <stdexcept>
 
 using namespace argos;
 
@@ -249,10 +250,10 @@ void CCollectiveRLTransport::CreateEntities() {
    CVector3 cPos;
 
    
-   Real ROBOT_PRISM_DISTANCE   = 2*max_length + 2*FOOTBOT_RADIUS;
+   Real ROBOT_PRISM_DISTANCE   = 2*max_length;
    
    // Adding an offset just makes the robots start slightly farther away
-   Real PRISM_PLACEMENT_RADIUS = 2*(WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS);
+   Real PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS;
 
 
    for(size_t i = 0; i < m_unNumRobots; ++i) {
@@ -301,26 +302,48 @@ void CCollectiveRLTransport::CreateEntities() {
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
+   // LOG << "Initializing Cylinder X"<<std::endl;
+   // LOG << "Min Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space X / 2 " << GetSpace().GetArenaLimits().GetMin().GetX()/2 <<std::endl;
+   // LOG << "Max Space X " << GetSpace().GetArenaLimits().GetMin().GetX() <<std::endl;
+   // LOG << "Prism Radius " << PRISM_PLACEMENT_RADIUS <<std::endl;
+   
    CRange<Real> cXCylinderRange(
       GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX()/2
       );
+   // LOG << "Initializing Obstacle X"<<std::endl;
    CRange<Real> cXObstacleRange(
       GetSpace().GetArenaLimits().GetMin().GetX()/2,
       0
    );
+   // LOG << "Initializing Cylinder Y"<<std::endl;
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - PRISM_PLACEMENT_RADIUS
+      -2 + PRISM_PLACEMENT_RADIUS,
+      2 - PRISM_PLACEMENT_RADIUS
       );
+   LOG << "Initializing Cylinder Pos"<<std::endl;
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
-               m_pcRNG->Uniform(cYRange),
+      auto x_pos = m_pcRNG->Uniform(cXCylinderRange);
+      auto y_pos = m_pcRNG->Uniform(cYRange);
+      if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+         LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+         throw std::out_of_range("X Value is outside the acceptable range");
+      }
+      if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+         LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+         throw std::out_of_range("Y Value is outside the acceptable range");
+      }
+      cPos.Set(x_pos,
+               y_pos,
                0.0);
+      EnforceBoundaries(cPos, i, "Cylinder");
       m_vecObjectPos.push_back(cPos);
       //Generate Failure Times for all episodes
       m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
+   LOG << "Initializing Robot Pos"<<std::endl;
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
@@ -334,21 +357,48 @@ void CCollectiveRLTransport::CreateEntities() {
                      j * cSlice + cOffset));
          /* Translate to actual cylinder center */
          cPos += m_vecObjectPos[i];
+         auto x_pos = cPos.GetX();
+         auto y_pos = cPos.GetY();
+         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+            LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+            throw std::out_of_range("X Value is outside the acceptable range");
+         }
+         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+            LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+            throw std::out_of_range("Y Value is outside the acceptable range");
+         }
          /* Add position */
+         EnforceBoundaries(cPos, i, "Robot");
          m_vecRobotPos.back().push_back(cPos);
          /* Calculate orientation to cylinder center */
          CQuaternion cOrient(j * cSlice + cOffset + CRadians::PI, CVector3::Z);
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
+   LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
+   CRange<Real> cYObstacleRange(
+      GetSpace().GetArenaLimits().GetMin().GetY() + OBSTACLE_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - OBSTACLE_RADIUS
+      );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-     m_vecObstaclePos.push_back(std::vector<CVector3>());
-     for(size_t j = 0; j < m_unNumObstacles; j++){
-       cPos.Set(m_pcRNG->Uniform(cXObstacleRange),
-                m_pcRNG->Uniform(cYRange),
+      m_vecObstaclePos.push_back(std::vector<CVector3>());
+      for(size_t j = 0; j < m_unNumObstacles; j++){
+         auto x_pos = m_pcRNG->Uniform(cXObstacleRange);
+         auto y_pos = m_pcRNG->Uniform(cYObstacleRange); 
+         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+            LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+            throw std::out_of_range("X Value is outside the acceptable range");
+         }
+         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+            LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+            throw std::out_of_range("Y Value is outside the acceptable range");
+         }
+         cPos.Set(x_pos,
+                y_pos,
                 0.0);
-       m_vecObstaclePos.back().push_back(cPos);
+         EnforceBoundaries(cPos, i, "Obstacle");
+         m_vecObstaclePos.back().push_back(cPos);
      }
    }
    /**
@@ -414,10 +464,12 @@ void CCollectiveRLTransport::CreateEntities() {
          cPos.Set(XPos,
                   GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
                   0.0);
+         EnforceBoundaries(cPos, i, "Gate Lower");
          m_vecGateWallPos.back().push_back(cPos);
          cPos.Set(XPos,
                   GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
                   0.0);
+         EnforceBoundaries(cPos, i, "Gate Upper");
          m_vecGateWallPos.back().push_back(cPos);
          /** Set Size */
          cPos.Set(0.5,
@@ -429,6 +481,33 @@ void CCollectiveRLTransport::CreateEntities() {
                   0.5);
          m_vecGateWallSize.back().push_back(cPos);
        }
+   }
+}
+
+void CCollectiveRLTransport::EnforceBoundaries(CVector3& pos, size_t episode, std::string state){
+   const CRange<CVector3>& cArenaLimits = GetSpace().GetArenaLimits();
+
+   Real buffer = 0.1;
+
+   if (pos.GetX() < cArenaLimits.GetMin().GetX() + buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position X is OUT OF BOUNDS: Min" << std::endl;
+      pos.SetX(cArenaLimits.GetMin().GetX() + buffer);
+   }
+   else if (pos.GetX() > cArenaLimits.GetMax().GetX() - buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position X is OUT OF BOUNDS: Max" << std::endl;
+      pos.SetX(cArenaLimits.GetMax().GetX() - buffer);
+   }
+   if (pos.GetY() < cArenaLimits.GetMin().GetY() + buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position Y is OUT OF BOUNDS: Min" << std::endl;
+      pos.SetY(cArenaLimits.GetMin().GetY() + buffer);
+   }
+   else if (pos.GetY() > cArenaLimits.GetMax().GetY() - buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position Y is OUT OF BOUNDS: Max" << std::endl;
+      pos.SetY(cArenaLimits.GetMax().GetY() - buffer);
    }
 }
 
@@ -445,6 +524,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    /* The placements we chose are collision-free by construction, no need to
     * check for collisions */
    if(m_unObjectChoice == 0) {
+      LOG << "Placing Cylinder"<<std::endl;
       MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
               m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
@@ -452,6 +532,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
               true);                             // ignore collisions
    }
    else if(m_unObjectChoice == 1) {
+      LOG << "Placing Convex Prism"<<std::endl;
       MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
               m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
@@ -459,6 +540,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
               true);                             // ignore collisions
    }
    else if(m_unObjectChoice == 2) {
+      LOG << "Placing Compisite"<<std::endl;
       MoveEntity(m_pcComposite->GetEmbodiedEntity(), // body
               m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
@@ -467,6 +549,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    }
    
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      LOG << "Placing Robot " << i <<std::endl;
       MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                  m_vecRobotPos[un_episode][i],        // position
                  m_vecRobotOrient[un_episode][i],     // orientation
@@ -474,6 +557,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                  true);                               // ignore collisions
    }
    for(size_t i = 0; i < m_vecObstacles.size(); ++i){
+      LOG << "Placing Obstacle" << i <<std::endl;
      MoveEntity(m_vecObstacles[i]->GetEmbodiedEntity(), // body
                 m_vecObstaclePos[un_episode][i],        // position
                 CQuaternion(),                          // orientation
@@ -481,21 +565,21 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                 true);                                  // ignore collisions
    }
    if(m_unUseGate == 1){
-     /** Move the Walls */
-     MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][0],
-                CQuaternion(),
-                false,
-                true);
-     MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][1],
-                CQuaternion(),
-                false,
-                true);
-
       /** Resize the walls */
       m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
       m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+      /** Move the Walls */
+      LOG << "Placing Gate"<<std::endl;
+      MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
+                  m_vecGateWallPos[un_episode][0],
+                  CQuaternion(),
+                  false,
+                  true);
+      MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
+                  m_vecGateWallPos[un_episode][1],
+                  CQuaternion(),
+                  false,
+                  true);
     }
 
 
@@ -585,6 +669,7 @@ void CCollectiveRLTransport::Reset() {
      LOG<<"[INFO] Current Offset: "<<m_vecOffset[m_unEpisodeCounter]<<std::endl;
    }
    PlaceEntities(m_unEpisodeCounter);
+   LOG <<"Done Placing Entitiies"<<std::endl;
    m_bReachedGoal = false;
 
 }

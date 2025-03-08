@@ -292,6 +292,8 @@ private:
 
    void CreateEntities();
 
+   void EnforceBoundaries(CVector3& pos, size_t episode, std::string state);
+
    void PlaceEntities(UInt32 un_episode);
 
    std::vector<SInt32> GenerateRobotFailure();
