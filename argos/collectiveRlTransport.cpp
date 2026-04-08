@@ -1175,7 +1175,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
      maxDist = dist4;
    }
    vecParams.push_back(maxDist);
-   vecParams.push_back(COMPOSITE_PRISM_POINTS.size());
+   vecParams.push_back(m_unUsePrisms ? COMPOSITE_PRISM_POINTS.size() : 0);
 
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
