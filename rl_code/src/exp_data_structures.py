@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 
 class data_logger:
     def __init__(self, data_file_path):
@@ -22,6 +23,8 @@ class data_logger:
         self.robots_y_pos:list = []
         self.robot_angle:list = []
         self.robot_failures:list = []
+        self.com_X_pos = []
+        self.com_Y_pos = []
 
     def writerow(
             self,
@@ -42,7 +45,9 @@ class data_logger:
             robots_x_poses,
             robots_y_poses,
             robot_angles,
-            robot_failure
+            robot_failure,
+            com_X_poses=0,
+            com_Y_poses=0,
     ):
         self.reward.append(rewards)
         self.epsilon.append(epsilons)
@@ -57,13 +62,17 @@ class data_logger:
         self.gate_stats.append(gate_stats)
         self.obstacle_stats.append(obstacle_stats)
         self.gsp_reward.append(gsp_rewards)
+        if isinstance(gsp_headings, np.ndarray):
+            gsp_headings = gsp_headings.tolist()
         self.gsp_heading.append(gsp_headings)
         self.run_time.append(run_times)
         self.robots_x_pos.append(robots_x_poses)
         self.robots_y_pos.append(robots_y_poses)
         self.robot_angle.append(robot_angles)
         self.robot_failures.append(robot_failure)
-    
+        self.com_X_pos.append(com_X_poses)
+        self.com_Y_pos.append(com_Y_poses)
+
     def write_to_file(self):
         data = {
             'reward': self.reward,
@@ -85,6 +94,8 @@ class data_logger:
             'robot_y_pos': self.robots_y_pos,
             'robot_angle': self.robot_angle,
             'robot_failure':self.robot_failures,
+            'comX': self.com_X_pos,
+            'comY': self.com_Y_pos,
         }
 
         with open(self.data_file_path, 'wb') as file:

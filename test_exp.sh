@@ -11,11 +11,14 @@ seed=$(awk '/SEED/{print $2}' test_config.yml)
 argos_filename=$(awk '/ARGOS_FILE_NAME/{print $2}' test_config.yml)
 gate_minimum=$(awk '/GATE_MIN/{print $2}' test_config.yml)
 model_num=$(awk '/MODEL_NUM/{print $2}' test_config.yml)
+use_prisms=$(awk '/USE_PRISMS/{print $2}' test_config.yml)
+random_objs=$(awk '/RANDOM_OBJECTS/{print $2}' test_config.yml)
+test_prism=$(awk '/TEST_PRISM/{print $2}' test_config.yml)
 # gate_curriculum_step=$(awk '/GATE_CURRICULUM_STEP/{print $2}' test_config.yml)
 # gate_curriculum_update_freq=$(awk '/GATE_CURRICULUM_UPDATE_FREQ/{print $2}' test_config.yml)
 
 cd argos
-python generate_argos.py --num_obstacles $num_obstacles --num_robots $num_robots --max_num_robot_failures $max_num_robot_failures --chance_failure $chance_failure --num_episodes $num_episodes --pytorch_port $port --use_gate $gate --gate_curriculum $gate_curriculum --seed $seed --argos_filename $argos_filename --gate_minimum $gate_minimum
+python generate_argos.py --num_obstacles $num_obstacles --num_robots $num_robots --max_num_robot_failures $max_num_robot_failures --chance_failure $chance_failure --num_episodes $num_episodes --pytorch_port $port --use_gate $gate --gate_curriculum $gate_curriculum --seed $seed --argos_filename $argos_filename --gate_minimum $gate_minimum --use_prisms $use_prisms --random_objs $random_objs --test_prism $test_prism
 
 cd ..
 test_file_path=testing_model_${model_num}_num_robots_${num_robots}_num_obstacles_${num_obstacles}_gate_$gate

@@ -18,7 +18,8 @@ add_library(collectiveRlTransport SHARED ${LIBRARY_FILES})
     argos3plugin_simulator_footbot
     argos3plugin_simulator_genericrobot
     argos3plugin_simulator_media
-    argos3plugin_simulator_buzz)
+    argos3plugin_simulator_buzz
+    argos3plugin_simulator_nonuniform_objects)
   if(NOT CLUSTER)
     target_link_libraries(collectiveRlTransport
       argos3plugin_simulator_qtopengl)

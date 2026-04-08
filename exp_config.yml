@@ -15,6 +15,11 @@ CHANCE_FAILURE: 0.25
 PORT: 55557
 SEED: 123
 
+##----------------- Object Parameters ----------------------------
+USE_PRISMS: 0
+RANDOM_OBJECTS: 0
+TEST_PRISM: 0
+
 ##----------------- Actor Parameters -----------------------------
 LEARNING_SCHEME: DDPG
 OPTIONS_PER_ACTION: 3

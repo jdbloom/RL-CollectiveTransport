@@ -19,6 +19,12 @@ class TestParseParams:
         assert isinstance(zmq_util.params['num_robots'], int)
         assert isinstance(zmq_util.params['num_obs'], int)
 
+    def test_num_prisms_parsed(self, zmq_util):
+        assert zmq_util.params['num_prisms'] == 0
+
+    def test_num_prisms_is_int(self, zmq_util):
+        assert isinstance(zmq_util.params['num_prisms'], int)
+
 
 class TestParseStatus:
     def test_not_done(self, zmq_util):
@@ -88,7 +94,38 @@ class TestParseRewards:
 
 class TestParseObjStats:
     def test_obj_stats_shape(self, zmq_util):
-        msg = pack('7f', 1.0, 2.0, 0.0, 0.0, 0.0, 45.0, 90.0)
+        msg = pack('9f', 1.0, 2.0, 0.0, 0.0, 0.0, 45.0, 90.0, 0.5, -0.3)
         stats = zmq_util.parse_obj_stats(msg)
-        assert stats.shape == (7,)
+        assert stats.shape == (9,)
         assert stats[5] == pytest.approx(45.0)
+        assert stats[7] == pytest.approx(0.5)   # comX
+        assert stats[8] == pytest.approx(-0.3)  # comY
+
+
+class TestParsePrismData:
+    def test_prism_sizes_parse(self):
+        util = ZMQ_Utility()
+        params_bytes = pack('9f', 4.0, 0.0, 31.0, 3.0, 4.0, 9.0, 0.0, 10.0, 2.0)
+        util.get_params(params_bytes)
+        util.set_prism_sizes()
+        msg = pack('2I', 4, 5)
+        sizes = util.parse_prism_sizes(msg)
+        assert sizes == [4, 5]
+
+    def test_prism_points_parse(self):
+        util = ZMQ_Utility()
+        params_bytes = pack('9f', 4.0, 0.0, 31.0, 3.0, 4.0, 9.0, 0.0, 10.0, 2.0)
+        util.get_params(params_bytes)
+        util.set_prism_sizes()
+        sizes = [4, 5]
+        util.set_prism_points(sizes)
+        coords = [float(i) * 0.1 for i in range(18)]
+        msg = pack(f'{18}f', *coords)
+        points = util.parse_prism_points(msg)
+        assert len(points) == 18
+        assert points[0] == pytest.approx(0.0)
+        assert points[1] == pytest.approx(0.1)
+
+    def test_no_prisms_no_setup_needed(self, zmq_util):
+        assert zmq_util.params['num_prisms'] == 0
+        assert zmq_util.PRISM_SIZE_FIELDS == []
