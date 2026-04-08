@@ -12,7 +12,9 @@ from src.agent import Agent
 def zmq_util():
     """ZMQ_Utility with 4-robot params pre-loaded."""
     util = ZMQ_Utility()
-    params_bytes = pack('8f', 4.0, 2.0, 31.0, 3.0, 4.0, 9.0, 0.0, 10.0)
+    # 9 floats: num_robots=4, num_obstacles=2, num_obs=31, num_actions=3,
+    #           num_stats=4, alphabet_size=9, use_gate=0, dist_norm=10, num_prisms=0
+    params_bytes = pack('9f', 4.0, 2.0, 31.0, 3.0, 4.0, 9.0, 0.0, 10.0, 0.0)
     util.get_params(params_bytes)
     util.set_obstacles_fields()
     return util

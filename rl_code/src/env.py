@@ -50,8 +50,8 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
 class ZMQ_Utility:
     def __init__(self):
         self.PARAMS_FIELDS = ['num_robots','num_obstacles', 'num_obs','num_actions', 'num_stats', 'alphabet_size',
-                               'use_gate', 'distance_to_goal_normalization_factor']
-        self.PARAMS_FMT = '8f'
+                               'use_gate', 'distance_to_goal_normalization_factor', 'num_prisms']
+        self.PARAMS_FMT = '9f'
         self.EXPERIMENT_FIELDS = ['exp_done', 'episode_done', 'reached_goal']
         self.EXPERIMENT_FMT = '3B'
         self.OBS_FIELDS = ['robot_dist2goal', 'robot_angle2goal', 'robot_lwheel',
@@ -71,13 +71,18 @@ class ZMQ_Utility:
         self.STATS_FMT = '4f'
         self.ROBOT_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg']
         self.ROBOT_STATS_FMT = '6f'
-        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'cyl_angle2goal']
-        self.OBJ_STATS_FMT = '7f'
+        self.OBJ_STATS_FIELDS = ['x_pos', 'y_pos', 'z_pos', 'x_deg', 'y_deg', 'z_deg', 'cyl_angle2goal', 'comX', 'comY']
+        self.OBJ_STATS_FMT = '9f'
         self.GATE_STATS_FIELDS = ['neg_wall_1_x', 'neg_wall_1_length_y',
                                   'pos_wall_2_x', 'pos_wall_2_length_y']
         self.GATE_STATS_FMT = '4f'
         # Need to account for differing numbers of obstacles
         self.OBSTACLE_STATS_FIELDS = []
+
+        self.PRISM_SIZE_FIELDS = []
+        self.PRISM_SIZE_FMT = ''
+        self.PRISM_POINT_FIELDS = []
+        self.PRISM_POINT_FMT = ''
 
 
         self.ACTIONS_FIELDS = ['lwheel', 'rwheel', 'failure']
@@ -98,12 +103,39 @@ class ZMQ_Utility:
         self.params['num_stats'] = int(self.params['num_stats'])
         self.params['alphabet_size'] = int(self.params['alphabet_size'])
         self.params['use_gate'] = int(self.params['use_gate'])
+        self.params['num_prisms'] = int(self.params['num_prisms'])
 
     def set_obstacles_fields(self):
         for i in range(self.params['num_obstacles']):
             self.OBSTACLE_STATS_FIELDS.append('obs_'+str(i)+'_x')
             self.OBSTACLE_STATS_FIELDS.append('obs_'+str(i)+'_y')
         self.OBSTACLE_STATS_FMT = str(self.params['num_obstacles']*2)+'f'
+
+    def set_prism_sizes(self):
+        """Build format for prism vertex count array."""
+        for i in range(self.params['num_prisms']):
+            self.PRISM_SIZE_FIELDS.append('prism_' + str(i) + '_size')
+        self.PRISM_SIZE_FMT = str(self.params['num_prisms']) + 'I'
+
+    def set_prism_points(self, prism_sizes):
+        """Build format for prism vertex coordinate array."""
+        total_points = 0
+        for i, size in enumerate(prism_sizes):
+            for j in range(size):
+                self.PRISM_POINT_FIELDS.append('prism_' + str(i) + '_point_' + str(j) + '_x')
+                self.PRISM_POINT_FIELDS.append('prism_' + str(i) + '_point_' + str(j) + '_y')
+                total_points += 1
+        self.PRISM_POINT_FMT = str(total_points * 2) + 'f'
+
+    def parse_prism_sizes(self, msg):
+        """Parse per-prism vertex counts from C++ handshake."""
+        data = self.parse_msg(msg, 'prism_sizes', self.PRISM_SIZE_FIELDS, self.PRISM_SIZE_FMT)
+        return list(data.values())
+
+    def parse_prism_points(self, msg):
+        """Parse prism vertex coordinates from C++ handshake."""
+        data = self.parse_msg(msg, 'prism_points', self.PRISM_POINT_FIELDS, self.PRISM_POINT_FMT)
+        return list(data.values())
 
     #
     # Parse the fields from a message
