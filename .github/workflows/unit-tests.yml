@@ -32,10 +32,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NESTLab/GSP-RL
-          path: ../GSP-RL
+          path: GSP-RL
 
       - name: Install dependencies
         run: |
+          # Override local path dep with the checked-out copy for CI
+          sed -i 's|path = "../GSP-RL"|path = "GSP-RL"|' pyproject.toml
+          poetry lock --no-update
           poetry install --no-interaction
 
       - name: Run unit tests
