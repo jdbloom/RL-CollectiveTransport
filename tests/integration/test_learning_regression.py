@@ -407,10 +407,7 @@ class TestDDPG_R_GSP_N:
             neighbors=True,
             recurrent=True,
         )
-        # R-GSP-N is slow on CPU (MPS LSTM fallback) — use fewer episodes + smaller batch
         config["NUM_EPISODES"] = NUM_EPISODES_RECURRENT
-        config["BATCH_SIZE"] = 16
-        config["GSP_BATCH_SIZE"] = 16
         data_dir = _run_experiment(config)
 
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
@@ -462,8 +459,6 @@ def _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port):
     config = _make_config(exp_name, scheme, port, gsp, neighbors, recurrent, attention)
     if recurrent:
         config["NUM_EPISODES"] = NUM_EPISODES_RECURRENT
-        config["BATCH_SIZE"] = 16
-        config["GSP_BATCH_SIZE"] = 16
     target_eps = NUM_EPISODES_RECURRENT if recurrent else NUM_EPISODES
     start = time.time()
     try:
