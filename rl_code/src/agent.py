@@ -81,6 +81,12 @@ class Agent(Actor):
         else:
             self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
 
+        # Per-agent LSTM hidden state for R-GSP-N inference
+        self._agent_hidden_states = {}
+        if self._neighbors and recurrent:
+            for i in range(self._n_agents):
+                self._agent_hidden_states[i] = None  # None = zeros on first call
+
         self._ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
                                        112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
                                        -157.5, -142.5, -127.5, -112.5, -97.5, 
@@ -95,6 +101,11 @@ class Agent(Actor):
     @property
     def n_agents(self):
         return self._n_agents
+
+    def reset_hidden_states(self):
+        """Reset all per-agent LSTM hidden states. Call at episode boundaries."""
+        for i in self._agent_hidden_states:
+            self._agent_hidden_states[i] = None
 
     def build_neighbors(self):
         agents_available = np.arange(self.n_agents)
@@ -235,9 +246,17 @@ class Agent(Actor):
             actions = []
             for i in range(self._n_agents):
                 if self.recurrent_gsp:
-                    # print(f'[AGENT {i}], Observation: {self.gsp_observation[i]}')
-                    actions.append(self.choose_action(self.gsp_observation[i], self.gsp_networks, test))
-                    # print(f'[AGENT {i}], Action: {actions[i].shape}')
+                    hidden = self._agent_hidden_states.get(i)
+                    obs = T.tensor(np.array(self.gsp_observation[i]), dtype=T.float).to(
+                        self.gsp_networks['actor'].device)
+                    # RDDPG actor forward returns (action, (h_n, c_n))
+                    with T.no_grad():
+                        action_tensor, new_hidden = self.gsp_networks['actor'](obs, hidden=hidden)
+                    self._agent_hidden_states[i] = (
+                        new_hidden[0].detach(), new_hidden[1].detach()
+                    )
+                    # Take the last timestep's action
+                    actions.append(action_tensor[-1].cpu().detach().numpy())
                 else: 
                     actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, test))
             return actions
