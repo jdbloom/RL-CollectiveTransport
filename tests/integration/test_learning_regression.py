@@ -415,12 +415,77 @@ class TestTD3_A_GSP_N:
         )
 
 
+def _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port):
+    """Run a single test and return results dict."""
+    exp_name = f"regression_{name}"
+    _cleanup_experiment(exp_name)
+    config = _make_config(exp_name, scheme, port, gsp, neighbors, recurrent, attention)
+    if recurrent:
+        config["NUM_EPISODES"] = NUM_EPISODES_RECURRENT
+        config["BATCH_SIZE"] = 16
+        config["GSP_BATCH_SIZE"] = 16
+    target_eps = NUM_EPISODES_RECURRENT if recurrent else NUM_EPISODES
+    start = time.time()
+    try:
+        data_dir = _run_experiment(config)
+        pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
+        early, late, improved = _check_learning_signal(data_dir, pkl_count)
+        return {
+            "name": name, "status": "PASS" if improved else "FAIL",
+            "episodes": pkl_count, "target": target_eps,
+            "early": early, "late": late, "duration": time.time() - start,
+        }
+    except Exception as e:
+        return {"name": name, "status": "ERROR", "error": str(e),
+                "duration": time.time() - start}
+    finally:
+        _cleanup_experiment(exp_name)
+
+
+def _run_parallel(tests_to_run, tests_dict):
+    """Launch all tests in parallel using threads."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    start = time.time()
+    results = []
+
+    with ThreadPoolExecutor(max_workers=len(tests_to_run)) as executor:
+        futures = {}
+        for name in tests_to_run:
+            scheme, gsp, neighbors, recurrent, attention, port = tests_dict[name]
+            f = executor.submit(_run_single_test, name, scheme, gsp, neighbors, recurrent, attention, port)
+            futures[f] = name
+
+        for future in as_completed(futures):
+            result = future.result()
+            name = result["name"]
+            if result["status"] == "ERROR":
+                print(f"  DONE: {name} — ERROR: {result['error']}", flush=True)
+            else:
+                print(f"  DONE: {name} — {result['status']} in {result['duration']:.0f}s "
+                      f"({result['episodes']}/{result['target']} eps, "
+                      f"early={result['early']:.0f}, late={result['late']:.0f})", flush=True)
+            results.append(result)
+
+    total = time.time() - start
+    return results, total
+
+
 if __name__ == "__main__":
-    """Run standalone without pytest for quick testing."""
+    """Run standalone without pytest.
+
+    Usage:
+        python test_learning_regression.py                    # all sequential
+        python test_learning_regression.py --parallel         # all parallel
+        python test_learning_regression.py --test dqn_ic      # single test
+        python test_learning_regression.py --parallel --test dqn_ic,td3_a_gsp_n  # subset parallel
+    """
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", type=str, default="all",
-                        help="Which test to run: dqn_ic, dqn_gsp, ddqn_gsp_n, ddpg_r_gsp_n, td3_a_gsp_n, all")
+                        help="Comma-separated test names, or 'all'")
+    parser.add_argument("--parallel", action="store_true",
+                        help="Run tests in parallel (each on its own port)")
     args = parser.parse_args()
 
     tests = {
@@ -431,28 +496,39 @@ if __name__ == "__main__":
         "td3_a_gsp_n": ("TD3", True, True, False, True, 55584),
     }
 
-    to_run = tests.keys() if args.test == "all" else [args.test]
+    to_run = list(tests.keys()) if args.test == "all" else args.test.split(",")
 
-    for name in to_run:
-        scheme, gsp, neighbors, recurrent, attention, port = tests[name]
-        exp_name = f"regression_{name}"
-        print(f"\n{'='*60}")
-        print(f"Running: {name} ({scheme} + {'GSP' if gsp else 'IC'}"
-              f"{'_N' if neighbors else ''}{'_R' if recurrent else ''}{'_A' if attention else ''})")
-        print(f"{'='*60}")
+    if args.parallel:
+        print(f"Running {len(to_run)} tests in PARALLEL...", flush=True)
+        results, total = _run_parallel(to_run, tests)
 
-        _cleanup_experiment(exp_name)
-        config = _make_config(exp_name, scheme, port, gsp, neighbors, recurrent, attention)
-        try:
-            data_dir = _run_experiment(config)
-            pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
-            early, late, improved = _check_learning_signal(data_dir, NUM_EPISODES)
-            status = "PASS" if improved else "FAIL"
-            print(f"  Episodes: {pkl_count}/{NUM_EPISODES}")
-            print(f"  Early avg reward: {early:.1f}")
-            print(f"  Late avg reward:  {late:.1f}")
-            print(f"  Learning signal:  {status}")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-        finally:
-            _cleanup_experiment(exp_name)
+        print(f"\n{'='*70}")
+        print(f"PARALLEL RESULTS: {total:.0f}s ({total/60:.1f} min)")
+        print(f"{'='*70}")
+        print(f"{'Test':<22s} {'Status':<8s} {'Episodes':<10s} {'Duration':<10s} {'Early':<12s} {'Late':<12s}")
+        print(f"{'-'*74}")
+        for r in sorted(results, key=lambda x: x["name"]):
+            if r["status"] == "ERROR":
+                print(f"{r['name']:<22s} {'ERROR':<8s} {'—':10s} {r['duration']:<10.0f}s {r['error']}")
+            else:
+                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<10d} {r['duration']:<10.0f}s {r['early']:<12.0f} {r['late']:<12.0f}")
+
+        passed = sum(1 for r in results if r["status"] == "PASS")
+        print(f"\n{passed}/{len(results)} PASSED")
+    else:
+        for name in to_run:
+            scheme, gsp, neighbors, recurrent, attention, port = tests[name]
+            print(f"\n{'='*60}")
+            print(f"Running: {name} ({scheme} + {'GSP' if gsp else 'IC'}"
+                  f"{'_N' if neighbors else ''}{'_R' if recurrent else ''}{'_A' if attention else ''})")
+            print(f"{'='*60}")
+
+            result = _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port)
+            if result["status"] == "ERROR":
+                print(f"  ERROR: {result['error']}")
+            else:
+                print(f"  Episodes: {result['episodes']}/{result.get('target', NUM_EPISODES)}")
+                print(f"  Early avg reward: {result['early']:.1f}")
+                print(f"  Late avg reward:  {result['late']:.1f}")
+                print(f"  Learning signal:  {result['status']}")
+                print(f"  Duration:         {result['duration']:.0f}s")
