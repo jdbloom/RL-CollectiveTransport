@@ -62,7 +62,10 @@
                   gate_update_frequency = "50"
                   gate_update_amount = "0.25"
                   gate_minimum = "$$gate_minimum$$"
-                  use_base_model = "0"/>
+                  use_base_model = "0"
+                  use_prisms = "$$use_prisms$$"
+                  random_objs = "$$random_objs$$"
+                  test_prism = "$$test_prism$$"/>
 
 
   <!-- *********************** -->
