@@ -2,6 +2,7 @@
 #include <buzz/buzzvm.h>
 #include <zmq.h>
 #include <cmath>
+#include <stdexcept>
 
 using namespace argos;
 
@@ -18,6 +19,14 @@ static const Real OBSTACLE_HEIGHT           = 0.5;  // m
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
+static const Real PRISM_HEIGHT           = 0.25; // m
+static const Real PRISM_MASS = 100;
+static const  std::vector<CVector2> CONVEX_PRISM_POINTS{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.4)};
+
+std::vector<Real> PRISM_MASSES{75.0,25.0};
+static const std::vector<Real> TEST_PRISM_MASSES{75.0,25.0,15.0};
+std::vector<std::vector<CVector2>> COMPOSITE_PRISM_POINTS{{CVector2(-0.2,-0.2),CVector2(0.2,-0.2),CVector2(0.2,0.2),CVector2(-0.2,0.2)}, {CVector2(-0.2,0.2),CVector2(-0.4,0.2),CVector2(-0.5,-0.4),CVector2(-0.2,-0.2)}};
+static const  std::vector<std::vector<CVector2>> TEST_PRISM_POINTS{{CVector2(-0.1,-0.2),CVector2(0.1,-0.2),CVector2(0.1,0.2),CVector2(-0.1,0.2)},{CVector2(-0.1,0.2),CVector2(-0.3,0.2),CVector2(-0.3,-0.1),CVector2(-0.1,-0.2)},{CVector2(0.1,-0.2),CVector2(0.3,-0.3),CVector2(0.3,0.0),CVector2(0.1,0.2)}};
 static const Real CYLINDER_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_CYLINDER_DISTANCE + FOOTBOT_RADIUS;
 
 static const std::string OBS_DESCRIPTIONS[] = {
@@ -25,9 +34,9 @@ static const std::string OBS_DESCRIPTIONS[] = {
    "robot2goal_angle",
    "lwheel",
    "rwheel",
-   "robot2cylinder_dist",
-   "robot2cylinder_angle",
-   "cylinder2goal_dist",
+   "robot2object_dist",
+   "robot2object_angle",
+   "object2goal_dist",
    "reward"
 };
 
@@ -52,7 +61,7 @@ CCollectiveRLTransport::CCollectiveRLTransport() :
 void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
    try {
       /* Parse XML tree */
-      LOG<<"Initiating"<<std::endl;
+       LOG<<"Initiating"<<std::endl;
       GetNodeAttribute(t_tree, "data_file",       m_strOutFile);
       GetNodeAttribute(t_tree, "num_robots",      m_unNumRobots);
       GetNodeAttribute(t_tree, "max_robot_failures", m_unMaxRobotFailures);
@@ -77,6 +86,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_frequency", m_unGateUpdateFrequency);
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
+      GetNodeAttribute(t_tree, "use_prisms", m_unUsePrisms);
+      GetNodeAttribute(t_tree, "test_prism", m_unUseTestPrism);
+      GetNodeAttribute(t_tree, "random_objs", m_unRandomizeObjects);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
 
       /* Footbot dynamic equation parameters*/
@@ -109,6 +121,10 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       /* Send parameters */
       ZMQSendParams();
       LOG << "[INFO] Connection to PyTorch server " << strPyTorchURL << " successful" << std::endl;
+      if(m_unUsePrisms){
+         ZMQSendNumPrisms();
+         ZMQSendPrismPoints();
+      }
       /* Initialize episode-related variables */
       m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
@@ -119,7 +135,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_vecRewards.resize(m_unNumRobots, 0.0);
       m_vecStats.resize(m_unNumRobots * m_unNumStats, 0.0);
       m_vecRobotStats.resize(m_unNumRobots*6, 0.0);
-      m_vecObjStats.resize(7, 0.0);
+      m_vecObjStats.resize(9, 0.0);
       m_vecGateStats.resize(4, 0.0);
       if (m_unNumObstacles > 0){
           m_vecObstacleStats.resize(m_unNumObstacles*2, 0.0);
@@ -150,25 +166,100 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
 /****************************************/
 
 void CCollectiveRLTransport::CreateEntities() {
-   /* Create the cylinder */
-   m_pcCylinder = new CCylinderEntity(
-      "c1",
-      CVector3(),
-      CQuaternion(),
-      true,
-      CYLINDER_RADIUS,
-      CYLINDER_HEIGHT,
-      CYLINDER_MASS);
-   AddEntity(*m_pcCylinder);
+   /** Choose object*/
+   m_unObjectChoice = 0;
+   if(m_unUsePrisms == 1) {
+       m_unObjectChoice = 2;
+   }
+   if(m_unRandomizeObjects == 1) {
+      CRange<UInt32> ObjectRange(0,3);
+      m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
+   }
+    
+   /* Create the object */
+   Real max_length = 0;
+   if(m_unObjectChoice == 0){
+      m_pcCylinder = new CCylinderEntity(
+         "c1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         CYLINDER_RADIUS,
+         CYLINDER_HEIGHT,
+         CYLINDER_MASS);
+      AddEntity(*m_pcCylinder);
+      max_length = CYLINDER_RADIUS;
+      m_cObjCOMOffsetPos = CVector2::ZERO;
+   }
+   else if(m_unObjectChoice == 1) {
+      m_pcConvexPrism = new CConvexPrismEntity(
+         "Prism_1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         CONVEX_PRISM_POINTS,
+         PRISM_HEIGHT,
+         PRISM_MASS);
+      AddEntity(*m_pcConvexPrism);
+
+      CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+      for(size_t i = 0; i < CONVEX_PRISM_POINTS.size(); i++) {
+         Real point_distance = Distance(origin, CONVEX_PRISM_POINTS[i]);
+         if(point_distance > max_length) {
+            max_length = point_distance;
+         }
+      }
+      m_cObjCOMOffsetPos = GetCoM(CONVEX_PRISM_POINTS);
+
+   }
+   else if(m_unObjectChoice == 2) {
+      // uses the alternate composite prism object for testing
+      if(m_unUseTestPrism == 1) {
+         PRISM_MASSES = TEST_PRISM_MASSES;
+         COMPOSITE_PRISM_POINTS = TEST_PRISM_POINTS;
+      }
+      m_pcComposite = new CCompositeEntity(
+         "Prism_1",
+         CVector3(),
+         CQuaternion(),
+         true,
+         PRISM_MASSES,
+         COMPOSITE_PRISM_POINTS,
+         PRISM_HEIGHT);
+      AddEntity(*m_pcComposite);
+
+      CVector2 origin = CVector2(m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
+
+      for(size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); i++) {
+         for(size_t j = 0; j < COMPOSITE_PRISM_POINTS[0].size(); j++) {
+            Real point_distance = Distance(origin, COMPOSITE_PRISM_POINTS[i][j]);
+            LOG<<"point: " << point_distance<<std::endl;
+            if(point_distance > max_length) {
+               max_length = point_distance;
+            }
+         }
+      }
+      m_cObjCOMOffsetPos = GetCoMComposite(PRISM_MASSES,COMPOSITE_PRISM_POINTS);
+
+   }
+   
    /* Create robots */
    CRadians cSlice = CRadians::TWO_PI / m_unNumRobots;
    std::ostringstream cFBId;
    CFootBotEntity* pcFB;
    CVector3 cPos;
+
+   
+   Real ROBOT_PRISM_DISTANCE   = 2*max_length;
+   
+   // Adding an offset just makes the robots start slightly farther away
+   Real PRISM_PLACEMENT_RADIUS = WALL_THICKNESS + ROBOT_PRISM_DISTANCE + FOOTBOT_RADIUS;
+
+
    for(size_t i = 0; i < m_unNumRobots; ++i) {
       cFBId.str("");
       cFBId << "fb" << i;
-      cPos.FromSphericalCoords(ROBOT_CYLINDER_DISTANCE,
+      cPos.FromSphericalCoords(ROBOT_PRISM_DISTANCE,
                                CRadians::PI_OVER_TWO,
                                i * cSlice);
       cPos.SetZ(0.0);
@@ -211,26 +302,48 @@ void CCollectiveRLTransport::CreateEntities() {
    }
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
+   // LOG << "Initializing Cylinder X"<<std::endl;
+   // LOG << "Min Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space X / 2 " << GetSpace().GetArenaLimits().GetMin().GetX()/2 <<std::endl;
+   // LOG << "Max Space X " << GetSpace().GetArenaLimits().GetMin().GetX() <<std::endl;
+   // LOG << "Prism Radius " << PRISM_PLACEMENT_RADIUS <<std::endl;
+   
    CRange<Real> cXCylinderRange(
-      GetSpace().GetArenaLimits().GetMin().GetX() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2 -CYLINDER_PLACEMENT_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
+      GetSpace().GetArenaLimits().GetMin().GetX()/2
       );
+   // LOG << "Initializing Obstacle X"<<std::endl;
    CRange<Real> cXObstacleRange(
       GetSpace().GetArenaLimits().GetMin().GetX()/2,
       0
    );
+   // LOG << "Initializing Cylinder Y"<<std::endl;
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + CYLINDER_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - CYLINDER_PLACEMENT_RADIUS
+      -2 + PRISM_PLACEMENT_RADIUS,
+      2 - PRISM_PLACEMENT_RADIUS
       );
+   LOG << "Initializing Cylinder Pos"<<std::endl;
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-      cPos.Set(m_pcRNG->Uniform(cXCylinderRange),
-               m_pcRNG->Uniform(cYRange),
+      auto x_pos = m_pcRNG->Uniform(cXCylinderRange);
+      auto y_pos = m_pcRNG->Uniform(cYRange);
+      if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+         LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+         throw std::out_of_range("X Value is outside the acceptable range");
+      }
+      if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+         LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+         throw std::out_of_range("Y Value is outside the acceptable range");
+      }
+      cPos.Set(x_pos,
+               y_pos,
                0.0);
-      m_vecCylinderPos.push_back(cPos);
+      EnforceBoundaries(cPos, i, "Cylinder");
+      m_vecObjectPos.push_back(cPos);
       //Generate Failure Times for all episodes
       m_vecRobotFailures.push_back(GenerateRobotFailure());
    }
+   LOG << "Initializing Robot Pos"<<std::endl;
    /* Generating random positions for the robots */
    for(size_t i = 0; i < m_unNumEpisodes; ++i) {
       CRadians cOffset = m_pcRNG->Uniform(CRadians::SIGNED_RANGE);
@@ -243,22 +356,49 @@ void CCollectiveRLTransport::CreateEntities() {
                      CRadians::PI_OVER_TWO,
                      j * cSlice + cOffset));
          /* Translate to actual cylinder center */
-         cPos += m_vecCylinderPos[i];
+         cPos += m_vecObjectPos[i];
+         auto x_pos = cPos.GetX();
+         auto y_pos = cPos.GetY();
+         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+            LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+            throw std::out_of_range("X Value is outside the acceptable range");
+         }
+         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+            LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+            throw std::out_of_range("Y Value is outside the acceptable range");
+         }
          /* Add position */
+         EnforceBoundaries(cPos, i, "Robot");
          m_vecRobotPos.back().push_back(cPos);
          /* Calculate orientation to cylinder center */
          CQuaternion cOrient(j * cSlice + cOffset + CRadians::PI, CVector3::Z);
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
+   LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
+   CRange<Real> cYObstacleRange(
+      GetSpace().GetArenaLimits().GetMin().GetY() + OBSTACLE_RADIUS,
+      GetSpace().GetArenaLimits().GetMax().GetY() - OBSTACLE_RADIUS
+      );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
-     m_vecObstaclePos.push_back(std::vector<CVector3>());
-     for(size_t j = 0; j < m_unNumObstacles; j++){
-       cPos.Set(m_pcRNG->Uniform(cXObstacleRange),
-                m_pcRNG->Uniform(cYRange),
+      m_vecObstaclePos.push_back(std::vector<CVector3>());
+      for(size_t j = 0; j < m_unNumObstacles; j++){
+         auto x_pos = m_pcRNG->Uniform(cXObstacleRange);
+         auto y_pos = m_pcRNG->Uniform(cYObstacleRange); 
+         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+            LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
+            throw std::out_of_range("X Value is outside the acceptable range");
+         }
+         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+            LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
+            throw std::out_of_range("Y Value is outside the acceptable range");
+         }
+         cPos.Set(x_pos,
+                y_pos,
                 0.0);
-       m_vecObstaclePos.back().push_back(cPos);
+         EnforceBoundaries(cPos, i, "Obstacle");
+         m_vecObstaclePos.back().push_back(cPos);
      }
    }
    /**
@@ -324,10 +464,12 @@ void CCollectiveRLTransport::CreateEntities() {
          cPos.Set(XPos,
                   GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
                   0.0);
+         EnforceBoundaries(cPos, i, "Gate Lower");
          m_vecGateWallPos.back().push_back(cPos);
          cPos.Set(XPos,
                   GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
                   0.0);
+         EnforceBoundaries(cPos, i, "Gate Upper");
          m_vecGateWallPos.back().push_back(cPos);
          /** Set Size */
          cPos.Set(0.5,
@@ -342,6 +484,33 @@ void CCollectiveRLTransport::CreateEntities() {
    }
 }
 
+void CCollectiveRLTransport::EnforceBoundaries(CVector3& pos, size_t episode, std::string state){
+   const CRange<CVector3>& cArenaLimits = GetSpace().GetArenaLimits();
+
+   Real buffer = 0.1;
+
+   if (pos.GetX() < cArenaLimits.GetMin().GetX() + buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position X is OUT OF BOUNDS: Min" << std::endl;
+      pos.SetX(cArenaLimits.GetMin().GetX() + buffer);
+   }
+   else if (pos.GetX() > cArenaLimits.GetMax().GetX() - buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position X is OUT OF BOUNDS: Max" << std::endl;
+      pos.SetX(cArenaLimits.GetMax().GetX() - buffer);
+   }
+   if (pos.GetY() < cArenaLimits.GetMin().GetY() + buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position Y is OUT OF BOUNDS: Min" << std::endl;
+      pos.SetY(cArenaLimits.GetMin().GetY() + buffer);
+   }
+   else if (pos.GetY() > cArenaLimits.GetMax().GetY() - buffer){
+      LOG<<"Episode " << episode << " Errored Placing " << state<< std::endl;
+      LOG << "Position Y is OUT OF BOUNDS: Max" << std::endl;
+      pos.SetY(cArenaLimits.GetMax().GetY() - buffer);
+   }
+}
+
 /****************************************/
 /****************************************/
 
@@ -350,16 +519,37 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
    if(un_episode >= m_unNumEpisodes) {
       THROW_ARGOSEXCEPTION("Episode " << un_episode << " is beyond the maximum of " << m_unNumEpisodes);
    }
-   /* Get the old position of the cylinder*/
-   m_cOldCylinderPos = m_vecCylinderPos[un_episode];
+   /* Get the old position of the object*/
+   m_cOldObjectPos = m_vecObjectPos[un_episode];
    /* The placements we chose are collision-free by construction, no need to
     * check for collisions */
-   MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
-              m_vecCylinderPos[un_episode],      // position
+   if(m_unObjectChoice == 0) {
+      LOG << "Placing Cylinder"<<std::endl;
+      MoveEntity(m_pcCylinder->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
               CQuaternion(),                     // orientation
               false,                             // not a check
               true);                             // ignore collisions
+   }
+   else if(m_unObjectChoice == 1) {
+      LOG << "Placing Convex Prism"<<std::endl;
+      MoveEntity(m_pcConvexPrism->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
+              CQuaternion(),                     // orientation
+              false,                             // not a check
+              true);                             // ignore collisions
+   }
+   else if(m_unObjectChoice == 2) {
+      LOG << "Placing Compisite"<<std::endl;
+      MoveEntity(m_pcComposite->GetEmbodiedEntity(), // body
+              m_vecObjectPos[un_episode],      // position
+              CQuaternion(),                     // orientation
+              false,                             // not a check
+              true);                             // ignore collisions
+   }
+   
    for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      LOG << "Placing Robot " << i <<std::endl;
       MoveEntity(m_vecRobots[i]->GetEmbodiedEntity(), // body
                  m_vecRobotPos[un_episode][i],        // position
                  m_vecRobotOrient[un_episode][i],     // orientation
@@ -367,6 +557,7 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                  true);                               // ignore collisions
    }
    for(size_t i = 0; i < m_vecObstacles.size(); ++i){
+      LOG << "Placing Obstacle" << i <<std::endl;
      MoveEntity(m_vecObstacles[i]->GetEmbodiedEntity(), // body
                 m_vecObstaclePos[un_episode][i],        // position
                 CQuaternion(),                          // orientation
@@ -374,28 +565,56 @@ void CCollectiveRLTransport::PlaceEntities(UInt32 un_episode) {
                 true);                                  // ignore collisions
    }
    if(m_unUseGate == 1){
-     /** Move the Walls */
-     MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][0],
-                CQuaternion(),
-                false,
-                true);
-     MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
-                m_vecGateWallPos[un_episode][1],
-                CQuaternion(),
-                false,
-                true);
-
       /** Resize the walls */
       m_vecGateWalls[0]->Resize(m_vecGateWallSize[un_episode][0]);
       m_vecGateWalls[1]->Resize(m_vecGateWallSize[un_episode][1]);
+      /** Move the Walls */
+      LOG << "Placing Gate"<<std::endl;
+      MoveEntity(m_vecGateWalls[0]->GetEmbodiedEntity(),
+                  m_vecGateWallPos[un_episode][0],
+                  CQuaternion(),
+                  false,
+                  true);
+      MoveEntity(m_vecGateWalls[1]->GetEmbodiedEntity(),
+                  m_vecGateWallPos[un_episode][1],
+                  CQuaternion(),
+                  false,
+                  true);
     }
 
 
 }
+/****************************************/
+/****************************************/
+
+CVector2 CCollectiveRLTransport::GetCoM(std::vector<CVector2> vec_vertices) {
+   CVector2 sum = CVector2::ZERO;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      sum += vec_vertices[i];
+   }
+   CVector2 com_offset = sum / vec_vertices.size();
+   return com_offset;
+}
 
 /****************************************/
 /****************************************/
+
+CVector2 CCollectiveRLTransport::GetCoMComposite(std::vector<Real> vec_masses, std::vector<std::vector<CVector2>> vec_vertices) {
+   std::vector<CVector2> prism_coms;
+   for(size_t i = 0; i < vec_vertices.size(); ++i) {
+      CVector2 prism_com = GetCoM(vec_vertices[i]);
+      prism_coms.push_back(prism_com);
+   }
+   Real mass_sum = vec_masses[0];
+   CVector2 overall_com = prism_coms[0];
+   for(size_t i = 1; i < prism_coms.size(); ++i) {
+      Real new_mass_sum = mass_sum + vec_masses[i];
+      overall_com = (overall_com*mass_sum + prism_coms[i]*vec_masses[i])/new_mass_sum;
+      mass_sum = new_mass_sum; 
+   }
+
+   return overall_com;
+}
 
 std::vector<SInt32> CCollectiveRLTransport::GenerateRobotFailure(){
   /*
@@ -450,6 +669,7 @@ void CCollectiveRLTransport::Reset() {
      LOG<<"[INFO] Current Offset: "<<m_vecOffset[m_unEpisodeCounter]<<std::endl;
    }
    PlaceEntities(m_unEpisodeCounter);
+   LOG <<"Done Placing Entitiies"<<std::endl;
    m_bReachedGoal = false;
 
 }
@@ -518,19 +738,33 @@ struct GetWheelSpeeds : public CBuzzLoopFunctions::COperation {
 
 void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
    /** Get the position and orientation of the object*/
-   CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CQuaternion cCylinderOrient =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;
+   CVector3 cObjectPos = CVector3::ZERO;
+   CQuaternion cCylinderOrient;
+   if(m_unObjectChoice == 0) {
+      cObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Orientation;       
+   }
+   else if(m_unObjectChoice == 1) {
+      cObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Orientation;  
+   }
+   else if(m_unObjectChoice == 2) {
+      cObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position;
+      cCylinderOrient = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Orientation;  
+   }
+   
    CRadians cObjZ, cObjY, cObjX;
    cCylinderOrient.ToEulerAngles(cObjZ, cObjY, cObjX);
    /** Store object position and orientation to send to python*/
-   m_vecObjStats[0] = cCylinderPos.GetX();
-   m_vecObjStats[1] = cCylinderPos.GetY();
-   m_vecObjStats[2] = cCylinderPos.GetZ();
+   CVector2 COMPos = CVector2(m_cObjCOMOffsetPos.GetX() + cObjectPos.GetX(), m_cObjCOMOffsetPos.GetY() + cObjectPos.GetY()).Rotate(cObjZ);
+   m_vecObjStats[0] = cObjectPos.GetX();
+   m_vecObjStats[1] = cObjectPos.GetY();
+   m_vecObjStats[2] = cObjectPos.GetZ();
    m_vecObjStats[3] = ToDegrees(cObjX).GetValue();
    m_vecObjStats[4] = ToDegrees(cObjY).GetValue();
    m_vecObjStats[5] = ToDegrees(cObjZ).GetValue();
+   m_vecObjStats[7] = COMPos.GetX();
+   m_vecObjStats[8] = COMPos.GetY();
    if(m_unUseGate == 1){
      m_vecGateStats[0] = m_vecGateWallPos[m_unEpisodeCounter][0].GetX();
      m_vecGateStats[1] = m_vecGateWallSize[m_unEpisodeCounter][0].GetY();
@@ -565,20 +799,20 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
          m_cGoal.GetX() - cRobotPos.GetX(),
          m_cGoal.GetY() - cRobotPos.GetY());
       cVecRobot2Goal.Rotate(-cRobotZ);
-      /* Get vector from robot to cylinder (robot-local) */
-      CVector2 cVecRobot2Cylinder(
-         cCylinderPos.GetX() - cRobotPos.GetX(),
-         cCylinderPos.GetY() - cRobotPos.GetY());
-      cVecRobot2Cylinder.Rotate(-cRobotZ);
-      /* Get vector from cylinder to goal (robot-local) */
-      CVector2 cVecCylinder2Goal
-         (m_cGoal.GetX() - cCylinderPos.GetX(), m_cGoal.GetY() - cCylinderPos.GetY());
-      /* Get the cosine similarity of the cylinder */
-      CVector2 cMotion(cCylinderPos.GetX() - m_cOldCylinderPos.GetX(), cCylinderPos.GetY() - m_cOldCylinderPos.GetY());
+      /* Get vector from robot to object (robot-local) */
+      CVector2 cVecRobot2Object(
+         cObjectPos.GetX() - cRobotPos.GetX(),
+         cObjectPos.GetY() - cRobotPos.GetY());
+      cVecRobot2Object.Rotate(-cRobotZ);
+      /* Get vector from object to goal (robot-local) */
+      CVector2 cVecObject2Goal
+         (m_cGoal.GetX() - cObjectPos.GetX(), m_cGoal.GetY() - cObjectPos.GetY());
+      /* Get the cosine similarity of the object */
+      CVector2 cMotion(cObjectPos.GetX() - m_cOldObjectPos.GetX(), cObjectPos.GetY() - m_cOldObjectPos.GetY());
       Real fDirection = 0;
       if(cMotion.Length()>1e-4){
-        fDirection= cVecCylinder2Goal.DotProduct(cMotion) /
-                          (cVecCylinder2Goal.Length()*cMotion.Length());
+        fDirection= cVecObject2Goal.DotProduct(cMotion) /
+                          (cVecObject2Goal.Length()*cMotion.Length());
 
       }
 
@@ -610,9 +844,7 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       }
 
 
-      //DEBUG("cMotion = (%f,%f)\n", cMotion.GetX(), cMotion.GetY());
-      //DEBUG("cVecCylinder2Goal = (%f,%f)\n", cVecCylinder2Goal.GetX(), cVecCylinder2Goal.GetY());
-      //DEBUG("fDirection = %f\n", fDirection);
+
       /* Get the wheel speeds*/
       GetWheelSpeeds cGWS;
       BuzzForeachVM(cGWS);
@@ -623,11 +855,11 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
       m_vecObs[i * m_unNumObs + 1] = ToDegrees(cVecRobot2Goal.Angle()).GetValue();
       m_vecObs[i * m_unNumObs + 2] = fLWheel;
       m_vecObs[i * m_unNumObs + 3] = fRWheel;
-      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Cylinder.Length();
-      m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Cylinder.Angle()).GetValue();
-      m_vecObs[i * m_unNumObs + 6] = cVecCylinder2Goal.Length();
-      /* Adding cylinder angle to goal for MME*/
-      m_vecObjStats[6] = ToDegrees(cVecCylinder2Goal.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 4] = cVecRobot2Object.Length();
+      m_vecObs[i * m_unNumObs + 5] = ToDegrees(cVecRobot2Object.Angle()).GetValue();
+      m_vecObs[i * m_unNumObs + 6] = cVecObject2Goal.Length();
+      /* Adding object angle to goal for MME*/
+      m_vecObjStats[6] = ToDegrees(cVecObject2Goal.Angle()).GetValue();
       // Get the proximity sensor values
       const std::vector<argos::CCI_FootBotProximitySensor::SReading>& tReadings =
         m_vecRobots[i]->GetControllableEntity().GetController().GetSensor <CCI_FootBotProximitySensor> ("footbot_proximity")->GetReadings();
@@ -648,18 +880,17 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 void CCollectiveRLTransport::PreStep() {
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
-   m_cOldCylinderPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   /*for(size_t i = 0; i < m_unNumRobots; ++i) {
-      for(size_t j = 0; j < m_unNumObs; ++j) {
-         DEBUG("[E%u] [t=%u] [R=%zu] %s = %f\n",
-               m_unEpisodeCounter,
-               GetSpace().GetSimulationClock(),
-               i,
-               OBS_DESCRIPTIONS[j].c_str(),
-               m_vecObs[i * m_unNumObs + j]);
-      }
+   
+   if(m_unObjectChoice == 0) {
+      m_cOldObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;   
    }
-   DEBUG("\n");*/
+   else if(m_unObjectChoice == 1) {
+      m_cOldObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   }
+   else if(m_unObjectChoice == 2) {
+      m_cOldObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position; 
+   }
+
    /* Send observations to PyTorch */
    ZMQSendEpisodeState(EPISODE_RUNNING);
    ZMQSendObservations();
@@ -746,8 +977,8 @@ void CCollectiveRLTransport::PostExperiment() {
 void CCollectiveRLTransport::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
-   /* Check if the cylinder reached the goal */
-   m_bReachedGoal = CylinderAtTarget();
+   /* Check if the object reached the goal */
+   m_bReachedGoal = ObjectAtTarget();
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
@@ -800,13 +1031,21 @@ void CCollectiveRLTransport::PostStep() {
 /****************************************/
 /****************************************/
 
-bool CCollectiveRLTransport::CylinderAtTarget() {
-   CVector3& cCylinderPos =
-      m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
-   CVector2 cCylinder2Goal(
-      m_cGoal.GetX() - cCylinderPos.GetX(),
-      m_cGoal.GetY() - cCylinderPos.GetY());
-   return cCylinder2Goal.Length() < m_fThreshold;
+bool CCollectiveRLTransport::ObjectAtTarget() {
+   CVector3 cObjectPos = CVector3::ZERO;
+   if(m_unObjectChoice == 0) {
+      cObjectPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;   
+   }
+   else if(m_unObjectChoice == 1) {
+      cObjectPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   }
+   else if(m_unObjectChoice == 2) {
+      cObjectPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position; 
+   }
+   CVector2 cObject2Goal(
+      m_cGoal.GetX() - cObjectPos.GetX(),
+      m_cGoal.GetY() - cObjectPos.GetY());
+   return cObject2Goal.Length() < m_fThreshold;
 }
 
 /****************************************/
@@ -936,8 +1175,7 @@ void CCollectiveRLTransport::ZMQSendParams() {
      maxDist = dist4;
    }
    vecParams.push_back(maxDist);
-
-
+   vecParams.push_back(COMPOSITE_PRISM_POINTS.size());
 
    /*DEBUG("m_unNumRobots  = %u\n", m_unNumRobots);
    DEBUG("m_unNumObs     = %u\n", m_unNumObs);
@@ -953,6 +1191,48 @@ void CCollectiveRLTransport::ZMQSendParams() {
    }
    /* Wait for acknowledgment */
    ZMQGetAck();
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendNumPrisms(){
+   std::vector<int> m_vecNumPrismPoints;
+   for (size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); ++i){
+      m_vecNumPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i].size());
+   }
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<int*>(&m_vecNumPrismPoints[0]), // data pointer
+         sizeof(int) * m_vecNumPrismPoints.size(),  // data size in bytes
+         0)                      // another message will follow (rewards)
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+   ZMQGetAck();
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::ZMQSendPrismPoints(){
+   std::vector<float> m_vecPrismPoints;
+   for (size_t i = 0; i < COMPOSITE_PRISM_POINTS.size(); ++i){
+      for (size_t j = 0; j < COMPOSITE_PRISM_POINTS[i].size(); ++j){
+         m_vecPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i][j].GetX());
+         m_vecPrismPoints.push_back(COMPOSITE_PRISM_POINTS[i][j].GetY());
+      }
+   }
+   if(zmq_send_const(
+         m_ptZMQSocket,                    // the socket
+         const_cast<float*>(&m_vecPrismPoints[0]), // data pointer
+         sizeof(float) * m_vecPrismPoints.size(),  // data size in bytes
+         0)                      // another message will follow (rewards)
+      < 0) {                               // >= 0 means success
+      THROW_ARGOSEXCEPTION("Cannot send data to PyTorch: " << zmq_strerror(errno));
+   }
+   ZMQGetAck();
+
 }
 
 /****************************************/

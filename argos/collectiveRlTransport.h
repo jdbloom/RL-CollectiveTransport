@@ -11,6 +11,8 @@
 #include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
 #include <argos3/plugins/simulator/entities/proximity_sensor_equipped_entity.h>
 #include <argos3/core/utility/networking/tcp_socket.h>
+#include <argos3/plugins/simulator/entities/convex_prism_entity.h>
+#include <argos3/plugins/simulator/entities/composite_entity.h>
 #ifdef ARGOS_COMPILE_QTOPENGL
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
@@ -149,7 +151,7 @@ private:
    /** The Random Number Generator */
    CRandom::CRNG* m_pcRNG;
 
-   /** Whether the cylinder reached the goal */
+   /** Whether the object reached the goal */
    bool m_bReachedGoal;
 
    /** Number of episodes */
@@ -158,11 +160,14 @@ private:
    /** Number of time steps left */
    unsigned int m_unEpisodeTicksLeft;
 
-   /** Initial cylinder positions (index = # episode) */
-   std::vector<CVector3> m_vecCylinderPos;
+   /** Initial object positions (index = # episode) */
+   std::vector<CVector3> m_vecObjectPos;
 
-   /** Position of the cylinder from the previous time step*/
-   CVector3 m_cOldCylinderPos;
+   /** Position of the object from the previous time step*/
+   CVector3 m_cOldObjectPos;
+
+   /** Position of the center of mass of the object offset from the origin */
+   CVector2 m_cObjCOMOffsetPos;
 
    /** Initial robot positions (index = # episode, # robot) */
    std::vector< std::vector<CVector3> > m_vecRobotPos;
@@ -170,8 +175,14 @@ private:
    /** Initial robot orientations (index = # episode, # robot) */
    std::vector< std::vector<CQuaternion> > m_vecRobotOrient;
 
-   /** The cylinder */
+   /** The objects */
    CCylinderEntity* m_pcCylinder;
+   CConvexPrismEntity* m_pcConvexPrism;
+   CCompositeEntity* m_pcComposite;
+
+
+   /** Onject choice: randomly selected object*/
+   UInt32 m_unObjectChoice = 0;
 
    /** The networking socket */
    CTCPSocket* socket;
@@ -241,6 +252,15 @@ private:
    /** Minimum gate separation */
    Real m_fGateMinimum;
 
+   /** Use the composite prism as the object */
+   UInt32 m_unUsePrisms;
+
+   /** Randomize object between cylinder, convex, and composite prisms*/
+   UInt32 m_unRandomizeObjects;
+
+   /** Use different prism for testing*/
+   UInt32 m_unUseTestPrism;
+
    /** vector to keep track of the current offset (not used other than to print) */
    std::vector<Real> m_vecOffset;
 
@@ -265,13 +285,20 @@ private:
 
 private:
 
+   CVector2 GetCoM(std::vector<CVector2> vec_vertices);
+
+   CVector2 GetCoMComposite(std::vector<Real> vec_masses,
+                       std::vector<std::vector<CVector2>> vec_vertices);
+
    void CreateEntities();
+
+   void EnforceBoundaries(CVector3& pos, size_t episode, std::string state);
 
    void PlaceEntities(UInt32 un_episode);
 
    std::vector<SInt32> GenerateRobotFailure();
 
-   bool CylinderAtTarget();
+   bool ObjectAtTarget();
 
    bool IsEpisodeFinished();
 
@@ -304,6 +331,10 @@ private:
    void ZMQSendObstacleStats();
 
    void ZMQSendRobotStats();
+   
+   void ZMQSendNumPrisms();
+   
+   void ZMQSendPrismPoints();
 
    void ZMQGetAck();
 
