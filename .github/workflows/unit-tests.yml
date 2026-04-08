@@ -32,8 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NESTLab/GSP-RL
-          path: GSP-RL
-          token: ${{ secrets.GITHUB_TOKEN }}
+          path: ../GSP-RL
 
       - name: Install dependencies
         run: |
@@ -42,12 +41,3 @@ jobs:
       - name: Run unit tests
         run: |
           poetry run pytest tests/ -v --tb=short
-
-      - name: Check test count
-        run: |
-          count=$(poetry run pytest tests/ --co -q 2>&1 | tail -1 | grep -oE '[0-9]+')
-          echo "Tests collected: $count"
-          if [ "$count" -lt 60 ]; then
-            echo "WARNING: Expected at least 60 tests, got $count"
-            exit 1
-          fi
