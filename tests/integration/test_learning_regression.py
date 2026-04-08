@@ -245,19 +245,25 @@ def _check_learning_signal(data_dir, num_episodes):
             episode_rewards.append(total_reward)
 
             # Average action network loss (exclude None entries from pre-warmup)
-            losses = data.get("loss", [])
-            valid_losses = [l for l in losses if l is not None]
-            avg_loss = np.mean(valid_losses) if valid_losses else 0.0
+            try:
+                losses = data.get("loss", [])
+                valid_losses = [float(l) for l in losses if l is not None and np.isfinite(float(l))]
+                avg_loss = np.mean(valid_losses) if valid_losses else 0.0
+            except (TypeError, ValueError):
+                avg_loss = 0.0
             episode_losses.append(avg_loss)
 
             # Average GSP reward (sum across robots per step, then average)
-            gsp_rewards = data.get("gsp_reward", [])
-            if gsp_rewards and isinstance(gsp_rewards[0], (list, np.ndarray)):
-                step_sums = [sum(r) for r in gsp_rewards]
-                avg_gsp = np.mean(step_sums)
-            elif gsp_rewards:
-                avg_gsp = np.mean(gsp_rewards)
-            else:
+            try:
+                gsp_rewards = data.get("gsp_reward", [])
+                if gsp_rewards and isinstance(gsp_rewards[0], (list, np.ndarray)):
+                    step_sums = [sum(float(v) for v in r) for r in gsp_rewards]
+                    avg_gsp = np.mean(step_sums)
+                elif gsp_rewards:
+                    avg_gsp = np.mean([float(r) for r in gsp_rewards])
+                else:
+                    avg_gsp = 0.0
+            except (TypeError, ValueError):
                 avg_gsp = 0.0
             episode_gsp_rewards.append(avg_gsp)
 
@@ -588,7 +594,7 @@ if __name__ == "__main__":
             if r["status"] == "ERROR":
                 print(f"{r['name']:<22s} {'ERROR':<8s} {'—':10s} {r['duration']:<10.0f}s {r['error']}")
             else:
-                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<10d} {r['duration']:<10.0f}s {r['slope']:<12.1f} {r['r_squared']:<12.3f}")
+                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<10d} {r['duration']:<10.0f}s {r['slope']:<11.0f} {r.get('loss_slope',0):<12.4f} {r.get('gsp_slope',0):<12.4f}")
 
         passed = sum(1 for r in results if r["status"] == "PASS")
         print(f"\n{passed}/{len(results)} PASSED")
