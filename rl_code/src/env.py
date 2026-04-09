@@ -271,9 +271,9 @@ class ZMQ_Utility:
         return msg
 
     def parse_msgs(self, msgs):
-        if len(msgs) != 7:
+        if len(msgs) not in (7, 8):
             raise ValueError(
-                f"Expected 7 message parts, got {len(msgs)}. "
+                f"Expected 7-8 message parts, got {len(msgs)}. "
                 f"Part sizes: {[len(m) for m in msgs]}"
             )
         env_observations = self.parse_obs(msgs[1])

@@ -26,7 +26,7 @@ class TestMessageValidation:
 
     def test_parse_msgs_wrong_part_count_raises(self, zmq_util):
         msgs = [b"\x00"] * 5
-        with pytest.raises(ValueError, match="Expected 7 message parts"):
+        with pytest.raises(ValueError, match="Expected 7-8 message parts"):
             zmq_util.parse_msgs(msgs)
 
     def test_parse_msgs_correct_parts_works(self, zmq_util):
