@@ -536,6 +536,13 @@ while not exp_done:
                                 robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
 
                 if episode_done:
+                    if args.independent_learning:
+                        for m in models:
+                            if hasattr(m, 'reset_hidden_states'):
+                                m.reset_hidden_states()
+                    else:
+                        if hasattr(model, 'reset_hidden_states'):
+                            model.reset_hidden_states()
                     run_time = time.time() - episode_start_time
                     data_writer.write_to_file()
                     if not args.no_print:

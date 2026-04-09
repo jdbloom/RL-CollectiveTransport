@@ -33,7 +33,7 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ARGOS_BIN = shutil.which("argos3")
 NUM_EPISODES = 10
-NUM_EPISODES_RECURRENT = 5  # RDDPG is much slower (per-sample LSTM loop on CPU)
+NUM_EPISODES_RECURRENT = 10  # Was 5 when RDDPG was 200x slower; now vectorized
 SEED = 42
 
 
@@ -197,16 +197,27 @@ def _run_experiment(config):
     return os.path.join(data_root, "Data")
 
 
+def _linear_regression(values):
+    """Fit linear regression and return (slope, r_squared)."""
+    if len(values) < 2:
+        return 0.0, 0.0
+    x = np.arange(len(values))
+    coeffs = np.polyfit(x, values, 1)
+    slope = coeffs[0]
+    y_pred = np.polyval(coeffs, x)
+    ss_res = np.sum((np.array(values) - y_pred) ** 2)
+    ss_tot = np.sum((np.array(values) - np.mean(values)) ** 2)
+    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+    return slope, r_squared
+
+
 def _check_learning_signal(data_dir, num_episodes):
-    """Verify that training shows improvement using linear regression slope.
+    """Verify training improvement via linear regression on rewards, loss, and GSP reward.
 
-    Fits a line to per-episode rewards. A positive slope (less negative over time)
-    indicates learning. More robust than comparing early-vs-late windows, which
-    is sensitive to single-episode variance.
-
-    Returns:
-        (slope, r_squared, improved): regression slope, fit quality, and whether
-        the slope indicates improvement (positive = rewards getting less negative).
+    Returns dict with:
+        reward_slope, reward_r2: reward trend (positive = improving)
+        gsp_slope, gsp_r2: GSP prediction reward trend (positive = better predictions)
+        improved: bool, whether reward slope is positive
     """
     pkl_files = sorted(
         [f for f in os.listdir(data_dir) if f.endswith(".pkl")],
@@ -216,34 +227,59 @@ def _check_learning_signal(data_dir, num_episodes):
     if len(pkl_files) < num_episodes:
         raise RuntimeError(f"Expected {num_episodes} pkl files, found {len(pkl_files)}")
 
-    # Load all episode rewards
     episode_rewards = []
+    episode_losses = []
+    episode_gsp_rewards = []
+
     for f in pkl_files:
         with open(os.path.join(data_dir, f), "rb") as fh:
             data = pickle.load(fh)
+
+            # Total reward (sum across all robots and steps)
             rewards = data.get("reward", data.get("rewards", [0]))
-            # rewards may be list-of-lists (per step × per robot) or flat
             if isinstance(rewards, list) and rewards and isinstance(rewards[0], (list, np.ndarray)):
-                total = sum(sum(r) for r in rewards)
+                total_reward = sum(sum(r) for r in rewards)
             else:
-                total = np.sum(rewards)
-            episode_rewards.append(total)
+                total_reward = np.sum(rewards)
+            episode_rewards.append(total_reward)
 
-    # Linear regression: reward = slope * episode + intercept
-    x = np.arange(len(episode_rewards))
-    coeffs = np.polyfit(x, episode_rewards, 1)
-    slope = coeffs[0]
+            # Average action network loss (exclude None entries from pre-warmup)
+            try:
+                losses = data.get("loss", [])
+                valid_losses = [float(l) for l in losses if l is not None and np.isfinite(float(l))]
+                avg_loss = np.mean(valid_losses) if valid_losses else 0.0
+            except (TypeError, ValueError):
+                avg_loss = 0.0
+            episode_losses.append(avg_loss)
 
-    # R-squared for fit quality
-    y_pred = np.polyval(coeffs, x)
-    ss_res = np.sum((np.array(episode_rewards) - y_pred) ** 2)
-    ss_tot = np.sum((np.array(episode_rewards) - np.mean(episode_rewards)) ** 2)
-    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+            # Average GSP reward (sum across robots per step, then average)
+            try:
+                gsp_rewards = data.get("gsp_reward", [])
+                if gsp_rewards and isinstance(gsp_rewards[0], (list, np.ndarray)):
+                    step_sums = [sum(float(v) for v in r) for r in gsp_rewards]
+                    avg_gsp = np.mean(step_sums)
+                elif gsp_rewards:
+                    avg_gsp = np.mean([float(r) for r in gsp_rewards])
+                else:
+                    avg_gsp = 0.0
+            except (TypeError, ValueError):
+                avg_gsp = 0.0
+            episode_gsp_rewards.append(avg_gsp)
 
-    # Positive slope = rewards getting less negative = learning
-    improved = slope > 0
+    reward_slope, reward_r2 = _linear_regression(episode_rewards)
 
-    return slope, r_squared, improved
+    # GSP slope is None when GSP is disabled (all zeros)
+    all_gsp_zero = all(abs(g) < 1e-10 for g in episode_gsp_rewards)
+    if all_gsp_zero:
+        gsp_slope, gsp_r2 = None, None
+    else:
+        gsp_slope, gsp_r2 = _linear_regression(episode_gsp_rewards)
+
+    return {
+        "reward_slope": reward_slope, "reward_r2": reward_r2,
+        "gsp_slope": gsp_slope, "gsp_r2": gsp_r2,
+        "improved": reward_slope > 0,
+    }
 
 
 def _cleanup_experiment(exp_name):
@@ -282,9 +318,9 @@ class TestDQN_IC:
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
         assert pkl_count == NUM_EPISODES, f"Expected {NUM_EPISODES} episodes, got {pkl_count}"
 
-        slope, r_squared, improved = _check_learning_signal(data_dir, NUM_EPISODES)
-        assert improved, (
-            f"DQN+IC failed: slope=\{slope:.1f\}, R²=\{r_squared:.3f\} (need positive slope)"
+        result = _check_learning_signal(data_dir, NUM_EPISODES)
+        assert result["improved"], (
+            f"DQN+IC failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -314,9 +350,9 @@ class TestDQN_GSP:
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
         assert pkl_count == NUM_EPISODES, f"Expected {NUM_EPISODES} episodes, got {pkl_count}"
 
-        slope, r_squared, improved = _check_learning_signal(data_dir, NUM_EPISODES)
-        assert improved, (
-            f"DQN+GSP failed: slope=\{slope:.1f\}, R²=\{r_squared:.3f\} (need positive slope)"
+        result = _check_learning_signal(data_dir, NUM_EPISODES)
+        assert result["improved"], (
+            f"DQN+GSP failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -346,9 +382,9 @@ class TestDDQN_GSP_N:
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
         assert pkl_count == NUM_EPISODES, f"Expected {NUM_EPISODES} episodes, got {pkl_count}"
 
-        slope, r_squared, improved = _check_learning_signal(data_dir, NUM_EPISODES)
-        assert improved, (
-            f"DDQN+GSP-N failed: slope=\{slope:.1f\}, R²=\{r_squared:.3f\} (need positive slope)"
+        result = _check_learning_signal(data_dir, NUM_EPISODES)
+        assert result["improved"], (
+            f"DQN+GSP failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -374,18 +410,15 @@ class TestDDPG_R_GSP_N:
             neighbors=True,
             recurrent=True,
         )
-        # R-GSP-N is slow on CPU (MPS LSTM fallback) — use fewer episodes + smaller batch
         config["NUM_EPISODES"] = NUM_EPISODES_RECURRENT
-        config["BATCH_SIZE"] = 16
-        config["GSP_BATCH_SIZE"] = 16
         data_dir = _run_experiment(config)
 
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
         assert pkl_count == NUM_EPISODES_RECURRENT, f"Expected {NUM_EPISODES_RECURRENT} episodes, got {pkl_count}"
 
-        slope, r_squared, improved = _check_learning_signal(data_dir, NUM_EPISODES_RECURRENT)
-        assert improved, (
-            f"DDPG+R-GSP-N failed: slope=\{slope:.1f\}, R²=\{r_squared:.3f\} (need positive slope)"
+        result = _check_learning_signal(data_dir, NUM_EPISODES_RECURRENT)
+        assert result["improved"], (
+            f"DDPG+R-GSP-N failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -416,9 +449,9 @@ class TestTD3_A_GSP_N:
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
         assert pkl_count == NUM_EPISODES, f"Expected {NUM_EPISODES} episodes, got {pkl_count}"
 
-        slope, r_squared, improved = _check_learning_signal(data_dir, NUM_EPISODES)
-        assert improved, (
-            f"TD3+A-GSP-N failed: slope=\{slope:.1f\}, R²=\{r_squared:.3f\} (need positive slope)"
+        result = _check_learning_signal(data_dir, NUM_EPISODES)
+        assert result["improved"], (
+            f"TD3+A-GSP-N failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -429,18 +462,16 @@ def _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port):
     config = _make_config(exp_name, scheme, port, gsp, neighbors, recurrent, attention)
     if recurrent:
         config["NUM_EPISODES"] = NUM_EPISODES_RECURRENT
-        config["BATCH_SIZE"] = 16
-        config["GSP_BATCH_SIZE"] = 16
     target_eps = NUM_EPISODES_RECURRENT if recurrent else NUM_EPISODES
     start = time.time()
     try:
         data_dir = _run_experiment(config)
         pkl_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
-        slope, r_squared, improved = _check_learning_signal(data_dir, pkl_count)
+        result = _check_learning_signal(data_dir, pkl_count)
         return {
-            "name": name, "status": "PASS" if improved else "FAIL",
+            "name": name, "status": "PASS" if result["improved"] else "FAIL",
             "episodes": pkl_count, "target": target_eps,
-            "slope": slope, "r_squared": r_squared, "duration": time.time() - start,
+            "slope": result["reward_slope"], "r_squared": result["reward_r2"], "gsp_slope": result.get("gsp_slope"), "duration": time.time() - start,
         }
     except Exception as e:
         return {"name": name, "status": "ERROR", "error": str(e),
@@ -450,11 +481,53 @@ def _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port):
 
 
 def _run_parallel(tests_to_run, tests_dict):
-    """Launch all tests in parallel using threads."""
+    """Launch all tests in parallel with live progress display."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
 
     start = time.time()
     results = []
+    completed = {}
+    lock = threading.Lock()
+
+    # Track targets per test
+    targets = {}
+    for name in tests_to_run:
+        _, _, _, recurrent, _, _ = tests_dict[name]
+        targets[name] = NUM_EPISODES_RECURRENT if recurrent else NUM_EPISODES
+
+    def _progress_display():
+        """Background thread that prints progress bars every 10 seconds."""
+        while len(completed) < len(tests_to_run):
+            time.sleep(10)
+            elapsed = time.time() - start
+            lines = []
+            for name in tests_to_run:
+                target = targets[name]
+                if name in completed:
+                    r = completed[name]
+                    status = r["status"]
+                    bar = "█" * target
+                    lines.append(f"  {name:<22s} [{bar}] {target}/{target} {status} ({r['duration']:.0f}s)")
+                else:
+                    exp_name = f"regression_{name}"
+                    data_dir = os.path.join(PROJECT_ROOT, "rl_code", "Data", exp_name, "Data")
+                    try:
+                        ep_count = len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
+                    except FileNotFoundError:
+                        ep_count = 0
+                    filled = "█" * ep_count
+                    empty = "░" * (target - ep_count)
+                    lines.append(f"  {name:<22s} [{filled}{empty}] {ep_count}/{target}")
+
+            # Clear and redraw
+            print(f"\n  [{elapsed:.0f}s elapsed]", flush=True)
+            for line in lines:
+                print(line, flush=True)
+
+    # Start progress thread
+    progress_thread = threading.Thread(target=_progress_display, daemon=True)
+    progress_thread.start()
 
     with ThreadPoolExecutor(max_workers=len(tests_to_run)) as executor:
         futures = {}
@@ -466,12 +539,13 @@ def _run_parallel(tests_to_run, tests_dict):
         for future in as_completed(futures):
             result = future.result()
             name = result["name"]
+            with lock:
+                completed[name] = result
             if result["status"] == "ERROR":
-                print(f"  DONE: {name} — ERROR: {result['error']}", flush=True)
+                print(f"\n  ✗ {name} — ERROR: {result['error']}", flush=True)
             else:
-                print(f"  DONE: {name} — {result['status']} in {result['duration']:.0f}s "
-                      f"({result['episodes']}/{result['target']} eps, "
-                      f"slope={result['slope']:.1f}, R²={result['r_squared']:.3f})", flush=True)
+                print(f"\n  ✓ {name} — {result['status']} in {result['duration']:.0f}s "
+                      f"(slope={result['slope']:.1f}, R²={result['r_squared']:.3f})", flush=True)
             results.append(result)
 
     total = time.time() - start
@@ -512,13 +586,14 @@ if __name__ == "__main__":
         print(f"\n{'='*70}")
         print(f"PARALLEL RESULTS: {total:.0f}s ({total/60:.1f} min)")
         print(f"{'='*70}")
-        print(f"{'Test':<22s} {'Status':<8s} {'Episodes':<10s} {'Duration':<10s} {'Slope':<12s} {'R²':<12s}")
-        print(f"{'-'*74}")
+        print(f"{'Test':<22s} {'Status':<8s} {'Eps':<6s} {'Duration':<10s} {'Action Rwd':<12s} {'GSP Rwd':<12s}")
+        print(f"{'-'*70}")
         for r in sorted(results, key=lambda x: x["name"]):
             if r["status"] == "ERROR":
-                print(f"{r['name']:<22s} {'ERROR':<8s} {'—':10s} {r['duration']:<10.0f}s {r['error']}")
+                print(f"{r['name']:<22s} {'ERROR':<8s} {'—':6s} {r['duration']:<10.0f}s {r['error']}")
             else:
-                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<10d} {r['duration']:<10.0f}s {r['slope']:<12.1f} {r['r_squared']:<12.3f}")
+                gsp = f"{r.get('gsp_slope',0):.4f}" if r.get('gsp_slope') else "N/A"
+                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<6d} {r['duration']:<10.0f}s {r['slope']:<12.0f} {gsp:<12s}")
 
         passed = sum(1 for r in results if r["status"] == "PASS")
         print(f"\n{passed}/{len(results)} PASSED")
@@ -534,8 +609,9 @@ if __name__ == "__main__":
             if result["status"] == "ERROR":
                 print(f"  ERROR: {result['error']}")
             else:
-                print(f"  Episodes: {result['episodes']}/{result.get('target', NUM_EPISODES)}")
-                print(f"  Slope: {result['slope']:.1f} (positive = learning)")
-                print(f"  R²: {result['r_squared']:.3f}")
-                print(f"  Learning signal:  {result['status']}")
-                print(f"  Duration:         {result['duration']:.0f}s")
+                gsp_str = f"{result.get('gsp_slope', 0):.4f}" if result.get('gsp_slope') is not None else "N/A"
+                print(f"  Episodes:      {result['episodes']}/{result.get('target', NUM_EPISODES)}")
+                print(f"  Action reward: {result['slope']:.1f} (positive = learning)")
+                print(f"  GSP reward:    {gsp_str} (positive = better predictions)")
+                print(f"  Status:        {result['status']}")
+                print(f"  Duration:      {result['duration']:.0f}s")
