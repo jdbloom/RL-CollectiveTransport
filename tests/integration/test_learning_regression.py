@@ -216,7 +216,6 @@ def _check_learning_signal(data_dir, num_episodes):
 
     Returns dict with:
         reward_slope, reward_r2: reward trend (positive = improving)
-        loss_slope, loss_r2: action network loss trend (negative = converging)
         gsp_slope, gsp_r2: GSP prediction reward trend (positive = better predictions)
         improved: bool, whether reward slope is positive
     """
@@ -268,12 +267,16 @@ def _check_learning_signal(data_dir, num_episodes):
             episode_gsp_rewards.append(avg_gsp)
 
     reward_slope, reward_r2 = _linear_regression(episode_rewards)
-    loss_slope, loss_r2 = _linear_regression(episode_losses)
-    gsp_slope, gsp_r2 = _linear_regression(episode_gsp_rewards)
+
+    # GSP slope is None when GSP is disabled (all zeros)
+    all_gsp_zero = all(abs(g) < 1e-10 for g in episode_gsp_rewards)
+    if all_gsp_zero:
+        gsp_slope, gsp_r2 = None, None
+    else:
+        gsp_slope, gsp_r2 = _linear_regression(episode_gsp_rewards)
 
     return {
         "reward_slope": reward_slope, "reward_r2": reward_r2,
-        "loss_slope": loss_slope, "loss_r2": loss_r2,
         "gsp_slope": gsp_slope, "gsp_r2": gsp_r2,
         "improved": reward_slope > 0,
     }
@@ -317,7 +320,7 @@ class TestDQN_IC:
 
         result = _check_learning_signal(data_dir, NUM_EPISODES)
         assert result["improved"], (
-            f"DQN+IC failed: reward={result['reward_slope']:.0f}, loss={result['loss_slope']:.4f}, gsp={result['gsp_slope']:.4f}"
+            f"DQN+IC failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -349,7 +352,7 @@ class TestDQN_GSP:
 
         result = _check_learning_signal(data_dir, NUM_EPISODES)
         assert result["improved"], (
-            f"DQN+GSP failed: reward={result['reward_slope']:.0f}, loss={result['loss_slope']:.4f}, gsp={result['gsp_slope']:.4f}"
+            f"DQN+GSP failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -381,7 +384,7 @@ class TestDDQN_GSP_N:
 
         result = _check_learning_signal(data_dir, NUM_EPISODES)
         assert result["improved"], (
-            f"DDQN+GSP-N failed: reward={result['reward_slope']:.0f}, loss={result['loss_slope']:.4f}, gsp={result['gsp_slope']:.4f}"
+            f"DQN+GSP failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -415,7 +418,7 @@ class TestDDPG_R_GSP_N:
 
         result = _check_learning_signal(data_dir, NUM_EPISODES_RECURRENT)
         assert result["improved"], (
-            f"DDPG+R-GSP-N failed: reward={result['reward_slope']:.0f}, loss={result['loss_slope']:.4f}, gsp={result['gsp_slope']:.4f}"
+            f"DDPG+R-GSP-N failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -448,7 +451,7 @@ class TestTD3_A_GSP_N:
 
         result = _check_learning_signal(data_dir, NUM_EPISODES)
         assert result["improved"], (
-            f"TD3+A-GSP-N failed: reward={result['reward_slope']:.0f}, loss={result['loss_slope']:.4f}, gsp={result['gsp_slope']:.4f}"
+            f"TD3+A-GSP-N failed: action_rwd={result['reward_slope']:.0f}, gsp_rwd={result.get('gsp_slope', 'N/A')}"
         )
 
 
@@ -468,7 +471,7 @@ def _run_single_test(name, scheme, gsp, neighbors, recurrent, attention, port):
         return {
             "name": name, "status": "PASS" if result["improved"] else "FAIL",
             "episodes": pkl_count, "target": target_eps,
-            "slope": result["reward_slope"], "r_squared": result["reward_r2"], "loss_slope": result["loss_slope"], "gsp_slope": result["gsp_slope"], "duration": time.time() - start,
+            "slope": result["reward_slope"], "r_squared": result["reward_r2"], "gsp_slope": result.get("gsp_slope"), "duration": time.time() - start,
         }
     except Exception as e:
         return {"name": name, "status": "ERROR", "error": str(e),
@@ -583,13 +586,14 @@ if __name__ == "__main__":
         print(f"\n{'='*70}")
         print(f"PARALLEL RESULTS: {total:.0f}s ({total/60:.1f} min)")
         print(f"{'='*70}")
-        print(f"{'Test':<22s} {'Status':<8s} {'Episodes':<10s} {'Duration':<10s} {'Rwd Slope':<11s} {'Loss Slope':<12s} {'GSP Slope':<12s}")
-        print(f"{'-'*74}")
+        print(f"{'Test':<22s} {'Status':<8s} {'Eps':<6s} {'Duration':<10s} {'Action Rwd':<12s} {'GSP Rwd':<12s}")
+        print(f"{'-'*70}")
         for r in sorted(results, key=lambda x: x["name"]):
             if r["status"] == "ERROR":
-                print(f"{r['name']:<22s} {'ERROR':<8s} {'—':10s} {r['duration']:<10.0f}s {r['error']}")
+                print(f"{r['name']:<22s} {'ERROR':<8s} {'—':6s} {r['duration']:<10.0f}s {r['error']}")
             else:
-                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<10d} {r['duration']:<10.0f}s {r['slope']:<11.0f} {r.get('loss_slope',0):<12.4f} {r.get('gsp_slope',0):<12.4f}")
+                gsp = f"{r.get('gsp_slope',0):.4f}" if r.get('gsp_slope') else "N/A"
+                print(f"{r['name']:<22s} {r['status']:<8s} {r['episodes']:<6d} {r['duration']:<10.0f}s {r['slope']:<12.0f} {gsp:<12s}")
 
         passed = sum(1 for r in results if r["status"] == "PASS")
         print(f"\n{passed}/{len(results)} PASSED")
@@ -605,8 +609,9 @@ if __name__ == "__main__":
             if result["status"] == "ERROR":
                 print(f"  ERROR: {result['error']}")
             else:
-                print(f"  Episodes: {result['episodes']}/{result.get('target', NUM_EPISODES)}")
-                print(f"  Slope: {result['slope']:.1f} (positive = learning)")
-                print(f"  R²: {result['r_squared']:.3f}")
-                print(f"  Learning signal:  {result['status']}")
-                print(f"  Duration:         {result['duration']:.0f}s")
+                gsp_str = f"{result.get('gsp_slope', 0):.4f}" if result.get('gsp_slope') is not None else "N/A"
+                print(f"  Episodes:      {result['episodes']}/{result.get('target', NUM_EPISODES)}")
+                print(f"  Action reward: {result['slope']:.1f} (positive = learning)")
+                print(f"  GSP reward:    {gsp_str} (positive = better predictions)")
+                print(f"  Status:        {result['status']}")
+                print(f"  Duration:      {result['duration']:.0f}s")
