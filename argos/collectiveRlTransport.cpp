@@ -878,6 +878,8 @@ void CCollectiveRLTransport::GetObservations(EEpisodeState e_state){
 /****************************************/
 
 void CCollectiveRLTransport::PreStep() {
+   /* Skip if all episodes are done — prevents phantom episode from unsigned underflow */
+   if(m_unEpisodeCounter >= m_unNumEpisodes) return;
    GetObservations(EPISODE_RUNNING);
    CalculateRobotStats();
    
