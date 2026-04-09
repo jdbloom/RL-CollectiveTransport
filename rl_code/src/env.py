@@ -4,11 +4,15 @@ from collections import namedtuple
 from struct import pack, unpack, Struct
 
 def angle_normalize_unsigned_deg(a):
+  if not np.isfinite(a):
+      return 0.0
   while a < 0: a += 360
   while a >= 360: a -= 360
   return a
 
 def angle_normalize_signed_deg(a):
+  if not np.isfinite(a):
+      return 0.0
   while a < -180: a += 360
   while a >= 180: a -= 360
   return a
@@ -92,6 +96,7 @@ class ZMQ_Utility:
         self.FLOAT_SIZE = 4
         # Byte size of int in C++
         self.INT_SIZE = 4
+        self._namedtuple_cache = {}
 
 
     def get_params(self, msg):
@@ -142,11 +147,18 @@ class ZMQ_Utility:
     # Returns a dictionary
     #
     def parse_msg(self, msg, msgtype, fields, fmt):
-        # Make an empty named tuple with the given fields
-        Tx = namedtuple(msgtype, fields)
-        # Fill the tuple with the contents of the message
+        import struct
+        expected_size = struct.calcsize(fmt)
+        if len(msg) != expected_size:
+            raise ValueError(
+                f"Message size mismatch for '{msgtype}': "
+                f"expected {expected_size} bytes, got {len(msg)}"
+            )
+        cache_key = msgtype
+        if cache_key not in self._namedtuple_cache:
+            self._namedtuple_cache[cache_key] = namedtuple(msgtype, fields)
+        Tx = self._namedtuple_cache[cache_key]
         x = Tx._make(unpack(fmt, msg))
-        # Return the tuple as a dictionary
         return x._asdict()
 
     #
@@ -259,11 +271,15 @@ class ZMQ_Utility:
         return msg
 
     def parse_msgs(self, msgs):
+        if len(msgs) != 7:
+            raise ValueError(
+                f"Expected 7 message parts, got {len(msgs)}. "
+                f"Part sizes: {[len(m) for m in msgs]}"
+            )
         env_observations = self.parse_obs(msgs[1])
         failures = self.parse_failures(msgs[2])
         rewards = self.parse_rewards(msgs[3])
         stats = self.parse_stats(msgs[4])
         robot_stats = self.parse_robot_stats(msgs[5])
         obj_stats = self.parse_obj_stats(msgs[6])
-
         return env_observations, failures, rewards, stats, robot_stats, obj_stats
