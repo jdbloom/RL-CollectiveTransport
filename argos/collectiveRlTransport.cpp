@@ -979,12 +979,40 @@ void CCollectiveRLTransport::PostExperiment() {
 void CCollectiveRLTransport::PostStep() {
    /* Decrement remaining time */
    --m_unEpisodeTicksLeft;
+   /* Check for NaN positions — indicates physics engine failure */
+   for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+      CVector3 cPos = m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Position;
+      if(std::isnan(cPos.GetX()) || std::isnan(cPos.GetY()) || std::isnan(cPos.GetZ())) {
+         LOG << "[FATAL] Robot " << i << " has NaN position at episode "
+             << m_unEpisodeCounter << " tick " << (m_unEpisodeTime - m_unEpisodeTicksLeft)
+             << ": (" << cPos.GetX() << ", " << cPos.GetY() << ", " << cPos.GetZ() << ")" << std::endl;
+         THROW_ARGOSEXCEPTION("Physics simulation produced NaN position for robot " << i);
+      }
+   }
+   /* Check object position for NaN */
+   CVector3 cObjPos = CVector3::ZERO;
+   if(m_unObjectChoice == 0) {
+      cObjPos = m_pcCylinder->GetEmbodiedEntity().GetOriginAnchor().Position;
+   } else if(m_unObjectChoice == 1) {
+      cObjPos = m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position;
+   } else if(m_unObjectChoice == 2) {
+      cObjPos = m_pcComposite->GetEmbodiedEntity().GetOriginAnchor().Position;
+   }
+   if(std::isnan(cObjPos.GetX()) || std::isnan(cObjPos.GetY()) || std::isnan(cObjPos.GetZ())) {
+      LOG << "[FATAL] Object has NaN position at episode "
+          << m_unEpisodeCounter << " tick " << (m_unEpisodeTime - m_unEpisodeTicksLeft) << std::endl;
+      THROW_ARGOSEXCEPTION("Physics simulation produced NaN position for transported object");
+   }
    /* Check if the object reached the goal */
    m_bReachedGoal = ObjectAtTarget();
    EEpisodeState eState = EPISODE_RUNNING;
    /* If we haven't reached our experiment limit then reset */
    if(IsEpisodeFinished()) {
       LOG << "Episode " << m_unEpisodeCounter << " is done" << std::endl;
+      LOG << "[EPISODE] ep=" << m_unEpisodeCounter
+          << " result=" << (m_bReachedGoal ? "SUCCESS" : "TIMEOUT")
+          << " ticks=" << (m_unEpisodeTime - m_unEpisodeTicksLeft)
+          << std::endl;
       /* check to see if we need to decrease the threshold */
       if((m_unEpisodeCounter+1) % m_unDecThresholdTime == 0){
         if(m_fThreshold > m_fMinThreshold){
