@@ -22,7 +22,7 @@ data_path = args.data_path + 'Data/'
 if args.registry_db and args.experiment_id:
     # Load from registry database
     import sys as _sys
-    _stelaris_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '..', '..')
+    _stelaris_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '..', '..', '..')
     if _stelaris_root not in _sys.path:
         _sys.path.insert(0, _stelaris_root)
     from tools.registry.client import RegistryClient
