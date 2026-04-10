@@ -19,6 +19,20 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+# Registry integration (optional — gracefully degrades if unavailable)
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".."))
+    from tools.registry.client import RegistryClient
+    REGISTRY_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "data", "registry.db")
+    os.makedirs(os.path.dirname(REGISTRY_DB), exist_ok=True)
+    _registry = RegistryClient(REGISTRY_DB)
+    HAS_REGISTRY = True
+    print(f"Registry connected: {REGISTRY_DB}")
+except Exception:
+    HAS_REGISTRY = False
+    _registry = None
+
+
 def episode_timing_logger(exp_name, data_dir, output_dir='Data/monitoring'):
     """Background thread: watches for new .pkl files, logs per-episode wall time."""
     os.makedirs(output_dir, exist_ok=True)
@@ -324,6 +338,23 @@ def run_train_and_test(train_name):
     """Train one experiment, then kick off its test runs."""
     gsp, neighbors, num_obs, use_gate, gate_curr, use_prisms, port, recurrent, attention = TRAIN_EXPERIMENTS[train_name]
 
+    exp_id = f"{train_name}_{SEED}"
+    if HAS_REGISTRY:
+        try:
+            coord = "R-GSP-N" if recurrent else ("A-GSP-N" if attention else ("GSP-N" if neighbors else ("GSP" if gsp else "IC")))
+            env = f"{num_obs}obs" if num_obs > 0 else ("gate_curr" if gate_curr else ("gate" if use_gate else ("prism" if use_prisms else "open")))
+            _registry.create_experiment(
+                id=exp_id, name=train_name, algorithm="DQN",
+                coordination=coord, environment=env,
+                num_robots=NUM_ROBOTS, num_obstacles=num_obs,
+                use_gate=bool(use_gate), use_prisms=bool(use_prisms),
+                num_episodes=TRAIN_EPISODES, seed=SEED, port=port,
+                machine_hostname=os.uname().nodename,
+            )
+            _registry.start_experiment(exp_id)
+        except Exception as e:
+            print(f"  [WARN] Registry: {e}", flush=True)
+
     # ── TRAIN ──
     print(f"  [TRAIN] Starting {train_name} (port {port})", flush=True)
     config = make_config(
@@ -337,6 +368,11 @@ def run_train_and_test(train_name):
         print(f"  [TRAIN] ✓ {train_name} done — {ep_count} episodes in {duration:.0f}s", flush=True)
     except Exception as e:
         print(f"  [TRAIN] ✗ {train_name} FAILED: {e}", flush=True)
+        if HAS_REGISTRY:
+            try:
+                _registry.fail_experiment(exp_id, error_message=str(e))
+            except Exception:
+                pass
         return {"train": train_name, "status": "TRAIN_ERROR", "error": str(e)}
 
     # ── FIND BEST MODEL ──
@@ -391,6 +427,12 @@ def run_train_and_test(train_name):
         except Exception as e:
             print(f"  [TEST]  ✗ {test_name} FAILED: {e}", flush=True)
             test_results.append({"test_name": test_name, "status": "ERROR", "error": str(e)})
+
+    if HAS_REGISTRY:
+        try:
+            _registry.complete_experiment(exp_id)
+        except Exception:
+            pass
 
     return {
         "train": train_name, "status": "DONE",

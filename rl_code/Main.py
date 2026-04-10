@@ -564,6 +564,28 @@ try:
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,
                         )
+                        # Log to registry if available
+                        try:
+                            import sys as _sys
+                            _stelaris_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "..")
+                            if _stelaris_root not in _sys.path:
+                                _sys.path.insert(0, _stelaris_root)
+                            from tools.registry.client import RegistryClient as _RC
+                            _reg_db = os.path.join(_stelaris_root, "data", "registry.db")
+                            if os.path.exists(_reg_db):
+                                _reg = _RC(_reg_db)
+                                _reg.log_episode(
+                                    experiment_id=f"{os.path.basename(recording_path)}_{config.get('SEED', 0)}",
+                                    episode_num=ep_counter,
+                                    total_reward=float(running_reward if not args.independent_learning else np.mean(running_reward)),
+                                    success=bool(reached_goal),
+                                    duration_s=run_time,
+                                    timesteps=time_steps,
+                                    epsilon=float(tmp_epsilon),
+                                )
+                                _reg.close()
+                        except Exception:
+                            pass  # Registry is optional
                         if not args.no_print:
                             print('[RUN TIME] %.2f' % run_time)
                         if args.independent_learning:
