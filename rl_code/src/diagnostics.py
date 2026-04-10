@@ -53,7 +53,21 @@ class ExperimentLogger:
     def finish(self, success: bool, error_message: str | None = None):
         if success:
             self.close()
-            shutil.rmtree(self.log_dir, ignore_errors=True)
+            # Only remove files we created (python.log), not the whole directory
+            # The runner may have placed argos.log here too
+            for name in ("python.log",):
+                path = os.path.join(self.log_dir, name)
+                if os.path.exists(path):
+                    os.remove(path)
+            # Remove crash_dump if it exists (shouldn't on success, but be safe)
+            crash_dir = os.path.join(self.log_dir, "crash_dump")
+            if os.path.isdir(crash_dir):
+                shutil.rmtree(crash_dir)
+            # Remove the directory only if empty (runner's files may still be there)
+            try:
+                os.rmdir(self.log_dir)
+            except OSError:
+                pass  # Directory not empty — runner still has files there
         else:
             self.write_crash_dump(error_message=error_message)
             self.close()
