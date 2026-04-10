@@ -8,7 +8,7 @@ Reinforcement learning for multi-robot collective transport using ARGoS simulato
 
 | Dependency | Version | Purpose | Install |
 |---|---|---|---|
-| [ARGoS3](https://github.com/ilpincy/argos3) | 3.0.0-beta59+ | Multi-robot physics simulator | Build from source ([instructions](https://github.com/ilpincy/argos3)) |
+| [ARGoS3](https://github.com/ilpincy/argos3) | **commit `4bb398cd`** (post-beta59) | Multi-robot physics simulator | Build from source — see pinned commit below |
 | [Buzz](https://github.com/buzz-lang/Buzz) | 0.0.1+ | Robot controller scripting language | Build from source (requires ARGoS installed first) |
 | [argos3-nonuniform-objects](https://github.com/NESTLab/argos3-nonuniform-objects) | main | Plugin for convex prism/composite entities | Build from source, `sudo make install` |
 | ZeroMQ | 4.3+ | IPC between ARGoS and Python | `brew install zeromq` (macOS) |
@@ -24,13 +24,35 @@ Reinforcement learning for multi-robot collective transport using ARGoS simulato
 | PyTorch | 2.x | Deep learning (CUDA, MPS, or CPU) |
 | Poetry | latest | Python package manager |
 
+### Pinned ARGoS3 Version
+
+ARGoS must be built from commit **`4bb398cd`** or later from `ilpincy/argos3`. This version includes a critical fix to the simulation loop (`a96e090b`) that prevents ZMQ deadlocks during episode resets. Beta59 (the last tagged release) does NOT include this fix.
+
+```bash
+git clone https://github.com/ilpincy/argos3.git
+cd argos3
+git checkout 4bb398cd
+mkdir build && cd build
+cmake ../src
+make -j$(nproc)
+sudo make install
+```
+
 ### Build Order
 
-1. ARGoS3 (from source)
+1. ARGoS3 (from pinned commit above)
 2. Buzz (from source, requires ARGoS)
 3. argos3-nonuniform-objects plugin (from source, requires ARGoS)
 4. `poetry install` (Python deps + GSP-RL)
 5. `cd build_scripts && ./quick-build.sh` (C++ loop functions + Buzz controller)
+
+### Verify Environment
+
+After setup, run the verification script to confirm all dependencies match:
+
+```bash
+python verify_environment.py
+```
 
 **macOS note:** Set `CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@5"` before building. Qt5 is keg-only in Homebrew.
 
