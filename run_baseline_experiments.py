@@ -276,8 +276,8 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
     main_proc = subprocess.Popen(
         main_cmd,
         cwd=os.path.join(PROJECT_ROOT, "rl_code"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     # Start per-episode timing logger
