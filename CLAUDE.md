@@ -92,17 +92,17 @@ When investigating a stall, crash, or unexpected behavior:
 5. **When adding validation, test against all environment types** — open, obstacles, gate, prism
 6. **Verify the fix works at scale** — run multi-seed stress test before committing to long runs
 
-## Hard Rules (from learnings)
+## Things We've Learned
 
-These rules are derived from bugs we found. See `kb/wiki/learnings/` for full context.
+Wisdom from past bugs — see `kb/wiki/learnings/` for full postmortems. Use judgment, not blind rules.
 
-- **Never use `subprocess.PIPE` without consuming stdout** — use `DEVNULL` or read in a thread. Pipe buffer fills at ~65KB and blocks the child process. (`learnings/stdout-pipe-deadlock`)
-- **Never use `except: pass` for code that needs debugging** — at minimum `except Exception as e: log.debug(e)`. Silent swallowing masks real errors. 
-- **Never hardcode expected message counts from external systems** — validate against a range or schema, not exact values. ARGoS message structure varies by config. (`learnings/zmq-message-parts-mismatch`)
-- **Always guard numerical functions against NaN/Inf** — `if not np.isfinite(x): return default`. NaN propagates silently; Inf causes infinite loops. (`learnings/nan-infinite-loop`)
-- **Never create classes/types inside hot loops** — cache `namedtuple()`, compiled regexes, etc. (`learnings/namedtuple-class-creation-performance`)
-- **Pin exact dependency versions** — use commit hashes, not "latest" or version ranges. Different machines must run identical code. See `verify_environment.py`.
-- **After every bug fix, write a learnings entry** in `kb/wiki/learnings/` with symptom, root cause, fix, detection, and prevention.
+- **Subprocess pipes fill up** — PIPE buffers ~65KB then blocks the child. Know whether you need the output; use DEVNULL if you don't, consume in a thread if you do. (`learnings/stdout-pipe-deadlock`)
+- **Silent error handling hides bugs** — `except: pass` cost us hours of debugging. Log what you suppress so you can tell the difference between "working" and "silently broken."
+- **Protocol assumptions break** — ARGoS message structure varies by config (7 vs 8 parts). Validate flexibly against what's possible, not what you've seen so far. (`learnings/zmq-message-parts-mismatch`)
+- **NaN propagates silently across system boundaries** — guard the handoff between physics engine and Python. Inf causes infinite loops in normalization functions. (`learnings/nan-infinite-loop`)
+- **Hot-loop allocations add up** — `namedtuple()` creates a class per call. Profile first (`py-spy`), then cache factory results where it matters. (`learnings/namedtuple-class-creation-performance`)
+- **Environment drift causes mystery bugs** — pin dependency versions with commit hashes. Run `verify_environment.py` when something works on one machine but not another.
+- **After every bug fix, write a learnings entry** in `kb/wiki/learnings/` — then review this section and refactor if a new insight consolidates or replaces existing ones.
 
 ## Maintaining This File
 
