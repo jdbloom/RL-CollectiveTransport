@@ -579,10 +579,20 @@ try:
                                 _exp_id = f"{os.path.basename(recording_path)}_{config.get('SEED', 0)}"
                                 # Ensure experiment exists (may already be created by runner)
                                 if _reg.get_experiment(_exp_id) is None:
+                                    # Classify coordination from config flags
+                                    _gsp = bool(config.get("GSP", False))
+                                    _nbr = bool(config.get("NEIGHBORS", False))
+                                    _rec = bool(config.get("RECURRENT", False))
+                                    _att = bool(config.get("ATTENTION", False))
+                                    _coord = "A-GSP-N" if (_gsp and _att) else ("R-GSP-N" if (_gsp and _rec) else ("GSP-N" if (_gsp and _nbr) else ("GSP" if _gsp else "IC")))
+                                    _nobs = int(config.get("NUM_OBSTACLES", 0))
+                                    _gate = bool(config.get("USE_GATE", 0))
+                                    _prism = bool(config.get("USE_PRISMS", 0))
+                                    _env = "prism" if _prism else ("gate" if _gate else (str(_nobs) + "obs" if _nobs > 0 else "open"))
                                     _reg.create_experiment(
                                         id=_exp_id, name=os.path.basename(recording_path),
                                         algorithm=config.get("LEARNING_SCHEME", "DQN"),
-                                        coordination="IC", environment="unknown",
+                                        coordination=_coord, environment=_env,
                                         num_robots=int(config.get("NUM_ROBOTS", 4)),
                                         num_obstacles=int(config.get("NUM_OBSTACLES", 0)),
                                         use_gate=bool(config.get("USE_GATE", 0)),
