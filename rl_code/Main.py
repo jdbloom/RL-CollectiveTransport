@@ -13,7 +13,7 @@ from collections import namedtuple
 from struct import pack, unpack, Struct
 import numpy as np
 import math
-import copy
+
 import zmq
 import csv
 import os
@@ -53,6 +53,7 @@ with open(config_path, 'r') as file:
 if args.model_path is not None:
     model_file_path = os.path.join(containing_folder, args.model_path)
 learning_scheme = config['LEARNING_SCHEME']
+learn_every = int(config.get('LEARN_EVERY', 1))
 port = str(config['PORT'])
 test_mode = args.test
 train_mode = not test_mode
@@ -173,7 +174,6 @@ try:
         if not exp_done:
             time_steps = 0
         
-            object_positions = []
             agent_prox_flags = []
             last_object_heading = None
 
@@ -183,7 +183,6 @@ try:
 
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
-            object_positions.append([obj_stats[0], obj_stats[1]])
             old_cyl_ang = obj_stats[5]
 
             if Utility.params['num_obstacles'] > 0:
@@ -312,10 +311,6 @@ try:
                     elif Utility.params['use_gate'] == 1:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
 
-                    old_object_positions = copy.deepcopy(object_positions)
-                    object_positions.append([obj_stats[0], obj_stats[1]])
-
-                
                     ############################## gsp REWARD ##############################################
                     gsp_reward, label = calculate_gsp_reward(
                         config['GSP'], 
@@ -331,9 +326,9 @@ try:
 
                     old_cyl_ang = obj_stats[5]
 
-                    old_agent_prox_flags = copy.deepcopy(agent_prox_flags)
-                    neighbors_old_heading_gsp = copy.deepcopy(old_heading_gsp)
-                    old_heading_gsp = copy.deepcopy(next_heading_gsp)
+                    old_agent_prox_flags = list(agent_prox_flags)
+                    neighbors_old_heading_gsp = old_heading_gsp.copy()
+                    old_heading_gsp = next_heading_gsp.copy()
 
                     new_agent_states = []
                     force_mags = []
@@ -500,11 +495,14 @@ try:
                         r.append(rewards[i][0])
 
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
-                        if args.independent_learning:
-                            for i in range(Utility.params['num_robots']):
-                                loss = models[i].learn()
+                        if time_steps % learn_every == 0:
+                            if args.independent_learning:
+                                for i in range(Utility.params['num_robots']):
+                                    loss = models[i].learn()
+                            else:
+                                loss = model.learn()
                         else:
-                            loss = model.learn()
+                            loss = 0
                     else:
                         loss = 0
 
