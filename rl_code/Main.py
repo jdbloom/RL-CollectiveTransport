@@ -567,15 +567,33 @@ try:
                         # Log to registry if available
                         try:
                             import sys as _sys
-                            _stelaris_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "..", "..")
+                            _stelaris_root = os.environ.get("STELARIS_ROOT",
+                                os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "..", "..")))
                             if _stelaris_root not in _sys.path:
                                 _sys.path.insert(0, _stelaris_root)
                             from tools.registry.client import RegistryClient as _RC
-                            _reg_db = os.path.join(_stelaris_root, "data", "registry.db")
+                            _reg_db = os.environ.get("STELARIS_DB",
+                                os.path.join(_stelaris_root, "data", "registry.db"))
                             if os.path.exists(_reg_db):
                                 _reg = _RC(_reg_db)
+                                _exp_id = f"{os.path.basename(recording_path)}_{config.get('SEED', 0)}"
+                                # Ensure experiment exists (may already be created by runner)
+                                if _reg.get_experiment(_exp_id) is None:
+                                    _reg.create_experiment(
+                                        id=_exp_id, name=os.path.basename(recording_path),
+                                        algorithm=config.get("LEARNING_SCHEME", "DQN"),
+                                        coordination="IC", environment="unknown",
+                                        num_robots=int(config.get("NUM_ROBOTS", 4)),
+                                        num_obstacles=int(config.get("NUM_OBSTACLES", 0)),
+                                        use_gate=bool(config.get("USE_GATE", 0)),
+                                        use_prisms=bool(config.get("USE_PRISMS", 0)),
+                                        num_episodes=int(config.get("NUM_EPISODES", 500)),
+                                        seed=int(config.get("SEED", 0)),
+                                        port=int(config.get("PORT", 55555)),
+                                        status="running",
+                                    )
                                 _reg.log_episode(
-                                    experiment_id=f"{os.path.basename(recording_path)}_{config.get('SEED', 0)}",
+                                    experiment_id=_exp_id,
                                     episode_num=ep_counter,
                                     total_reward=float(running_reward if not args.independent_learning else np.mean(running_reward)),
                                     success=bool(reached_goal),
