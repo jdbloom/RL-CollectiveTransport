@@ -14,6 +14,7 @@ import shutil
 import pickle
 import subprocess
 import threading
+from datetime import datetime
 import yaml
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -200,7 +201,7 @@ def find_best_model(data_dir, models_dir):
         key=lambda x: int(x.replace("Data_Episode_", "").replace(".pkl", ""))
     )
     if not pkl_files:
-        return None
+        return (0, 0.0)
 
     # Compute 10-episode rolling averages aligned with checkpoint saves
     episode_rewards = []
