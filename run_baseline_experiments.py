@@ -295,7 +295,12 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
             if argos_proc.poll() is not None:
                 argos_rc = argos_proc.returncode
                 argos_log_file.flush()
-                argos_stderr = open(argos_log_path).read()[-2000:]
+                argos_stderr = ""
+                try:
+                    argos_stderr = open(argos_log_path).read()[-2000:]
+                except FileNotFoundError:
+                    argos_stderr = "(argos.log was cleaned up by diagnostics)"
+
                 print(f"  [ERROR] {exp_name}: ARGoS died (rc={argos_rc}) — killing Python", flush=True)
                 print(f"  [ERROR] ARGoS stderr: {argos_stderr[-500:]}", flush=True)
                 # Log to diagnostics file
@@ -409,11 +414,11 @@ def run_train_and_test(train_name):
                             test_rewards.append(sum(sum(r) for r in rw))
                         else:
                             test_rewards.append(np.sum(rw))
-                        if d.get("reached_goal", [False]):
-                            rg = d["reached_goal"]
-                            if isinstance(rg, list):
-                                successes += sum(1 for x in rg if x)
-                            elif rg:
+                        terminations = d.get("termination", [])
+                        if terminations:
+                            # termination is a list of bools per timestep
+                            # any True means goal was reached during the episode
+                            if isinstance(terminations, list) and any(terminations):
                                 successes += 1
 
             avg_reward = np.mean(test_rewards) if test_rewards else 0
