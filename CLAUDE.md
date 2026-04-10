@@ -1,0 +1,113 @@
+# RL-CollectiveTransport
+
+Reinforcement learning for multi-robot collective transport using ARGoS simulator and BUZZ.
+
+## Context Loading Guide
+
+Load documentation based on what you are working on:
+
+| Task | Load These Docs |
+|------|----------------|
+| **Any task** | This file (auto-loaded) |
+| **System orientation** | `docs/architecture/TIER1_SYSTEM_DAG.md` |
+| **ZMQ / message bugs** | `docs/protocols/ZMQ_PROTOCOL.md` |
+| **Config changes** | `docs/protocols/CONFIG_SCHEMA.md` |
+| **Modifying Main.py** | `docs/architecture/TIER2_MAIN.md` |
+| **Modifying agent.py** | `docs/architecture/TIER2_AGENT.md` |
+| **Modifying env.py** | `docs/architecture/TIER2_ENV.md` |
+| **Modifying C++ loop functions** | `docs/architecture/TIER2_ARGOS_CPP.md` |
+| **Modifying BUZZ controller** | `docs/architecture/TIER2_ARGOS_BUZZ.md` |
+| **Config / experiment setup** | `docs/architecture/TIER2_CONFIG.md` |
+| **Data logging / pickle format** | `docs/architecture/TIER2_DATA.md` |
+| **Plotting / visualization** | `docs/architecture/TIER2_PLOTTING.md` |
+| **Domain terminology** | `docs/GLOSSARY.md` |
+
+**Loading order:** Read CLAUDE.md (this file) → TIER1 for orientation → relevant TIER2 + protocol docs for specific work. Never load all TIER2 files at once.
+
+## Architecture
+
+- `rl_code/Main.py` — Entry point. ZMQ REP server coordinating with ARGoS simulator.
+- `rl_code/src/agent.py` — Agent class (extends gsp_rl.Actor): action selection, GSP, state building.
+- `rl_code/src/env.py` — ZMQ_Utility (message serialization), calculate_gsp_reward, angle normalization.
+- `rl_code/src/exp_data_structures.py` — data_logger: per-episode pickle serialization.
+- `rl_code/src/plotting/` — Visualization scripts (trajectories, training curves).
+- `argos/collectiveRlTransport.cpp` — C++ ARGoS loop functions (entity management, observations, ZMQ sends).
+- `argos/collectiveRlTransport.bzz` — BUZZ robot controller (gripping, wheel control, failure).
+- `argos/generate_argos.py` — Template-based ARGoS XML config generator.
+
+## Languages
+
+- **Python 3.10** (RL code, managed by Poetry)
+- **C++** (ARGoS loop functions, built via CMake)
+- **BUZZ** (robot controller scripts)
+
+## Key Dependencies
+
+- `gsp-rl` — Custom RL library (Git dependency from NESTLab/GSP-RL). Provides Actor base class with neural networks, replay buffers, learn(), save/load_model().
+- `pytest` — Testing (dev dependency)
+
+## Running
+
+```bash
+# Training/testing (terminal 1)
+python Main.py recording_folder -flags
+
+# ARGoS simulator (terminal 2)
+argos3 -c argos/collectiveRlTransport0.argos
+```
+
+Recording folder must contain `agent_config.yml`, `Data/`, and `Models/` subdirectories.
+
+## RL Algorithms
+
+Selectable via config `LEARNING_SCHEME`: DQN, DDQN, DDPG, TD3
+
+## Key Flags
+
+- `--independent_learning` — Each robot gets its own neural network (vs shared CTDE)
+- `--global_knowledge` — Augment observations with other robots' positions + velocities
+- `--share_prox_values` — Share averaged proximity readings between robots
+- `--test` — Test mode (no learning, loads saved model)
+
+## Testing
+
+```bash
+poetry run pytest
+```
+
+## Conventions
+
+- Feature branches only — never commit to main
+- All new Python code must have pytest tests
+- Preserve existing experiment config formats (`exp_config.yml`, `test_config.yml`)
+
+## Debugging Protocol
+
+When investigating a stall, crash, or unexpected behavior:
+
+1. **Check diagnostics first** — read `/tmp/stelaris-runs/<exp>/python.log` before theorizing
+2. **Use py-spy** — `py-spy dump --nonblocking --pid <PID>` to see WHERE the code is stuck
+3. **Check ALL process states** — both Python AND ARGoS. Are they in recv? send? idle? print?
+4. **Test with smallest reproduction** — 10 ticks/episode, 1 experiment, before scaling up
+5. **When adding validation, test against all environment types** — open, obstacles, gate, prism
+6. **Verify the fix works at scale** — run multi-seed stress test before committing to long runs
+
+## Things We've Learned
+
+Wisdom from past bugs — see `kb/wiki/learnings/` for full postmortems. Use judgment, not blind rules.
+
+- **Subprocess pipes fill up** — PIPE buffers ~65KB then blocks the child. Know whether you need the output; use DEVNULL if you don't, consume in a thread if you do. (`learnings/stdout-pipe-deadlock`)
+- **Silent error handling hides bugs** — `except: pass` cost us hours of debugging. Log what you suppress so you can tell the difference between "working" and "silently broken."
+- **Protocol assumptions break** — ARGoS message structure varies by config (7 vs 8 parts). Validate flexibly against what's possible, not what you've seen so far. (`learnings/zmq-message-parts-mismatch`)
+- **NaN propagates silently across system boundaries** — guard the handoff between physics engine and Python. Inf causes infinite loops in normalization functions. (`learnings/nan-infinite-loop`)
+- **Hot-loop allocations add up** — `namedtuple()` creates a class per call. Profile first (`py-spy`), then cache factory results where it matters. (`learnings/namedtuple-class-creation-performance`)
+- **Environment drift causes mystery bugs** — pin dependency versions with commit hashes. Run `verify_environment.py` when something works on one machine but not another.
+- **After every bug fix, write a learnings entry** in `kb/wiki/learnings/` — then review this section and refactor if a new insight consolidates or replaces existing ones.
+
+## Maintaining This File
+
+CLAUDE.md rules must stay lean. When adding a new rule:
+1. Check if an existing rule already covers it — **update** rather than append
+2. Look for rules that share a theme — **consolidate** into a broader principle (keep specifics in the learnings entries)
+3. If the Hard Rules section exceeds ~15 items, refactor: group by principle, promote common themes, delete rules subsumed by broader ones
+4. The learnings entries (`kb/wiki/learnings/`) are the permanent detailed record. CLAUDE.md is the distilled, actionable summary.
