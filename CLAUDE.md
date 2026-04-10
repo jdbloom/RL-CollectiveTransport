@@ -103,3 +103,11 @@ These rules are derived from bugs we found. See `kb/wiki/learnings/` for full co
 - **Never create classes/types inside hot loops** — cache `namedtuple()`, compiled regexes, etc. (`learnings/namedtuple-class-creation-performance`)
 - **Pin exact dependency versions** — use commit hashes, not "latest" or version ranges. Different machines must run identical code. See `verify_environment.py`.
 - **After every bug fix, write a learnings entry** in `kb/wiki/learnings/` with symptom, root cause, fix, detection, and prevention.
+
+## Maintaining This File
+
+CLAUDE.md rules must stay lean. When adding a new rule:
+1. Check if an existing rule already covers it — **update** rather than append
+2. Look for rules that share a theme — **consolidate** into a broader principle (keep specifics in the learnings entries)
+3. If the Hard Rules section exceeds ~15 items, refactor: group by principle, promote common themes, delete rules subsumed by broader ones
+4. The learnings entries (`kb/wiki/learnings/`) are the permanent detailed record. CLAUDE.md is the distilled, actionable summary.
