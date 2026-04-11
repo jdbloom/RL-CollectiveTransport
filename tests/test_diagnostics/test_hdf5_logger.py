@@ -13,7 +13,8 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not HAS_H5PY, reason="h5py not installed")
 
 
-from src.hdf5_logger import HDF5Logger
+if HAS_H5PY:
+    from src.hdf5_logger import HDF5Logger
 
 
 class TestHDF5Logger:
