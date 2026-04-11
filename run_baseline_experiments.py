@@ -11,7 +11,7 @@ import os
 import sys
 import time
 import shutil
-import pickle
+import h5py
 import subprocess
 import threading
 from datetime import datetime
@@ -338,12 +338,18 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
 
 
 def count_episodes(exp_name):
-    """Count completed pkl files for an experiment."""
-    data_dir = os.path.join(PROJECT_ROOT, "rl_code", "Data", exp_name, "Data")
+    """Count completed episodes from HDF5 file."""
+    h5_path = os.path.join(PROJECT_ROOT, "rl_code", "Data", exp_name, exp_name + ".h5")
     try:
-        return len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
-    except FileNotFoundError:
-        return 0
+        with h5py.File(h5_path, "r") as f:
+            return len([k for k in f.keys() if k.startswith("episode")])
+    except (FileNotFoundError, OSError):
+        # Fallback to pkl count
+        data_dir = os.path.join(PROJECT_ROOT, "rl_code", "Data", exp_name, "Data")
+        try:
+            return len([f for f in os.listdir(data_dir) if f.endswith(".pkl")])
+        except FileNotFoundError:
+            return 0
 
 
 def run_train_and_test(train_name):
@@ -412,21 +418,18 @@ def run_train_and_test(train_name):
             # Compute test metrics
             test_rewards = []
             successes = 0
-            for f in sorted(os.listdir(test_data_dir)):
-                if f.endswith(".pkl"):
-                    with open(os.path.join(test_data_dir, f), "rb") as fh:
-                        d = pickle.load(fh)
-                        rw = d.get("reward", d.get("rewards", [0]))
-                        if isinstance(rw, list) and rw and isinstance(rw[0], (list, np.ndarray)):
-                            test_rewards.append(sum(sum(r) for r in rw))
-                        else:
-                            test_rewards.append(np.sum(rw))
-                        terminations = d.get("termination", [])
-                        if terminations:
-                            # termination is a list of bools per timestep
-                            # any True means goal was reached during the episode
-                            if isinstance(terminations, list) and any(terminations):
-                                successes += 1
+            # Read test results from HDF5
+            test_h5 = os.path.join(os.path.dirname(test_data_dir.rstrip("/")),
+                                   os.path.basename(os.path.dirname(test_data_dir.rstrip("/"))) + ".h5")
+            try:
+                with h5py.File(test_h5, "r") as f:
+                    for ep_key in sorted(k for k in f.keys() if k.startswith("episode")):
+                        rpr = list(f[ep_key].attrs.get("reward_per_robot", [0]))
+                        test_rewards.append(sum(rpr))
+                        if f[ep_key].attrs.get("success", False):
+                            successes += 1
+            except (FileNotFoundError, OSError):
+                pass
 
             avg_reward = np.mean(test_rewards) if test_rewards else 0
             print(f"  [TEST]  ✓ {test_name} done — {test_ep_count} eps, "

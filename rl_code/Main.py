@@ -2,13 +2,7 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
-from src.exp_data_structures import data_logger  # kept for backward compat
-# HDF5 data pipeline (optional, enabled via USE_HDF5 env var or --hdf5 flag)
-try:
-    from src.hdf5_logger import HDF5Logger
-    HAS_HDF5 = True
-except ImportError:
-    HAS_HDF5 = False
+from src.hdf5_logger import HDF5Logger
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -94,11 +88,8 @@ Utility.set_obstacles_fields()
 data_file_path = recording_path + '/Data/'
 
 # Initialize HDF5 logger (one per experiment)
-if HAS_HDF5:
-    hdf5_path = os.path.join(recording_path, os.path.basename(recording_path) + ".h5")
-    hdf5_writer = HDF5Logger(hdf5_path)
-else:
-    hdf5_writer = None
+hdf5_path = os.path.join(recording_path, os.path.basename(recording_path) + ".h5")
+hdf5_writer = HDF5Logger(hdf5_path)
 
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
@@ -555,13 +546,7 @@ try:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    data_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
-                                    [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
-                                    obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
-                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
-                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
-                    if hdf5_writer:
-                        hdf5_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
+                    hdf5_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
@@ -576,7 +561,6 @@ try:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
-                        data_writer.write_to_file()
                         if HAS_HDF5:
                             hdf5_writer.write_episode(ep_counter)
                         log.info(
