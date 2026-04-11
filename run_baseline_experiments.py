@@ -320,6 +320,8 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
                 # rc=0 means ARGoS finished normally — wait for Python to finish too
                 break
             time.sleep(1)
+        # Wait for Python to finish after ARGoS exits normally
+        main_proc.wait()
     finally:
         argos_log_file.close()
         if argos_proc.poll() is None:
