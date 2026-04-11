@@ -2,7 +2,17 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
-from src.exp_data_structures import data_logger
+from src.exp_data_structures import data_logger  # kept for backward compat
+# HDF5 data pipeline
+try:
+    import sys as _sys
+    _stelaris_root = os.environ.get("STELARIS_ROOT", "")
+    if _stelaris_root and _stelaris_root not in _sys.path:
+        _sys.path.insert(0, _stelaris_root)
+    from tools.ingestion.hdf5_logger import HDF5Logger
+    HAS_HDF5 = True
+except ImportError:
+    HAS_HDF5 = False
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -86,6 +96,13 @@ if not args.no_print:
 Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
+
+# Initialize HDF5 logger (one per experiment)
+if HAS_HDF5:
+    hdf5_path = os.path.join(recording_path, os.path.basename(recording_path) + ".h5")
+    hdf5_writer = HDF5Logger(hdf5_path)
+else:
+    hdf5_writer = None
 
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
@@ -547,6 +564,12 @@ try:
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
                                     robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
+                    if hdf5_writer:
+                        hdf5_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
+                                    [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
+                                    obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
+                                    time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
+                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
 
                     if episode_done:
                         if args.independent_learning:
@@ -558,50 +581,12 @@ try:
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
                         data_writer.write_to_file()
+                        if HAS_HDF5:
+                            hdf5_writer.write_episode(ep_counter, os.path.basename(recording_path))
                         log.info(
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,
                         )
-                        # Log to registry if available
-                        try:
-                            import sys as _sys
-                            _stelaris_root = os.environ.get("STELARIS_ROOT",
-                                os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "..", "..")))
-                            if _stelaris_root not in _sys.path:
-                                _sys.path.insert(0, _stelaris_root)
-                            from tools.registry.client import RegistryClient as _RC
-                            _reg_db = os.environ.get("STELARIS_DB",
-                                os.path.join(_stelaris_root, "data", "registry.db"))
-                            if os.path.exists(_reg_db):
-                                _reg = _RC(_reg_db)
-                                _exp_id = f"{os.path.basename(recording_path)}_{config.get('SEED', 0)}"
-                                # Ensure experiment exists (may already be created by runner)
-                                if _reg.get_experiment(_exp_id) is None:
-                                    _reg.create_experiment(
-                                        id=_exp_id, name=os.path.basename(recording_path),
-                                        algorithm=config.get("LEARNING_SCHEME", "DQN"),
-                                        coordination="IC", environment="unknown",
-                                        num_robots=int(config.get("NUM_ROBOTS", 4)),
-                                        num_obstacles=int(config.get("NUM_OBSTACLES", 0)),
-                                        use_gate=bool(config.get("USE_GATE", 0)),
-                                        use_prisms=bool(config.get("USE_PRISMS", 0)),
-                                        num_episodes=int(config.get("NUM_EPISODES", 500)),
-                                        seed=int(config.get("SEED", 0)),
-                                        port=int(config.get("PORT", 55555)),
-                                        status="running",
-                                    )
-                                _reg.log_episode(
-                                    experiment_id=_exp_id,
-                                    episode_num=ep_counter,
-                                    total_reward=float(running_reward if not args.independent_learning else np.mean(running_reward)),
-                                    success=bool(reached_goal),
-                                    duration_s=run_time,
-                                    timesteps=time_steps,
-                                    epsilon=float(tmp_epsilon),
-                                )
-                                _reg.close()
-                        except Exception:
-                            pass  # Registry is optional
                         if not args.no_print:
                             print('[RUN TIME] %.2f' % run_time)
                         if args.independent_learning:
