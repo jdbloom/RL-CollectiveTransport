@@ -578,7 +578,7 @@ try:
                         run_time = time.time() - episode_start_time
                         data_writer.write_to_file()
                         if HAS_HDF5:
-                            hdf5_writer.write_episode(ep_counter, os.path.basename(recording_path))
+                            hdf5_writer.write_episode(ep_counter)
                         log.info(
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,

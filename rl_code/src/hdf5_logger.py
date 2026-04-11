@@ -91,7 +91,7 @@ class HDF5Logger:
         self.com_X_pos.append(com_X_poses)
         self.com_Y_pos.append(com_Y_poses)
 
-    def write_episode(self, episode_num: int, experiment_name: Optional[str] = None) -> dict:
+    def write_episode(self, episode_num: int) -> dict:
         """Write accumulated data to HDF5 and return summary dict.
 
         Call this instead of data_logger.write_to_file().
