@@ -6,6 +6,7 @@ import json
 import os
 import matplotlib.pyplot as plt
 import pickle
+import h5py
 
 def angle_normalize_unsigned_deg(a):
   while a < 0: a += 360
@@ -40,8 +41,18 @@ data_path = args.data_path + 'Data/'
 print('. . . Loading Model Data')
 
 file_names = []
-for file in os.listdir(data_path):
-    file_names.append(file)
+# Try HDF5 first
+exp_name = os.path.basename(args.data_path.rstrip('/'))
+h5_path = os.path.join(args.data_path, exp_name + '.h5')
+use_hdf5 = os.path.exists(h5_path)
+if use_hdf5:
+    h5_file = h5py.File(h5_path, 'r')
+    file_names = sorted([k for k in h5_file.keys() if k.startswith('episode')])
+    print(f'Loading from HDF5: {len(file_names)} episodes')
+else:
+    for file in os.listdir(data_path):
+        file_names.append(file)
+    print(f'Loading from pkl: {len(file_names)} files')
 
 df_list = []
 for ep in range(len(file_names)-1):
@@ -52,7 +63,8 @@ for ep in range(len(file_names)-1):
 
     cyl_heading_diff = []
     cyl_angle = data['cyl_angle']
-    gsp = data['gsp_heading']
+    gsp_raw = data["gsp_heading"]
+    gsp = [g[0] if isinstance(g, list) else g for g in gsp_raw]
     predicted_cyl_heading = []
     for i in range(len(data['cyl_angle'])-1):
         predicted_cyl_heading.append(cyl_angle[i] + math.degrees(gsp[i+1]/10))
