@@ -3,13 +3,9 @@ from urllib.parse import uses_relative
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
 from src.exp_data_structures import data_logger  # kept for backward compat
-# HDF5 data pipeline
+# HDF5 data pipeline (optional, enabled via USE_HDF5 env var or --hdf5 flag)
 try:
-    import sys as _sys
-    _stelaris_root = os.environ.get("STELARIS_ROOT", "")
-    if _stelaris_root and _stelaris_root not in _sys.path:
-        _sys.path.insert(0, _stelaris_root)
-    from tools.ingestion.hdf5_logger import HDF5Logger
+    from src.hdf5_logger import HDF5Logger
     HAS_HDF5 = True
 except ImportError:
     HAS_HDF5 = False
