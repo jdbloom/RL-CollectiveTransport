@@ -40,6 +40,7 @@ jobs:
           sed -i 's|path = "../GSP-RL"|path = "GSP-RL"|' pyproject.toml
           poetry lock
           poetry install --no-interaction
+          poetry run pip install h5py
 
       - name: Run unit tests
         run: |
