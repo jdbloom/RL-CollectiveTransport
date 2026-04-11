@@ -296,26 +296,29 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
         while main_proc.poll() is None:
             if argos_proc.poll() is not None:
                 argos_rc = argos_proc.returncode
-                argos_log_file.flush()
-                argos_stderr = ""
-                try:
-                    argos_stderr = open(argos_log_path).read()[-2000:]
-                except FileNotFoundError:
-                    argos_stderr = "(argos.log was cleaned up by diagnostics)"
+                if argos_rc != 0:
+                    # Actual crash — non-zero exit code
+                    argos_log_file.flush()
+                    argos_stderr = ""
+                    try:
+                        argos_stderr = open(argos_log_path).read()[-2000:]
+                    except FileNotFoundError:
+                        argos_stderr = "(argos.log was cleaned up by diagnostics)"
 
-                print(f"  [ERROR] {exp_name}: ARGoS died (rc={argos_rc}) — killing Python", flush=True)
-                print(f"  [ERROR] ARGoS stderr: {argos_stderr[-500:]}", flush=True)
-                # Log to diagnostics file
-                diag_path = os.path.join(data_root, "argos_crash.log")
-                with open(diag_path, "w") as f:
-                    f.write(f"ARGoS exit code: {argos_rc}\n")
-                    f.write(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    f.write(f"Episodes completed: {count_episodes(exp_name)}\n")
-                    f.write(f"Elapsed: {time.time() - start:.0f}s\n")
-                    f.write(f"Stderr:\n{argos_stderr}\n")
-                main_proc.kill()
-                main_proc.wait(timeout=10)
-                raise RuntimeError(f"ARGoS crashed (rc={argos_rc}): {argos_stderr[-200:]}")
+                    print(f"  [ERROR] {exp_name}: ARGoS crashed (rc={argos_rc})", flush=True)
+                    print(f"  [ERROR] ARGoS stderr: {argos_stderr[-500:]}", flush=True)
+                    diag_path = os.path.join(data_root, "argos_crash.log")
+                    with open(diag_path, "w") as f:
+                        f.write(f"ARGoS exit code: {argos_rc}\n")
+                        f.write(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(f"Episodes completed: {count_episodes(exp_name)}\n")
+                        f.write(f"Elapsed: {time.time() - start:.0f}s\n")
+                        f.write(f"Stderr:\n{argos_stderr}\n")
+                    main_proc.kill()
+                    main_proc.wait(timeout=10)
+                    raise RuntimeError(f"ARGoS crashed (rc={argos_rc}): {argos_stderr[-200:]}")
+                # rc=0 means ARGoS finished normally — wait for Python to finish too
+                break
             time.sleep(1)
     finally:
         argos_log_file.close()
