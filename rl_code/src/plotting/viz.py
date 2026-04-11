@@ -12,86 +12,59 @@ parser.add_argument("--gsp_log_scale", default=False, action="store_true")
 parser.add_argument("--IL", default = False, action = "store_true")
 parser.add_argument("--gate", default = False, action = "store_true")
 
-parser.add_argument("--registry-db", default=None, help="Path to registry SQLite database")
-parser.add_argument("--experiment-id", default=None, help="Experiment ID in registry")
 
 args = parser.parse_args()
 
 data_path = args.data_path + 'Data/'
 
-if args.registry_db and args.experiment_id:
-    # Load from registry database
-    import sys as _sys
-    _stelaris_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '..', '..', '..')
-    if _stelaris_root not in _sys.path:
-        _sys.path.insert(0, _stelaris_root)
-    from tools.registry.client import RegistryClient
+# Try HDF5 first, fallback to pkl
+import h5py
 
-    print('. . . Loading from Registry DB')
-    client = RegistryClient(args.registry_db)
-    episodes_data = client.get_episodes(args.experiment_id)
-    client.close()
+exp_name = os.path.basename(args.data_path.rstrip('/'))
+h5_path = os.path.join(args.data_path, exp_name + '.h5')
 
-    if not episodes_data:
-        print(f"No episodes found for {args.experiment_id}")
-        exit(1)
+if os.path.exists(h5_path):
+    print('. . . Loading from HDF5:', h5_path)
+    with h5py.File(h5_path, 'r') as f:
+        episodes = sorted([k for k in f.keys() if k.startswith('episode')])
+        episode_rewards = []
+        episode_gsp_rewards = []
+        terminals = []
+        for ep_key in episodes:
+            ep = f[ep_key]
+            rpr = list(ep.attrs.get('reward_per_robot', [0]))
+            episode_rewards.append(rpr)
+            gpr = list(ep.attrs.get('gsp_reward_per_robot', [0]))
+            episode_gsp_rewards.append(gpr)
+            terminals.append(1 if ep.attrs.get('success', False) else 0)
 
-    # Build the same data structures the pkl path produces
-    episode_rewards_list = []
-    episode_gsp_rewards_list = []
-    terminals = []
-
-    for ep in episodes_data:
-        # Registry stores total_reward as a single float (averaged across robots)
-        # Replicate as if all robots had the same reward for compatibility
-        reward_val = ep.get("total_reward", 0) or 0
-        episode_rewards_list.append([reward_val])
-        gsp_val = ep.get("gsp_reward", 0) or 0
-        episode_gsp_rewards_list.append([gsp_val])
-        terminals.append(1 if ep.get("success") else 0)
-
-    episode_rewards = np.array(episode_rewards_list)
+    episode_rewards = np.array(episode_rewards)
     terminals = np.array(terminals)
-    episode_gsp_rewards = np.array(episode_gsp_rewards_list)[:, 0]
+    episode_gsp_rewards = np.array(episode_gsp_rewards)[:, 0]
     episode_std = np.std(episode_rewards, axis=1)
     average_episode_rewards = np.average(episode_rewards, axis=1)
-
 else:
-    # Original pkl loading path
-    print('. . . Loading Model Data')
-    file_names = []
-    for file in os.listdir(data_path):
-        file_names.append(file)
+    # Fallback to pkl
+    print('. . . Loading from pkl files')
+    file_names = [f for f in os.listdir(data_path) if f.endswith('.pkl')]
 
     episode_rewards = []
-    episode_gsps = []
     episode_gsp_rewards = []
-    episode_success_reward = []
-    episode_success_index = []
-    episode_failure_reward = []
-    episode_failure_index = []
     terminals = []
-    last_10_axis = []
-    last_10_rewards = []
 
-    episode_run_times = []
-    cumulative_episode_run_times = [0]
-    episode_time_steps = []
-
-    print('. . . Consolodating Model Data')
-    IL_flag = False
-    for i in range(len(file_names)-1):
+    for i in range(len(file_names)):
         name = 'Data_Episode_'+str(i)+'.pkl'
-        with open(data_path+name, 'rb') as f:
+        pkl_file = os.path.join(data_path, name)
+        if not os.path.exists(pkl_file):
+            continue
+        with open(pkl_file, 'rb') as f:
             data = pickle.load(f)
-
             rewards = np.array(data['reward'])
             gsp_rewrads = np.array(data['gsp_reward'])
-
-            robot_rewards = np.array([rewards[:, i] for i in range(rewards.shape[-1])])
-            robot_gsp_rewards = np.array([gsp_rewrads[:, i] for i in range(gsp_rewrads.shape[-1])])
-            episode_rewards.append([np.sum(robot_rewards[i]) for i in range(robot_rewards.shape[0])])
-            episode_gsp_rewards.append([np.sum(robot_gsp_rewards[i]) for i in range(robot_gsp_rewards.shape[0])])
+            robot_rewards = np.array([rewards[:, j] for j in range(rewards.shape[-1])])
+            robot_gsp_rewards = np.array([gsp_rewrads[:, j] for j in range(gsp_rewrads.shape[-1])])
+            episode_rewards.append([np.sum(robot_rewards[j]) for j in range(robot_rewards.shape[0])])
+            episode_gsp_rewards.append([np.sum(robot_gsp_rewards[j]) for j in range(robot_gsp_rewards.shape[0])])
             if rewards.shape[0] < 4500:
                 terminals.append(1)
             else:
@@ -99,7 +72,7 @@ else:
 
     episode_rewards = np.array(episode_rewards)
     terminals = np.array(terminals)
-    episode_gsp_rewards = np.array(episode_gsp_rewards)[:,0]
+    episode_gsp_rewards = np.array(episode_gsp_rewards)[:, 0]
     episode_std = np.std(episode_rewards, axis=1)
     average_episode_rewards = np.average(episode_rewards, axis=1)
 episode_index = np.arange(0, average_episode_rewards.shape[0], 1)
