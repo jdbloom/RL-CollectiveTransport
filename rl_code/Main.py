@@ -38,6 +38,7 @@ parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
+parser.add_argument("--experiment_name", default=None)  # experiment name for ingestion worker
 
 args = parser.parse_args()
 
@@ -160,6 +161,7 @@ gate_stats = 0
 obstacles = 0
 obstacle_stats = 0
 ep_ticks = 0
+h5_logger = None
 
 try:
     while not exp_done:
@@ -656,6 +658,8 @@ try:
     #socket.unbind("tcp://:" + port)
     #socket.close()
     print("Experiment Done\n")
+    if h5_logger is not None:
+        h5_logger.close(experiment_name=args.experiment_name)
     exp_logger.finish(success=True)
 except zmq.error.Again:
     error_msg = f"ZMQ timeout at episode {ep_counter} — ARGoS likely crashed"
