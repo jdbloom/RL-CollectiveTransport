@@ -2,7 +2,21 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
-from src.exp_data_structures import data_logger
+from src.exp_data_structures import data_logger  # legacy import, no longer used for writing
+
+# HDF5 logger (sole data writer as of 2026-04-12 — pkl removed)
+import sys as _sys_h5
+import os as _os_h5
+_stelaris_root_h5 = _os_h5.environ.get(
+    "STELARIS_ROOT",
+    _os_h5.path.abspath(_os_h5.path.join(
+        _os_h5.path.dirname(_os_h5.path.dirname(_os_h5.path.abspath(__file__))),
+        "..", "..", "..",
+    )),
+)
+if _stelaris_root_h5 not in _sys_h5.path:
+    _sys_h5.path.insert(0, _stelaris_root_h5)
+from tools.ingestion.hdf5_logger import HDF5Logger
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -161,7 +175,10 @@ gate_stats = 0
 obstacles = 0
 obstacle_stats = 0
 ep_ticks = 0
-h5_logger = None
+# HDF5 is now the sole data writer. One file per experiment, co-located with Data/ and Models/.
+_hdf5_path = os.path.join(recording_path, "episodes.h5")
+h5_logger = HDF5Logger(_hdf5_path)
+log.info("HDF5 logger initialised at %s", _hdf5_path)
 
 try:
     while not exp_done:
@@ -170,8 +187,6 @@ try:
         exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
         socket.set_episode(ep_counter)
         log.info("Episode %d starting", ep_counter)
-        data_file_name = 'Data_Episode_'+str(ep_counter)+'.pkl'
-        data_writer = data_logger(data_file_path+data_file_name)
 
         if not exp_done:
             time_steps = 0
@@ -544,7 +559,7 @@ try:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    data_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
+                    h5_logger.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
@@ -559,7 +574,7 @@ try:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
-                        data_writer.write_to_file()
+                        h5_logger.write_episode(ep_counter, experiment_name=args.experiment_name)
                         log.info(
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,
@@ -658,8 +673,7 @@ try:
     #socket.unbind("tcp://:" + port)
     #socket.close()
     print("Experiment Done\n")
-    if h5_logger is not None:
-        h5_logger.close(experiment_name=args.experiment_name)
+    h5_logger.close(experiment_name=args.experiment_name)
     exp_logger.finish(success=True)
 except zmq.error.Again:
     error_msg = f"ZMQ timeout at episode {ep_counter} — ARGoS likely crashed"
