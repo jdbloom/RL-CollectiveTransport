@@ -19,6 +19,13 @@ import yaml
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# algorithm_defaults lives in rl_code/src/ inside the submodule directory.
+# The submodule root may or may not be on sys.path, so we insert it explicitly.
+_submodule_root = os.path.dirname(os.path.abspath(__file__))
+if _submodule_root not in sys.path:
+    sys.path.insert(0, _submodule_root)
+from rl_code.src.algorithm_defaults import merge_algorithm_defaults
+
 
 # Registry integration (optional — gracefully degrades if unavailable)
 try:
@@ -108,8 +115,8 @@ TEST_PLAN = {
 
 def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curriculum,
                 use_prisms, port, num_episodes, test=False, model_num=490,
-                recurrent=False, attention=False):
-    return {
+                recurrent=False, attention=False, algorithm: str = "DQN"):
+    base = {
         "TEST": test,
         "MODEL_NUM": model_num,
         "EXP_NAME": exp_name,
@@ -127,7 +134,6 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "USE_PRISMS": use_prisms,
         "RANDOM_OBJECTS": 0,
         "TEST_PRISM": 0,
-        "LEARNING_SCHEME": "DQN",
         "OPTIONS_PER_ACTION": 3,
         "MIN_MAX_ACTION": 0.1,
         "META_PARAM_SIZE": 1,
@@ -163,6 +169,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "LEARN_EVERY": 4,
         "GSP_BATCH_SIZE": 256,
     }
+    return merge_algorithm_defaults(base, algorithm)
 
 
 def write_yaml_config(config, path):
