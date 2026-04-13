@@ -32,14 +32,25 @@ class Agent(Actor):
             gsp_min_max_action: float,
             gsp_look_back: int,
             gsp_sequence_length: int,
+            broadcast: bool = False,
             prox_filter_angle_deg: float = 45.0,
             n_hop_neighbors: int = 1,
     ):
+        if neighbors and broadcast:
+            raise ValueError(
+                "GSP variants neighbors=True and broadcast=True are mutually exclusive — "
+                "they overload gsp_input_size differently. Pick one."
+            )
         if neighbors:
             # 2 inputs from ownship (prev_gsp, avg_prox)
             # 2 inputs from each neighbor (prev_gsp, avg_prox)
             # 2*n_hop_neighbors for symmetry in both CW and CCW
-            gsp_input_size = 2+2*(n_hop_neighbors*2)  
+            gsp_input_size = 2+2*(n_hop_neighbors*2)
+        if broadcast:
+            # GSP-B: each agent's view is (self_prox, self_prev_gsp) + (other_prox, other_prev_gsp)
+            # for all (n_agents - 1) other agents. Total 2*n_agents. Known limitation:
+            # coupled to team size, not transferable across num_robots.
+            gsp_input_size = 2 * n_agents  
 
         output_size = n_actions
         if network in ['DQN', 'DDQN']:
@@ -68,13 +79,16 @@ class Agent(Actor):
         self._network = network
         self._n_actions = n_actions
         self._neighbors = neighbors
+        self._broadcast = broadcast
         self._n_hop_neighbors = n_hop_neighbors
         self.neighbors_dict = {}
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
 
-        if self._neighbors:
+        if self._neighbors or self._broadcast:
+            # Per-agent observation ring buffers: GSP-N and GSP-B both produce
+            # per-agent self-centric views, so each agent has its own history.
             self.gsp_observation = []
             for _ in range(self._n_agents):
                 self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
@@ -97,6 +111,10 @@ class Agent(Actor):
     @property
     def gsp_neighbors(self):
         return self._neighbors
+
+    @property
+    def gsp_broadcast(self):
+        return self._broadcast
 
     @property
     def n_agents(self):
@@ -155,6 +173,40 @@ class Agent(Actor):
             env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs   
     
+    def make_gsp_states_broadcast(self, agent_prox_values, agent_prev_gsp):
+        """Build per-agent GSP inputs for GSP-B (full-broadcast variant).
+
+        Each agent's view is self-first: [self_prox, self_prev_gsp, other_0_prox,
+        other_0_prev_gsp, other_1_prox, other_1_prev_gsp, ..., other_{n-1}_prox,
+        other_{n-1}_prev_gsp]. "other" iterates all agents in ascending id order,
+        skipping self. Total length = 2 * n_agents.
+
+        Known limitation: the network input size is coupled to n_agents, so a
+        trained GSP-B policy does not transfer to teams of different size. This
+        is the tradeoff vs GSP-N, which uses fixed (self + n_hop_neighbors * 2)
+        inputs and transfers across team sizes.
+        """
+        states = []
+        for agent in range(self._n_agents):
+            agent_state = np.zeros(self.gsp_network_input)
+            # Self first
+            agent_state[0] = agent_prox_values[agent]
+            agent_state[1] = agent_prev_gsp[agent]
+            i = 2
+            # Then every other agent in ascending id order, skipping self
+            for other in range(self._n_agents):
+                if other == agent:
+                    continue
+                agent_state[i] = agent_prox_values[other]
+                agent_state[i + 1] = agent_prev_gsp[other]
+                i += 2
+            # Maintain gsp_observation ring buffer the same way make_gsp_states does,
+            # so recurrent/attention variants can still see sequences if added later.
+            self.gsp_observation[agent].pop(0)
+            self.gsp_observation[agent].append(agent_state)
+            states.append(agent_state)
+        return states
+
     def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags = False):
         states = []
         prox_flags = []
@@ -242,7 +294,11 @@ class Agent(Actor):
         return actions, action_num
     
     def choose_agent_gsp(self, agent_gsp_states, test = False):
-        if self._neighbors:
+        if self._neighbors or self._broadcast:
+            # Per-agent predictions with self-centric inputs. GSP-N (neighbors)
+            # and GSP-B (broadcast) share the same per-agent forward-pass shape;
+            # only the input vector differs. Non-recurrent broadcast uses the
+            # same stateless path as non-recurrent neighbors.
             actions = []
             for i in range(self._n_agents):
                 if self.recurrent_gsp:
@@ -257,7 +313,7 @@ class Agent(Actor):
                     )
                     # Take the last timestep's action
                     actions.append(action_tensor[-1].cpu().detach().numpy())
-                else: 
+                else:
                     actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, test))
             return actions
         else:

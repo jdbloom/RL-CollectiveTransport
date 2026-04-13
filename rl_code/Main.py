@@ -111,6 +111,7 @@ agent_nn_args = {
     'recurrent': config['RECURRENT'],
     'attention': config['ATTENTION'],
     'neighbors': config['NEIGHBORS'],
+    'broadcast': config.get('BROADCAST', False),
     'gsp_input_size':config['GSP_INPUT_SIZE'],
     'gsp_output_size':config['GSP_OUTPUT_SIZE'],
     'gsp_look_back':config['GSP_LOOK_BACK'],
@@ -362,6 +363,11 @@ try:
                             if model.gsp_neighbors:
                                 agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                            elif model.gsp_broadcast:
+                                # GSP-B: per-agent self-centric view with full-broadcast
+                                # [self_prox, self_prev_gsp, other_i_prox, other_i_prev_gsp, ...]
+                                agent_gsp_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
+                                ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                             else:
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                             for i in range(Utility.params['num_robots']):
@@ -377,20 +383,27 @@ try:
                             states, state_prox_flags = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp, True)
                             new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                             for i in range(Utility.params['num_robots']):
-                                # print(f'[AGENT] {i} PROX FLAGS:', state_prox_flags[i])
-                                # only store if state has value
                                 if np.sum(state_prox_flags[i]) > 0:
-                                    # print(f'[AGENT] {i} Has Value, Storing GSP State: {states[i]}')
                                     if model.gsp_networks['learning_scheme'] == 'attention':
                                         model.store_gsp_transition(states[i], label, 0, 0, 0)
                                     else:
-                                        # Under the direct-MSE GSP training path, the 2nd arg
-                                        # (action field) carries the supervised target label.
-                                        # See GSP-RL fix/gsp-direct-mse-training PR #24 and
-                                        # Stelaris docs/research/2026-04-13-gsp-information-collapse-analysis.md.
+                                        # 2nd arg = label (supervised target for direct-MSE GSP training)
                                         state = states[i]
                                         new_state = new_states[i]
                                         model.store_gsp_transition(state, label, 0, new_state, 0)
+                        elif model.gsp_broadcast:
+                            # GSP-B per-agent storage with broadcast inputs.
+                            # state_t : broadcast view at previous step (uses neighbors_old_heading_gsp so
+                            #            the prev_gsp slot reflects the prediction from the previous tick)
+                            # state_{t+1}: broadcast view at current step
+                            states = model.make_gsp_states_broadcast(old_agent_prox_flags, neighbors_old_heading_gsp)
+                            new_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
+                            for i in range(Utility.params['num_robots']):
+                                # Gate on self-prox being non-zero so we only store informative transitions,
+                                # matching the GSP and GSP-N branches. Self-prox lives at index 0 under the
+                                # self-first layout.
+                                if states[i][0] != 0:
+                                    model.store_gsp_transition(states[i], label, 0, new_states[i], 0)
                         else:
                             for i in range(Utility.params['num_robots']):
                                 if model.gsp_networks['learning_scheme'] == 'attention':
