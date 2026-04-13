@@ -384,15 +384,13 @@ try:
                                     if model.gsp_networks['learning_scheme'] == 'attention':
                                         model.store_gsp_transition(states[i], label, 0, 0, 0)
                                     else:
+                                        # Under the direct-MSE GSP training path, the 2nd arg
+                                        # (action field) carries the supervised target label.
+                                        # See GSP-RL fix/gsp-direct-mse-training PR #24 and
+                                        # Stelaris docs/research/2026-04-13-gsp-information-collapse-analysis.md.
                                         state = states[i]
-                                        action = old_heading_gsp[i]
-                                        reward = gsp_reward[i]
                                         new_state = new_states[i]
-                                        # print('[MAIN] Transition State:', state)
-                                        # print('[MAIN] Transition Action:', action)
-                                        # print('[MAIN] Transition Reward:', reward)
-                                        # print('[MAIN] Transition New State:', new_state)
-                                        model.store_gsp_transition(state, action, reward, new_state, 0)
+                                        model.store_gsp_transition(state, label, 0, new_state, 0)
                         else:
                             for i in range(Utility.params['num_robots']):
                                 if model.gsp_networks['learning_scheme'] == 'attention':
@@ -404,23 +402,16 @@ try:
                                     state = np.array(old_agent_prox_flags)
                                     # only store the state if it has value
                                     if np.sum(state) > 0:
-                                        action = old_heading_gsp[i]
-                                        reward = gsp_reward[i]
+                                        # 2nd arg = label (supervised target for direct-MSE GSP training)
                                         new_state = np.array(agent_prox_flags)
-                                        models[i].store_gsp_transition(state, action, reward, new_state, 0)
+                                        models[i].store_gsp_transition(state, label, 0, new_state, 0)
                                 else:
-                                    # print(f'[AGENT] {i} GSP:', old_heading_gsp[i])
                                     state = np.array(old_agent_prox_flags)
                                     # only store the state if it has value
                                     if np.sum(state) > 0:
-                                        action = old_heading_gsp[i]
-                                        reward = gsp_reward[i]
+                                        # 2nd arg = label (supervised target for direct-MSE GSP training)
                                         new_state = np.array(agent_prox_flags)
-                                        # print('[MAIN] Transition State:', state)
-                                        # print('[MAIN] Transition Action:', action)
-                                        # print('[MAIN] Transition Reward:', reward)
-                                        # print('[MAIN] Transition New State:', new_state)
-                                        model.store_gsp_transition(state, action, reward, new_state, 0)
+                                        model.store_gsp_transition(state, label, 0, new_state, 0)
 
 
                     #Define Global Knowledge: [positions, velocities]
@@ -507,6 +498,10 @@ try:
                                 # information-collapse diagnostic.
                                 for i in range(Utility.params['num_robots']):
                                     loss = models[i].learn()
+                                    # TD3's learn_TD3 returns (0, 0) on non-actor-update steps;
+                                    # unwrap so the hdf5 logger's 1D loss array stays homogeneous.
+                                    if isinstance(loss, tuple):
+                                        loss = loss[0]
                                 gsp_losses = [
                                     m.last_gsp_loss for m in models
                                     if getattr(m, "last_gsp_loss", None) is not None
@@ -515,6 +510,8 @@ try:
                                     hdf5_writer.record_gsp_loss(float(np.mean(gsp_losses)))
                             else:
                                 loss = model.learn()
+                                if isinstance(loss, tuple):
+                                    loss = loss[0]
                                 gsp_step_loss = getattr(model, "last_gsp_loss", None)
                                 if gsp_step_loss is not None:
                                     hdf5_writer.record_gsp_loss(gsp_step_loss)

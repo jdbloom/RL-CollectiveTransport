@@ -159,7 +159,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "NOISE": 0.1,
         "UPDATE_ACTOR_ITER": 2,
         "WARMUP": 1000,
-        "GSP_LEARNING_FREQUENCY": 500,
+        "GSP_LEARNING_FREQUENCY": 4,
         "LEARN_EVERY": 4,
         "GSP_BATCH_SIZE": 256,
     }
