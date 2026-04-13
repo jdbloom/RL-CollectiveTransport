@@ -514,12 +514,20 @@ try:
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
                             if args.independent_learning:
+                                # Aggregate GSP losses across per-robot models to a single
+                                # scalar per learn tick. Otherwise the 1D gsp_loss dataset
+                                # would have (num_learn_steps × num_robots) entries in
+                                # independent mode vs. num_learn_steps in shared mode,
+                                # breaking cross-mode comparability of the
+                                # information-collapse diagnostic.
                                 for i in range(Utility.params['num_robots']):
                                     loss = models[i].learn()
-                                    # Surface GSP prediction network loss for information-collapse diagnostic.
-                                    gsp_step_loss = getattr(models[i], "last_gsp_loss", None)
-                                    if gsp_step_loss is not None:
-                                        h5_logger.record_gsp_loss(gsp_step_loss)
+                                gsp_losses = [
+                                    m.last_gsp_loss for m in models
+                                    if getattr(m, "last_gsp_loss", None) is not None
+                                ]
+                                if gsp_losses:
+                                    h5_logger.record_gsp_loss(float(np.mean(gsp_losses)))
                             else:
                                 loss = model.learn()
                                 gsp_step_loss = getattr(model, "last_gsp_loss", None)
