@@ -2,7 +2,21 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
-from src.exp_data_structures import data_logger
+from src.exp_data_structures import data_logger  # legacy import, no longer used for writing
+
+# HDF5 logger (sole data writer as of 2026-04-12 — pkl removed)
+import sys as _sys_h5
+import os as _os_h5
+_stelaris_root_h5 = _os_h5.environ.get(
+    "STELARIS_ROOT",
+    _os_h5.path.abspath(_os_h5.path.join(
+        _os_h5.path.dirname(_os_h5.path.dirname(_os_h5.path.abspath(__file__))),
+        "..", "..", "..",
+    )),
+)
+if _stelaris_root_h5 not in _sys_h5.path:
+    _sys_h5.path.insert(0, _stelaris_root_h5)
+from tools.ingestion.hdf5_logger import HDF5Logger
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -38,6 +52,7 @@ parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
 parser.add_argument("--global_knowledge", default = False, action = "store_true")   # append knowledge of other agents to the observation space
 parser.add_argument("--share_prox_values", default=False, action = 'store_true')    # Robots will share their averaged prox values with eachother
+parser.add_argument("--experiment_name", default=None)  # experiment name for ingestion worker
 
 args = parser.parse_args()
 
@@ -160,6 +175,10 @@ gate_stats = 0
 obstacles = 0
 obstacle_stats = 0
 ep_ticks = 0
+# HDF5 is now the sole data writer. One file per experiment, co-located with Data/ and Models/.
+_hdf5_path = os.path.join(recording_path, "episodes.h5")
+h5_logger = HDF5Logger(_hdf5_path)
+log.info("HDF5 logger initialised at %s", _hdf5_path)
 
 try:
     while not exp_done:
@@ -168,8 +187,6 @@ try:
         exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
         socket.set_episode(ep_counter)
         log.info("Episode %d starting", ep_counter)
-        data_file_name = 'Data_Episode_'+str(ep_counter)+'.pkl'
-        data_writer = data_logger(data_file_path+data_file_name)
 
         if not exp_done:
             time_steps = 0
@@ -312,11 +329,11 @@ try:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
 
                     ############################## gsp REWARD ##############################################
-                    gsp_reward, label = calculate_gsp_reward(
-                        config['GSP'], 
-                        old_cyl_ang, 
-                        obj_stats[5], 
-                        next_heading_gsp, 
+                    gsp_reward, label, gsp_squared_error = calculate_gsp_reward(
+                        config['GSP'],
+                        old_cyl_ang,
+                        obj_stats[5],
+                        next_heading_gsp,
                         Utility.params['num_robots']
                     )
                     # print('[MAIN] GSP Reward', gsp_reward)
@@ -497,10 +514,25 @@ try:
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
                             if args.independent_learning:
+                                # Aggregate GSP losses across per-robot models to a single
+                                # scalar per learn tick. Otherwise the 1D gsp_loss dataset
+                                # would have (num_learn_steps × num_robots) entries in
+                                # independent mode vs. num_learn_steps in shared mode,
+                                # breaking cross-mode comparability of the
+                                # information-collapse diagnostic.
                                 for i in range(Utility.params['num_robots']):
                                     loss = models[i].learn()
+                                gsp_losses = [
+                                    m.last_gsp_loss for m in models
+                                    if getattr(m, "last_gsp_loss", None) is not None
+                                ]
+                                if gsp_losses:
+                                    h5_logger.record_gsp_loss(float(np.mean(gsp_losses)))
                             else:
                                 loss = model.learn()
+                                gsp_step_loss = getattr(model, "last_gsp_loss", None)
+                                if gsp_step_loss is not None:
+                                    h5_logger.record_gsp_loss(gsp_step_loss)
                         else:
                             loss = 0
                     else:
@@ -542,11 +574,16 @@ try:
                     else:
                         tmp_epsilon = model.epsilon
 
-                    data_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
+                    # gsp_target: broadcast the scalar payload delta-theta label to per-robot list
+                    # so it aligns with the (timesteps × robots) HDF5 schema. Needed for the
+                    # information-collapse diagnostic (gsp_output_std, gsp_pred_target_corr).
+                    gsp_target_per_robot = [float(label)] * Utility.params['num_robots']
+                    h5_logger.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
-                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
+                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses,
+                                    gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error)
 
                     if episode_done:
                         if args.independent_learning:
@@ -557,7 +594,7 @@ try:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
-                        data_writer.write_to_file()
+                        h5_logger.write_episode(ep_counter, experiment_name=args.experiment_name)
                         log.info(
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,
@@ -656,6 +693,7 @@ try:
     #socket.unbind("tcp://:" + port)
     #socket.close()
     print("Experiment Done\n")
+    h5_logger.close(experiment_name=args.experiment_name)
     exp_logger.finish(success=True)
 except zmq.error.Again:
     error_msg = f"ZMQ timeout at episode {ep_counter} — ARGoS likely crashed"

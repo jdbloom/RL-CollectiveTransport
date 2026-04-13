@@ -73,6 +73,10 @@ class Agent(Actor):
         self._options_per_action = options_per_action
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
+        # R-GSP-N robot processing order (bias characterization, spec §14.3)
+        self.robot_order = config.get("ROBOT_ORDER", "fixed")
+        self._rng = np.random.default_rng(config.get("SEED", 42))
+
 
         if self._neighbors:
             self.gsp_observation = []
@@ -243,8 +247,12 @@ class Agent(Actor):
     
     def choose_agent_gsp(self, agent_gsp_states, test = False):
         if self._neighbors:
-            actions = []
-            for i in range(self._n_agents):
+            actions = [None] * self._n_agents
+            if self.robot_order == "randomized":
+                perm = self._rng.permutation(self._n_agents)
+            else:
+                perm = np.arange(self._n_agents)
+            for i in perm:
                 if self.recurrent_gsp:
                     hidden = self._agent_hidden_states.get(i)
                     obs = T.tensor(np.array(self.gsp_observation[i]), dtype=T.float).to(
@@ -256,9 +264,9 @@ class Agent(Actor):
                         new_hidden[0].detach(), new_hidden[1].detach()
                     )
                     # Take the last timestep's action
-                    actions.append(action_tensor[-1].cpu().detach().numpy())
-                else: 
-                    actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, test))
+                    actions[i] = action_tensor[-1].cpu().detach().numpy()
+                else:
+                    actions[i] = self.choose_action(agent_gsp_states[i], self.gsp_networks, test)
             return actions
         else:
             if self.recurrent_gsp:
