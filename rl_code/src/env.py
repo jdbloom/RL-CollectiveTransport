@@ -18,7 +18,15 @@ def angle_normalize_signed_deg(a):
   return a
 
 def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots):
+    """Return (clipped_rewards, label, squared_errors) per robot.
+
+    The clipped reward saturates at -2 and hides the magnitude of large prediction errors.
+    squared_errors carries the raw (diff - prediction)^2 per robot — needed for the
+    information-collapse diagnostic (paper outline: "Revamped Reward structure for GSP
+    to prevent information collapse").
+    """
     gsp_reward = []
+    squared_errors = []
     label = 0
     if GSP:
         old_cyl_ang = angle_normalize_unsigned_deg(old_cyl_ang)
@@ -28,27 +36,16 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
         diff = np.clip(diff*100, -1, 1)
         label=diff
-        x1 = math.cos(diff)
-        y1 = math.sin(diff)                        
         for i in range(num_robots):
-            # x2 = math.cos(next_heading_gsp[i]) 
-            # y2 = math.sin(next_heading_gsp[i])
-            # error = np.dot([x1, y1], [x2, y2])
-            # gsp_reward.append(-1 + error)
-            # print('GSP:', next_heading_gsp[i])
-            # print(f'Diff: {diff:.2f}, next_heading_gsp: {next_heading_gsp[i]:.2f}')
             reward = diff - next_heading_gsp[i]
-            # print('reward', reward)
-            # norm_reward = reward / next_heading_gsp[i]
-            # print('norm_reward', norm_reward)
             abs_reward = abs(reward)**2
-            # print('abs reward', abs_reward)
+            squared_errors.append(float(abs_reward))
             gsp_reward.append(np.clip(-1*abs_reward, -2, 0))
-        
     else:
         gsp_reward = [0 for i in range(num_robots)]
-    
-    return gsp_reward, label
+        squared_errors = [0 for i in range(num_robots)]
+
+    return gsp_reward, label, squared_errors
 
 
 class ZMQ_Utility:

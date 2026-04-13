@@ -316,11 +316,11 @@ try:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
 
                     ############################## gsp REWARD ##############################################
-                    gsp_reward, label = calculate_gsp_reward(
-                        config['GSP'], 
-                        old_cyl_ang, 
-                        obj_stats[5], 
-                        next_heading_gsp, 
+                    gsp_reward, label, gsp_squared_error = calculate_gsp_reward(
+                        config['GSP'],
+                        old_cyl_ang,
+                        obj_stats[5],
+                        next_heading_gsp,
                         Utility.params['num_robots']
                     )
                     # print('[MAIN] GSP Reward', gsp_reward)
@@ -501,10 +501,25 @@ try:
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
                             if args.independent_learning:
+                                # Aggregate GSP losses across per-robot models to a single
+                                # scalar per learn tick. Otherwise the 1D gsp_loss dataset
+                                # would have (num_learn_steps × num_robots) entries in
+                                # independent mode vs. num_learn_steps in shared mode,
+                                # breaking cross-mode comparability of the
+                                # information-collapse diagnostic.
                                 for i in range(Utility.params['num_robots']):
                                     loss = models[i].learn()
+                                gsp_losses = [
+                                    m.last_gsp_loss for m in models
+                                    if getattr(m, "last_gsp_loss", None) is not None
+                                ]
+                                if gsp_losses:
+                                    hdf5_writer.record_gsp_loss(float(np.mean(gsp_losses)))
                             else:
                                 loss = model.learn()
+                                gsp_step_loss = getattr(model, "last_gsp_loss", None)
+                                if gsp_step_loss is not None:
+                                    hdf5_writer.record_gsp_loss(gsp_step_loss)
                         else:
                             loss = 0
                     else:
@@ -546,11 +561,16 @@ try:
                     else:
                         tmp_epsilon = model.epsilon
 
+                    # gsp_target: broadcast the scalar payload delta-theta label to per-robot list
+                    # so it aligns with the (timesteps × robots) HDF5 schema. Needed for the
+                    # information-collapse diagnostic (gsp_output_std, gsp_pred_target_corr).
+                    gsp_target_per_robot = [float(label)] * Utility.params['num_robots']
                     hdf5_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
-                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
+                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses,
+                                    gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error)
 
                     if episode_done:
                         if args.independent_learning:
