@@ -172,8 +172,6 @@ try:
         exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
         socket.set_episode(ep_counter)
         log.info("Episode %d starting", ep_counter)
-        data_file_name = 'Data_Episode_'+str(ep_counter)+'.pkl'
-        data_writer = data_logger(data_file_path+data_file_name)
 
         if not exp_done:
             time_steps = 0
