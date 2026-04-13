@@ -56,6 +56,11 @@ class HDF5Logger:
         self.robot_failures = []
         self.com_X_pos = []
         self.com_Y_pos = []
+        # GSP information-collapse diagnostics: predicted delta-theta target and squared error
+        # per step, plus GSP-specific training loss per learning step.
+        self.gsp_target = []
+        self.gsp_squared_error = []
+        self.gsp_loss = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -65,6 +70,7 @@ class HDF5Logger:
         gsp_rewards, gsp_headings,
         run_times, robots_x_poses, robots_y_poses, robot_angles,
         robot_failure, com_X_poses=0, com_Y_poses=0,
+        gsp_target=None, gsp_squared_error=None,
     ):
         """Accumulate one timestep of data. Same signature as data_logger.writerow."""
         self.reward.append(rewards)
@@ -90,6 +96,17 @@ class HDF5Logger:
         self.robot_failures.append(robot_failure)
         self.com_X_pos.append(com_X_poses)
         self.com_Y_pos.append(com_Y_poses)
+        if gsp_target is not None:
+            self.gsp_target.append(gsp_target)
+        if gsp_squared_error is not None:
+            self.gsp_squared_error.append(gsp_squared_error)
+
+    def record_gsp_loss(self, loss_value: float) -> None:
+        """Record one GSP prediction network training loss sample.
+
+        Called per GSP learning step (cadence differs from per-timestep writerow).
+        """
+        self.gsp_loss.append(float(loss_value))
 
     def write_episode(self, episode_num: int) -> dict:
         """Write accumulated data to HDF5 and return summary dict.
@@ -105,7 +122,7 @@ class HDF5Logger:
             grp = h5f.create_group(group_name)
 
             # Store 2D arrays (timesteps × robots)
-            for key, data in [
+            twod_specs = [
                 ("reward", self.reward),
                 ("gsp_reward", self.gsp_reward),
                 ("force_magnitude", self.force_magnitude),
@@ -115,7 +132,12 @@ class HDF5Logger:
                 ("robot_angle", self.robot_angle),
                 ("robot_failure", self.robot_failures),
                 ("gsp_heading", self.gsp_heading),
-            ]:
+            ]
+            if self.gsp_target:
+                twod_specs.append(("gsp_target", self.gsp_target))
+            if self.gsp_squared_error:
+                twod_specs.append(("gsp_squared_error", self.gsp_squared_error))
+            for key, data in twod_specs:
                 arr = np.array(data, dtype=np.float32)
                 if arr.size > 0:
                     grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
@@ -134,6 +156,13 @@ class HDF5Logger:
                 arr = np.array(data, dtype=np.float32)
                 if arr.size > 0:
                     grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
+
+            # GSP-specific training loss — 1D but recorded at a different cadence than writerow,
+            # so it lives outside the timestep-indexed 1D block above.
+            if self.gsp_loss:
+                gsp_loss_arr = np.array(self.gsp_loss, dtype=np.float32)
+                grp.create_dataset("gsp_loss", data=gsp_loss_arr,
+                                   compression="gzip", compression_opts=4)
 
             # Termination as bool
             term_arr = np.array(self.termination, dtype=bool)
@@ -163,6 +192,43 @@ class HDF5Logger:
             grp.attrs["success"] = success
             grp.attrs["reward_per_robot"] = reward_per_robot
             grp.attrs["gsp_reward_per_robot"] = gsp_per_robot
+
+            # Information-collapse summary attrs. Computed only when both prediction
+            # (gsp_heading) and target (gsp_target) are present. The caller contract is
+            # that gsp_target must be passed on every writerow call within an episode once
+            # it's been passed on any — i.e. it tracks gsp_heading 1:1. Enforce here rather
+            # than silently zipping misaligned buffers. Use NaN-aware aggregation so a
+            # single physics glitch (prediction -> NaN) does not poison the summary.
+            # Undefined correlations (zero-variance in predictions or targets) are written
+            # as NaN so downstream analysis can distinguish "undefined" from "measured zero".
+            if self.gsp_target and self.gsp_heading:
+                if len(self.gsp_target) != len(self.gsp_heading):
+                    raise ValueError(
+                        f"gsp_target buffer length {len(self.gsp_target)} does not match "
+                        f"gsp_heading buffer length {len(self.gsp_heading)}; gsp_target must "
+                        "be passed on every writerow call within an episode once it's been "
+                        "passed on any call."
+                    )
+                pred_arr = np.array(self.gsp_heading, dtype=np.float64).ravel()
+                target_arr = np.array(self.gsp_target, dtype=np.float64).ravel()
+                if pred_arr.size > 0:
+                    pred_std = float(np.nanstd(pred_arr))
+                    target_std = float(np.nanstd(target_arr))
+                    # Tolerance guard: np.nanstd of a constant returns ~1e-18 due to
+                    # sum-of-squares fuzz, which passes a strict `> 0` check and lets
+                    # corrcoef return a garbage value. The observables here are radians
+                    # clipped to [-1, 1], so 1e-12 is well below any physical variation.
+                    STD_TOL = 1e-12
+                    grp.attrs["gsp_output_std"] = pred_std
+                    if pred_arr.size > 1 and pred_std > STD_TOL and target_std > STD_TOL:
+                        mask = np.isfinite(pred_arr) & np.isfinite(target_arr)
+                        if mask.sum() > 1:
+                            corr = float(np.corrcoef(pred_arr[mask], target_arr[mask])[0, 1])
+                        else:
+                            corr = float("nan")
+                    else:
+                        corr = float("nan")
+                    grp.attrs["gsp_pred_target_corr"] = corr
 
         # Reset for next episode
         summary = {
