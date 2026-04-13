@@ -579,8 +579,10 @@ try:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
-                        if HAS_HDF5:
-                            hdf5_writer.write_episode(ep_counter)
+                        # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
+                        # gate was always-true dead code. Removed during the same cleanup
+                        # that dropped the data_logger references.
+                        hdf5_writer.write_episode(ep_counter)
                         log.info(
                             "Episode %d done: success=%s duration=%.1fs timesteps=%d",
                             ep_counter, reached_goal, run_time, time_steps,
