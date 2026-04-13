@@ -329,11 +329,11 @@ try:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
 
                     ############################## gsp REWARD ##############################################
-                    gsp_reward, label = calculate_gsp_reward(
-                        config['GSP'], 
-                        old_cyl_ang, 
-                        obj_stats[5], 
-                        next_heading_gsp, 
+                    gsp_reward, label, gsp_squared_error = calculate_gsp_reward(
+                        config['GSP'],
+                        old_cyl_ang,
+                        obj_stats[5],
+                        next_heading_gsp,
                         Utility.params['num_robots']
                     )
                     # print('[MAIN] GSP Reward', gsp_reward)
@@ -516,8 +516,15 @@ try:
                             if args.independent_learning:
                                 for i in range(Utility.params['num_robots']):
                                     loss = models[i].learn()
+                                    # Surface GSP prediction network loss for information-collapse diagnostic.
+                                    gsp_step_loss = getattr(models[i], "last_gsp_loss", None)
+                                    if gsp_step_loss is not None:
+                                        h5_logger.record_gsp_loss(gsp_step_loss)
                             else:
                                 loss = model.learn()
+                                gsp_step_loss = getattr(model, "last_gsp_loss", None)
+                                if gsp_step_loss is not None:
+                                    h5_logger.record_gsp_loss(gsp_step_loss)
                         else:
                             loss = 0
                     else:
@@ -559,11 +566,16 @@ try:
                     else:
                         tmp_epsilon = model.epsilon
 
+                    # gsp_target: broadcast the scalar payload delta-theta label to per-robot list
+                    # so it aligns with the (timesteps × robots) HDF5 schema. Needed for the
+                    # information-collapse diagnostic (gsp_output_std, gsp_pred_target_corr).
+                    gsp_target_per_robot = [float(label)] * Utility.params['num_robots']
                     h5_logger.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
-                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses)
+                                    robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses,
+                                    gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error)
 
                     if episode_done:
                         if args.independent_learning:
