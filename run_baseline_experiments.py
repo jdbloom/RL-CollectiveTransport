@@ -162,6 +162,15 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "GSP_LEARNING_FREQUENCY": 4,
         "LEARN_EVERY": 4,
         "GSP_BATCH_SIZE": 256,
+        # Per-robot force_magnitude threshold for GSP replay buffer store filter.
+        # 0.0 = disabled (store every transition with prox activity, legacy behavior).
+        # > 0 = only store transitions where stats[i][0] (force_magnitude) exceeds
+        # the threshold. This concentrates GSP training on samples where the robot
+        # is actively applying force, which empirically multiplies the linear-R²
+        # ceiling of the prediction problem 3–4× (see
+        # docs/research/2026-04-13-gsp-ddpg-vs-attention-collapse.md in Stelaris).
+        # Recommended starting point: ~4.0 (≈ p75 of force_magnitude in 2-obstacle runs).
+        "GSP_STORE_FORCE_THRESHOLD": 0.0,
     }
 
 
