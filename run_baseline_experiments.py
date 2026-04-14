@@ -153,7 +153,12 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "EPSILON": 1.0,
         "EPS_MIN": 0.01,
         "EPS_DEC": 0.0001,
-        "BATCH_SIZE": 256,
+        # Bisect 2026-04-14: BATCH_SIZE 64 → 256 in commit a1c4d6e broke DDPG.
+        # DDPG at LE=4 BS=64 is a learned baseline (job 120, n=118, 100% last50 success,
+        # PR=-2375, 101/109 rolling windows in target band -1800 to -3500 per robot).
+        # Same mechanism likely broke GSP_BATCH_SIZE (the GSP head uses DDPGActorNetwork too).
+        # Reverting both batch sizes to dissertation values here.
+        "BATCH_SIZE": 64,
         "MEM_SIZE": 100000,
         "REPLACE_TARGET_COUNTER": 1000,
         "NOISE": 0.1,
@@ -161,7 +166,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "WARMUP": 1000,
         "GSP_LEARNING_FREQUENCY": 4,
         "LEARN_EVERY": 4,
-        "GSP_BATCH_SIZE": 256,
+        "GSP_BATCH_SIZE": 128,
         # Per-robot force_magnitude threshold for GSP replay buffer store filter.
         # 0.0 = disabled (store every transition with prox activity, legacy behavior).
         # > 0 = only store transitions where stats[i][0] (force_magnitude) exceeds
