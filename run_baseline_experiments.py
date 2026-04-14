@@ -180,6 +180,10 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         #   0.1 to test whether starting far from zero escapes the collapse.
         "GSP_WEIGHT_DECAY": 1e-4,
         "GSP_INIT_W": 3e-3,
+        # Trunk capacity of the GSP head MLP. Defaults match DDPG actor (400, 300).
+        # Override for the 2026-04-14 trunk-capacity experiment.
+        "GSP_FC1_DIMS": 400,
+        "GSP_FC2_DIMS": 300,
     }
 
 
