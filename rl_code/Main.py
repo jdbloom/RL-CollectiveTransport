@@ -33,6 +33,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("recording_path")
 parser.add_argument("--test", default = False, action = "store_true")
 parser.add_argument("--model_path")
+parser.add_argument("--best_gsp_ckpt", default=None,
+                    help="Path to a saved GSP-head snapshot (from Task 1). "
+                         "If set in test mode, the GSP head is loaded from this "
+                         "checkpoint AFTER load_model, overriding the bundled final weights.")
 parser.add_argument("--trained_num_robots")                                          # if we are testing a model trained on a different number of robots. This should be set to the training number of robots so that the network is built properly.
 parser.add_argument("--no_print", default = False, action = "store_true")
 parser.add_argument("--independent_learning", default = False, action = "store_true")
@@ -125,6 +129,10 @@ if args.independent_learning:
     models = [Agent.Agent(id=i, **agent_nn_args) for i in range(Utility.params['num_robots'])]
     if test_mode:
         [models[i].load_model(model_file_path) for i in range(Utility.params['num_robots'])]
+        if args.best_gsp_ckpt:
+            log.info(f'Loading best GSP-head checkpoint from {args.best_gsp_ckpt}')
+            for m in models:
+                m.load_gsp_head_snapshot(args.best_gsp_ckpt)
 else:
     if args.trained_num_robots is not None:
         agent_nn_args['n_agents'] = int(args.trained_num_robots)
@@ -133,6 +141,9 @@ else:
         model = Agent.Agent(id = 0, **agent_nn_args)
     if test_mode:
         model.load_model(model_file_path)
+        if args.best_gsp_ckpt:
+            log.info(f'Loading best GSP-head checkpoint from {args.best_gsp_ckpt}')
+            model.load_gsp_head_snapshot(args.best_gsp_ckpt)
 
 
 # Send acknowledgment
@@ -628,6 +639,32 @@ try:
                                     model.save_model(path)
                             if not args.no_print:
                                 print('reward last 10 eps:%.2f'%exp_mean_rewards[-1],'\n')
+
+                        # GSP head snapshot checkpointing (Task 1 of the stability plan).
+                        # Captures the GSP prediction-network weights every N episodes so
+                        # post-hoc best-checkpoint selection can recover the top-correlation
+                        # predictor even if it regresses during later training. 0 disables.
+                        gsp_ckpt_every = int(config.get('GSP_CHECKPOINT_EVERY', 0))
+                        if (train_mode and gsp_ckpt_every > 0
+                                and ep_counter > 0 and ep_counter % gsp_ckpt_every == 0
+                                and not args.independent_learning):
+                            try:
+                                ckpt_dir = os.path.join(recording_path, 'Models', 'gsp_snapshots')
+                                os.makedirs(ckpt_dir, exist_ok=True)
+                                ckpt_path = os.path.join(ckpt_dir, f'gsp_ep{ep_counter:04d}.pt')
+                                model.save_gsp_head_snapshot(ckpt_path)
+                                idx_path = os.path.join(ckpt_dir, 'index.json')
+                                import json as _json_ckpt
+                                idx = []
+                                if os.path.exists(idx_path):
+                                    try:
+                                        idx = _json_ckpt.load(open(idx_path))
+                                    except (ValueError, OSError):
+                                        idx = []
+                                idx.append({'episode': ep_counter, 'path': ckpt_path})
+                                _json_ckpt.dump(idx, open(idx_path, 'w'))
+                            except Exception as _e:
+                                log.warning(f'GSP checkpoint save failed at ep {ep_counter}: {_e}')
                         ep_counter += 1
 
                         # Send acknowledgment

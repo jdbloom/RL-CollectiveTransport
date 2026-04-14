@@ -184,6 +184,10 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         # Override for the 2026-04-14 trunk-capacity experiment.
         "GSP_FC1_DIMS": 400,
         "GSP_FC2_DIMS": 300,
+        # Task 1 of the stability plan: save a GSP-head weight snapshot every
+        # N episodes so post-hoc best-checkpoint selection can recover the
+        # highest-correlation predictor even if it regresses later. 0 = disabled.
+        "GSP_CHECKPOINT_EVERY": 0,
     }
 
 
