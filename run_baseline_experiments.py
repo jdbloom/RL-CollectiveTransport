@@ -193,6 +193,9 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         # N episodes so post-hoc best-checkpoint selection can recover the
         # highest-correlation predictor even if it regresses later. 0 = disabled.
         "GSP_CHECKPOINT_EVERY": 0,
+        # Task 4: LayerNorm in the GSP head trunk (after fc1 and fc2, before ReLU).
+        # Default False = legacy. Enable via matrix YAML override per-batch.
+        "GSP_USE_LAYER_NORM": False,
     }
 
 
