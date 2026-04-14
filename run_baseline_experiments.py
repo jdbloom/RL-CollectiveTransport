@@ -171,6 +171,15 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         # docs/research/2026-04-13-gsp-ddpg-vs-attention-collapse.md in Stelaris).
         # Recommended starting point: ~4.0 (≈ p75 of force_magnitude in 2-obstacle runs).
         "GSP_STORE_FORCE_THRESHOLD": 0.0,
+        # Task 0 ablation knobs — GSP head only, main policy actor untouched.
+        # GSP_WEIGHT_DECAY: Adam weight_decay on the GSP-head optimizer.
+        #   Default 1e-4 = legacy. Set to 0.0 to test the decoupled-decay
+        #   pull-to-mean collapse hypothesis.
+        # GSP_INIT_W: half-range of uniform init on the GSP-head output layer
+        #   weights. Default 3e-3 = legacy (starts near tanh zero). Set to
+        #   0.1 to test whether starting far from zero escapes the collapse.
+        "GSP_WEIGHT_DECAY": 1e-4,
+        "GSP_INIT_W": 3e-3,
     }
 
 
