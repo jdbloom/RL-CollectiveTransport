@@ -187,6 +187,12 @@ class HDF5Logger:
             else:
                 gsp_per_robot = []
 
+            # Logging schema version. Bump on every change that adds/removes a field
+            # or changes semantics of an existing field. Analyzer reads this attr
+            # to know which metrics are computable for this run vs gaps.
+            # v1 — implicit (pre-2026-04-15); treated as default in analyzer
+            # v2 — 2026-04-15: explicit log_schema_version attr added
+            grp.attrs["log_schema_version"] = 2
             grp.attrs["episode_num"] = episode_num
             grp.attrs["timesteps"] = timesteps
             grp.attrs["success"] = success
