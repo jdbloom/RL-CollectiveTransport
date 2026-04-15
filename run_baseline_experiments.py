@@ -196,6 +196,12 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         # Task 4: LayerNorm in the GSP head trunk (after fc1 and fc2, before ReLU).
         # Default False = legacy. Enable via matrix YAML override per-batch.
         "GSP_USE_LAYER_NORM": False,
+        # Task 5: VICReg variance+covariance penalty on the GSP head penultimate
+        # features. Default False (disabled). Enable via matrix YAML override
+        # per-batch. VAR_COEF/COV_COEF follow Bardes et al. ICLR 2022 Table 9.
+        "GSP_VICREG_ENABLED": False,
+        "GSP_VICREG_VAR_COEF": 1.0,
+        "GSP_VICREG_COV_COEF": 0.04,
     }
 
 
