@@ -335,8 +335,11 @@ try:
                     )
                     # print('[MAIN] GSP Reward', gsp_reward)
                     # print('[MAIN] GSP Label ', label)
+                    e2e_gsp_label = None
+                    if config.get('GSP_E2E_ENABLED'):
+                        e2e_gsp_label = np.array([label], dtype=np.float32)
                     for i in range(len(gsp_reward)):
-                        episode_gsp_rewards[i] += gsp_reward[i] 
+                        episode_gsp_rewards[i] += gsp_reward[i]
 
                     old_cyl_ang = obj_stats[5]
 
@@ -363,6 +366,8 @@ try:
                                 env_observations[i][7+filtered_indeces[j]] = 0.0
                             prox_value = np.sum(prox_values)              
                             agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
+
+                    e2e_gsp_obs = [None] * Utility.params['num_robots']
 
                     if config['GSP']:
                         # GSP Predict
@@ -400,6 +405,9 @@ try:
                         if model.gsp_neighbors:
                             states, state_prox_flags = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp, True)
                             new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                            if config.get('GSP_E2E_ENABLED'):
+                                for i in range(Utility.params['num_robots']):
+                                    e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
                             for i in range(Utility.params['num_robots']):
                                 if np.sum(state_prox_flags[i]) > 0 and stats[i][0] > force_thr:
                                     if model.gsp_networks['learning_scheme'] == 'attention':
@@ -491,13 +499,17 @@ try:
                                                                     (actions[i], actions_to_take[i]),
                                                                     rewards[i],
                                                                     new_agent_states[i],
-                                                                    episode_done)
+                                                                    episode_done,
+                                                                    gsp_obs=e2e_gsp_obs[i] if config.get('GSP_E2E_ENABLED') else None,
+                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
                                             else:
                                                 model.store_agent_transition(agent_states[i],
                                                                     (actions[i], actions_to_take[i]),
                                                                     rewards[i],
                                                                     new_agent_states[i],
-                                                                    episode_done)
+                                                                    episode_done,
+                                                                    gsp_obs=e2e_gsp_obs[i] if config.get('GSP_E2E_ENABLED') else None,
+                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
                                                 
                         r.append(rewards[i][0])
 

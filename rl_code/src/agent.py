@@ -348,10 +348,10 @@ class Agent(Actor):
         # Trailing zero is hardcoded control for gripper
         return np.array([l_wheel, r_wheel, 0])
     
-    def store_agent_transition(self, s, a, r, s_, d):
+    def store_agent_transition(self, s, a, r, s_, d, gsp_obs=None, gsp_label=None):
         if self.networks['replay'].action_type == 'Discrete':
             a = a[0]
         elif self.networks['replay'].action_type == 'Continuous':
             a = np.array(a[1][0:2])
-        return super().store_agent_transition(s, a, r, s_, d)
+        return super().store_agent_transition(s, a, r, s_, d, gsp_obs=gsp_obs, gsp_label=gsp_label)
     
