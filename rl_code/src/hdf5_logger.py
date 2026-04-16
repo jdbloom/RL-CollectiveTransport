@@ -61,6 +61,12 @@ class HDF5Logger:
         self.gsp_target = []
         self.gsp_squared_error = []
         self.gsp_loss = []
+        # H-14 / first-principles diagnostic: the GSP head's actual input vector per
+        # timestep per robot. Shape: (timesteps, num_robots, gsp_input_size).
+        # When provided, enables offline supervised diagnostic training of a fresh
+        # head on the same (input, label) pairs the live training saw — answering
+        # "can the head learn at all when RL coupling and exploration are removed?"
+        self.gsp_obs = []
         # E2E learning diagnostics: per-learn-step metrics from learn_DDQN_e2e.
         self.e2e_ddqn_loss = []
         self.e2e_gsp_mse_loss = []
@@ -82,7 +88,7 @@ class HDF5Logger:
         gsp_rewards, gsp_headings,
         run_times, robots_x_poses, robots_y_poses, robot_angles,
         robot_failure, com_X_poses=0, com_Y_poses=0,
-        gsp_target=None, gsp_squared_error=None,
+        gsp_target=None, gsp_squared_error=None, gsp_obs=None,
     ):
         """Accumulate one timestep of data. Same signature as data_logger.writerow."""
         self.reward.append(rewards)
@@ -112,6 +118,12 @@ class HDF5Logger:
             self.gsp_target.append(gsp_target)
         if gsp_squared_error is not None:
             self.gsp_squared_error.append(gsp_squared_error)
+        if gsp_obs is not None:
+            # gsp_obs is a per-robot list of input vectors; convert array elements to lists for
+            # consistent serialization (mirrors gsp_heading handling above).
+            if isinstance(gsp_obs, np.ndarray):
+                gsp_obs = gsp_obs.tolist()
+            self.gsp_obs.append(gsp_obs)
 
     def record_e2e_diagnostics(self, diag: dict) -> None:
         """Record one e2e learning step's diagnostics."""
@@ -167,6 +179,13 @@ class HDF5Logger:
                 arr = np.array(data, dtype=np.float32)
                 if arr.size > 0:
                     grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
+
+            # Store 3D array (timesteps × robots × gsp_input_size) for the head's
+            # actual input vector. Only present when gsp_obs was passed to writerow.
+            if self.gsp_obs:
+                arr = np.array(self.gsp_obs, dtype=np.float32)
+                if arr.size > 0:
+                    grp.create_dataset("gsp_obs", data=arr, compression="gzip", compression_opts=4)
 
             # Store 1D arrays (timesteps)
             for key, data in [

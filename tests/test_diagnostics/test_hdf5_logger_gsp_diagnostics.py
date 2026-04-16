@@ -46,6 +46,52 @@ def _base_writerow_kwargs():
     )
 
 
+def test_gsp_obs_stored_per_step_when_provided(tmp_path):
+    """gsp_obs is the head's actual input vector per timestep per robot.
+
+    Stored as 3D array (timesteps, robots, gsp_input_size) for the offline
+    diagnostic — needed to train a fresh head supervised on the same
+    (input, label) pairs the live training saw.
+    """
+    path = str(tmp_path / "ep.h5")
+    logger = HDF5Logger(path)
+    n_robots = 4
+    n_input = 6  # standard GSP-N input size: 2*(1 + 2 neighbors)
+    for t in range(5):
+        kwargs = _base_writerow_kwargs()
+        # One per-robot gsp_obs vector per timestep
+        kwargs["gsp_obs"] = [[0.1 * t + 0.01 * j for j in range(n_input)] for _ in range(n_robots)]
+        kwargs["gsp_target"] = [0.15 * t] * n_robots
+        logger.writerow(**kwargs)
+    logger.write_episode(0)
+
+    with h5py.File(path) as f:
+        grp = f["episode_0000"]
+        assert "gsp_obs" in grp, "gsp_obs dataset must exist when provided"
+        assert grp["gsp_obs"].shape == (5, n_robots, n_input), (
+            f"gsp_obs shape mismatch: got {grp['gsp_obs'].shape}, expected (5, 4, 6)"
+        )
+        # Verify content for last timestep, first robot
+        np.testing.assert_allclose(
+            grp["gsp_obs"][4, 0],
+            [0.4, 0.41, 0.42, 0.43, 0.44, 0.45],
+            rtol=1e-5,
+        )
+
+
+def test_gsp_obs_omitted_when_not_provided(tmp_path):
+    """Backwards compatible: writerow without gsp_obs does not create the dataset."""
+    path = str(tmp_path / "ep.h5")
+    logger = HDF5Logger(path)
+    for t in range(3):
+        logger.writerow(**_base_writerow_kwargs())
+    logger.write_episode(0)
+
+    with h5py.File(path) as f:
+        grp = f["episode_0000"]
+        assert "gsp_obs" not in grp
+
+
 def test_gsp_target_and_squared_error_stored_per_step(tmp_path):
     path = str(tmp_path / "ep.h5")
     logger = HDF5Logger(path)

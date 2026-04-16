@@ -368,6 +368,10 @@ try:
                             agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                     e2e_gsp_obs = [None] * Utility.params['num_robots']
+                    # H-14 / first-principles diagnostic: capture the GSP head's per-robot
+                    # input vector at this timestep so it can be logged alongside gsp_target.
+                    # Set in the GSP branch below; remains None for non-GSP runs.
+                    gsp_obs_per_robot = None
 
                     if config['GSP']:
                         # GSP Predict
@@ -379,11 +383,13 @@ try:
                             if model.gsp_neighbors:
                                 agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                                gsp_obs_per_robot = agent_gsp_states
                             elif model.gsp_broadcast:
                                 # GSP-B: per-agent self-centric view with full-broadcast
                                 # [self_prox, self_prev_gsp, other_i_prox, other_i_prev_gsp, ...]
                                 agent_gsp_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
+                                gsp_obs_per_robot = agent_gsp_states
                             else:
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                             for i in range(Utility.params['num_robots']):
@@ -599,7 +605,8 @@ try:
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
                                     time.time() - episode_start_time, robot_x_pos, robot_y_pos, robot_angle,
                                     robot_failures, com_X_poses=com_X_poses, com_Y_poses=com_Y_poses,
-                                    gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error)
+                                    gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error,
+                                    gsp_obs=gsp_obs_per_robot)
 
                     if episode_done:
                         if args.independent_learning:
