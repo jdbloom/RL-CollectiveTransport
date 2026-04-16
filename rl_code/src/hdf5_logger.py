@@ -61,6 +61,18 @@ class HDF5Logger:
         self.gsp_target = []
         self.gsp_squared_error = []
         self.gsp_loss = []
+        # E2E learning diagnostics: per-learn-step metrics from learn_DDQN_e2e.
+        self.e2e_ddqn_loss = []
+        self.e2e_gsp_mse_loss = []
+        self.e2e_total_loss = []
+        self.e2e_gsp_grad_norm = []
+        self.e2e_gsp_grad_norm_pre_clip = []
+        self.e2e_ddqn_grad_norm = []
+        self.e2e_gsp_input_grad = []
+        self.e2e_gsp_pred_mean = []
+        self.e2e_gsp_pred_std = []
+        self.e2e_gsp_label_mean = []
+        self.e2e_gsp_label_std = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -100,6 +112,20 @@ class HDF5Logger:
             self.gsp_target.append(gsp_target)
         if gsp_squared_error is not None:
             self.gsp_squared_error.append(gsp_squared_error)
+
+    def record_e2e_diagnostics(self, diag: dict) -> None:
+        """Record one e2e learning step's diagnostics."""
+        self.e2e_ddqn_loss.append(float(diag.get('ddqn_loss', 0)))
+        self.e2e_gsp_mse_loss.append(float(diag.get('gsp_mse_loss', 0)))
+        self.e2e_total_loss.append(float(diag.get('total_loss', 0)))
+        self.e2e_gsp_grad_norm.append(float(diag.get('gsp_grad_norm', 0)))
+        self.e2e_gsp_grad_norm_pre_clip.append(float(diag.get('gsp_grad_norm_pre_clip', 0)))
+        self.e2e_ddqn_grad_norm.append(float(diag.get('ddqn_grad_norm', 0)))
+        self.e2e_gsp_input_grad.append(float(diag.get('gsp_input_grad') or 0))
+        self.e2e_gsp_pred_mean.append(float(diag.get('gsp_pred_mean', 0)))
+        self.e2e_gsp_pred_std.append(float(diag.get('gsp_pred_std', 0)))
+        self.e2e_gsp_label_mean.append(float(diag.get('gsp_label_mean', 0)))
+        self.e2e_gsp_label_std.append(float(diag.get('gsp_label_std', 0)))
 
     def record_gsp_loss(self, loss_value: float) -> None:
         """Record one GSP prediction network training loss sample.
@@ -164,6 +190,28 @@ class HDF5Logger:
                 grp.create_dataset("gsp_loss", data=gsp_loss_arr,
                                    compression="gzip", compression_opts=4)
 
+            # E2E per-learn-step diagnostics (schema v3+).
+            e2e_fields = [
+                ('e2e_ddqn_loss', self.e2e_ddqn_loss),
+                ('e2e_gsp_mse_loss', self.e2e_gsp_mse_loss),
+                ('e2e_total_loss', self.e2e_total_loss),
+                ('e2e_gsp_grad_norm', self.e2e_gsp_grad_norm),
+                ('e2e_gsp_grad_norm_pre_clip', self.e2e_gsp_grad_norm_pre_clip),
+                ('e2e_ddqn_grad_norm', self.e2e_ddqn_grad_norm),
+                ('e2e_gsp_input_grad', self.e2e_gsp_input_grad),
+                ('e2e_gsp_pred_mean', self.e2e_gsp_pred_mean),
+                ('e2e_gsp_pred_std', self.e2e_gsp_pred_std),
+                ('e2e_gsp_label_mean', self.e2e_gsp_label_mean),
+                ('e2e_gsp_label_std', self.e2e_gsp_label_std),
+            ]
+            for key, data in e2e_fields:
+                if data:
+                    arr = np.array(data, dtype=np.float32)
+                    grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
+            if self.e2e_gsp_grad_norm:
+                grp.attrs["e2e_gsp_grad_norm_mean"] = float(np.mean(self.e2e_gsp_grad_norm))
+                grp.attrs["e2e_gsp_pred_std_mean"] = float(np.mean(self.e2e_gsp_pred_std))
+
             # Termination as bool
             term_arr = np.array(self.termination, dtype=bool)
             if term_arr.size > 0:
@@ -192,7 +240,8 @@ class HDF5Logger:
             # to know which metrics are computable for this run vs gaps.
             # v1 — implicit (pre-2026-04-15); treated as default in analyzer
             # v2 — 2026-04-15: explicit log_schema_version attr added
-            grp.attrs["log_schema_version"] = 2
+            # v3 — 2026-04-15: e2e diagnostics (11 per-learn-step metrics) added
+            grp.attrs["log_schema_version"] = 3
             grp.attrs["episode_num"] = episode_num
             grp.attrs["timesteps"] = timesteps
             grp.attrs["success"] = success

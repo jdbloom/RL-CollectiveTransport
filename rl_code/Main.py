@@ -534,6 +534,10 @@ try:
                                 ]
                                 if gsp_losses:
                                     hdf5_writer.record_gsp_loss(float(np.mean(gsp_losses)))
+                                if config.get('GSP_E2E_ENABLED'):
+                                    e2e_diag = getattr(models[0], 'last_e2e_diagnostics', None)
+                                    if e2e_diag is not None:
+                                        hdf5_writer.record_e2e_diagnostics(e2e_diag)
                             else:
                                 loss = model.learn()
                                 if isinstance(loss, tuple):
@@ -541,6 +545,10 @@ try:
                                 gsp_step_loss = getattr(model, "last_gsp_loss", None)
                                 if gsp_step_loss is not None:
                                     hdf5_writer.record_gsp_loss(gsp_step_loss)
+                                if config.get('GSP_E2E_ENABLED'):
+                                    e2e_diag = getattr(model, 'last_e2e_diagnostics', None)
+                                    if e2e_diag is not None:
+                                        hdf5_writer.record_e2e_diagnostics(e2e_diag)
                         else:
                             loss = 0
                     else:
