@@ -202,6 +202,10 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "GSP_VICREG_ENABLED": False,
         "GSP_VICREG_VAR_COEF": 1.0,
         "GSP_VICREG_COV_COEF": 0.04,
+        # End-to-end GSP training (2026-04-16, DIAL pattern).
+        "GSP_E2E_ENABLED": False,
+        "GSP_E2E_LAMBDA": 1.0,
+        "GSP_E2E_LINEAR_OUTPUT": False,
     }
 
 
