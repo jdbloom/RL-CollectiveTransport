@@ -67,6 +67,16 @@ class HDF5Logger:
         # head on the same (input, label) pairs the live training saw — answering
         # "can the head learn at all when RL coupling and exploration are removed?"
         self.gsp_obs = []
+        # Per-episode diagnostic scalars (FAU / weight norms / effective rank / Q-gap
+        # / pred diversity). Namespaced keys prefixed with diag_*. Populated by
+        # record_episode_diagnostics() once per diagnostic episode; written as HDF5
+        # attrs on the episode group. See
+        # docs/specs/2026-04-17-diagnostics-instrumentation.md for the full key list.
+        self.episode_diagnostics: dict = {}
+        # Fixed eval-batch states used for diagnostic computations. Stored as a
+        # dataset on whichever episode first records them so reanalysis can
+        # reconstruct exactly what was measured.
+        self.eval_batch_states = None
         # E2E learning diagnostics: per-learn-step metrics from learn_DDQN_e2e.
         self.e2e_ddqn_loss = []
         self.e2e_gsp_mse_loss = []
@@ -145,6 +155,33 @@ class HDF5Logger:
         Called per GSP learning step (cadence differs from per-timestep writerow).
         """
         self.gsp_loss.append(float(loss_value))
+
+    def record_episode_diagnostics(self, diag: dict) -> None:
+        """Record per-episode diagnostic scalars (FAU, weight norms, effective rank,
+        Q-gap, pred diversity, etc.).
+
+        Merges into the current episode's diagnostic dict; later calls with the
+        same key overwrite earlier values. All keys must be prefixed with ``diag_``
+        by convention — they will be persisted as HDF5 attrs on the episode group
+        when ``write_episode`` is called. ``_reset`` clears the dict between
+        episodes so diagnostics never leak across episodes.
+
+        See docs/specs/2026-04-17-diagnostics-instrumentation.md for the canonical
+        key list.
+        """
+        for k, v in diag.items():
+            # Coerce to Python float for h5 attr compatibility; NaNs are allowed.
+            self.episode_diagnostics[k] = float(v)
+
+    def record_eval_batch_states(self, states) -> None:
+        """Record the fixed eval-batch states used for diagnostic computations.
+
+        Typically called once, on the episode where the eval batch is first frozen
+        (e.g. episode 50 per the diagnostics spec). The states are persisted as
+        a float32 dataset ``diag_eval_batch_states`` on that episode's group so
+        later reanalysis can reconstruct exactly what was measured.
+        """
+        self.eval_batch_states = np.asarray(states, dtype=np.float32)
 
     def write_episode(self, episode_num: int) -> dict:
         """Write accumulated data to HDF5 and return summary dict.
@@ -266,6 +303,22 @@ class HDF5Logger:
             grp.attrs["success"] = success
             grp.attrs["reward_per_robot"] = reward_per_robot
             grp.attrs["gsp_reward_per_robot"] = gsp_per_robot
+
+            # Per-episode diagnostic attrs (FAU / weight norms / effective rank /
+            # Q-gap / pred diversity). Only written on episodes where
+            # record_episode_diagnostics was called since the last _reset.
+            for k, v in self.episode_diagnostics.items():
+                grp.attrs[k] = float(v)
+
+            # Fixed eval-batch states (typically only on the episode that first
+            # freezes the batch — ep 50 by default per the diagnostics spec).
+            if self.eval_batch_states is not None:
+                grp.create_dataset(
+                    "diag_eval_batch_states",
+                    data=self.eval_batch_states,
+                    compression="gzip",
+                    compression_opts=4,
+                )
 
             # Information-collapse summary attrs. Computed only when both prediction
             # (gsp_heading) and target (gsp_target) are present. The caller contract is
