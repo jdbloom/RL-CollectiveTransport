@@ -95,6 +95,16 @@ data_file_path = recording_path + '/Data/'
 hdf5_path = os.path.join(recording_path, os.path.basename(recording_path) + ".h5")
 hdf5_writer = HDF5Logger(hdf5_path)
 
+# Per-episode diagnostics (FAU / weight norms / effective rank / Q-gap / pred
+# diversity). Opt-in via config['DIAGNOSTICS_ENABLED']. The rolling gsp_obs_pool
+# buffers recent head-input vectors so the eval batch for GSP diagnostics can
+# be drawn from the same distribution the head actually sees during training.
+# Cap at max size so memory stays bounded on long runs.
+_DIAG_POOL_MAX_SIZE = 8192
+diag_gsp_obs_pool: list = []
+diag_eval_batch_frozen: bool = False
+diag_episode_predictions: list = []  # per-step GSP predictions this episode, reset each ep
+
 if args.share_prox_values:
     num_obs = Utility.params['num_obs'] +Utility.params['num_robots']   #need to account for num_robots extra observations
 elif args.global_knowledge:
@@ -608,6 +618,22 @@ try:
                                     gsp_target=gsp_target_per_robot, gsp_squared_error=gsp_squared_error,
                                     gsp_obs=gsp_obs_per_robot)
 
+                    # Populate diagnostics pools from the live training loop.
+                    # See docs/specs/2026-04-17-diagnostics-instrumentation.md.
+                    if getattr(model, 'diagnostics_enabled', False):
+                        # Rolling pool of recent GSP head inputs (one per robot per step).
+                        # Capped to keep memory bounded on long runs.
+                        if gsp_obs_per_robot is not None:
+                            for obs in gsp_obs_per_robot:
+                                diag_gsp_obs_pool.append(np.asarray(obs, dtype=np.float32))
+                            while len(diag_gsp_obs_pool) > _DIAG_POOL_MAX_SIZE:
+                                diag_gsp_obs_pool.pop(0)
+                        # Accumulate this-episode GSP predictions for the diversity entropy metric.
+                        if next_heading_gsp is not None:
+                            diag_episode_predictions.extend(
+                                float(v) for v in np.asarray(next_heading_gsp, dtype=np.float32).ravel()
+                            )
+
                     if episode_done:
                         if args.independent_learning:
                             for m in models:
@@ -617,6 +643,49 @@ try:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
                         run_time = time.time() - episode_start_time
+
+                        # Per-episode diagnostics hook. Runs before write_episode so the
+                        # diag_* attrs and the (optional) diag_eval_batch_states dataset
+                        # land on the same episode group. Gated on DIAGNOSTICS_ENABLED.
+                        if getattr(model, 'diagnostics_enabled', False):
+                            freeze_ep = getattr(model, 'diagnostics_freeze_episode', 50)
+                            cadence = getattr(model, 'diagnostics_cadence', 10)
+                            # Freeze the eval batch once, on/after freeze_ep, when the
+                            # replay buffer is big enough and the gsp_obs pool has ≥
+                            # batch_size samples.
+                            if (
+                                not diag_eval_batch_frozen
+                                and ep_counter >= freeze_ep
+                            ):
+                                pool_np = (
+                                    np.stack(diag_gsp_obs_pool)
+                                    if len(diag_gsp_obs_pool) >= model.diagnostics_batch_size
+                                    else None
+                                )
+                                model.freeze_diagnostic_batch(gsp_obs_pool=pool_np)
+                                if getattr(model, 'diag_actor_eval_batch', None) is not None:
+                                    diag_eval_batch_frozen = True
+                                    hdf5_writer.record_eval_batch_states(
+                                        model.diag_actor_eval_batch
+                                    )
+                            # Compute diagnostics on the cadence schedule once frozen.
+                            if (
+                                diag_eval_batch_frozen
+                                and (ep_counter - freeze_ep) % cadence == 0
+                            ):
+                                preds = (
+                                    np.asarray(diag_episode_predictions, dtype=np.float32)
+                                    if diag_episode_predictions
+                                    else None
+                                )
+                                diag_result = model.compute_diagnostics(
+                                    gsp_predictions_this_episode=preds
+                                )
+                                if diag_result:
+                                    hdf5_writer.record_episode_diagnostics(diag_result)
+                            # Reset per-episode prediction accumulator regardless of cadence.
+                            diag_episode_predictions = []
+
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
                         # gate was always-true dead code. Removed during the same cleanup
                         # that dropped the data_logger references.
