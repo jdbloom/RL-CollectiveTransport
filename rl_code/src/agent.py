@@ -165,13 +165,22 @@ class Agent(Actor):
         # print('cyl_dist2goal   ', env_obs[6])
 
         if heading_gsp is not None:
-            if global_knowledge is not None:
-                env_obs = np.concatenate((env_obs, np.array([np.degrees(heading_gsp/10)]), global_knowledge)) 
+            # H-14 GSP-minus ablation: if the zero-out flag is set, the GSP slot
+            # in the actor's augmented observation is forced to 0 regardless of
+            # what the GSP head predicted. The head itself still runs and trains
+            # normally; only the signal path from head to actor is severed.
+            # This is the QMIP-minus test of "does the prediction contribute?".
+            if getattr(self, 'gsp_zero_out_signal', False):
+                gsp_slot = np.array([0.0])
             else:
-                env_obs = np.concatenate((env_obs, np.array([np.degrees(heading_gsp/10)]))) 
+                gsp_slot = np.array([np.degrees(heading_gsp/10)])
+            if global_knowledge is not None:
+                env_obs = np.concatenate((env_obs, gsp_slot, global_knowledge))
+            else:
+                env_obs = np.concatenate((env_obs, gsp_slot))
         elif global_knowledge is not None:
             env_obs = np.concatenate((env_obs, global_knowledge))
-        return env_obs   
+        return env_obs
     
     def make_gsp_states_broadcast(self, agent_prox_values, agent_prev_gsp):
         """Build per-agent GSP inputs for GSP-B (full-broadcast variant).
