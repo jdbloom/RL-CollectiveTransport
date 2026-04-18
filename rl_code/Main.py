@@ -424,14 +424,30 @@ try:
                             if config.get('GSP_E2E_ENABLED'):
                                 for i in range(Utility.params['num_robots']):
                                     e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
-                            for i in range(Utility.params['num_robots']):
-                                if np.sum(state_prox_flags[i]) > 0 and stats[i][0] > force_thr:
-                                    if model.gsp_networks['learning_scheme'] == 'attention':
-                                        model.store_gsp_transition(states[i], label, 0, 0, 0)
-                                    else:
-                                        state = states[i]
-                                        new_state = new_states[i]
-                                        model.store_gsp_transition(state, label, 0, new_state, 0)
+
+                            # Candidate A: future-prox target — store transitions with per-robot
+                            # prox K steps ahead as the label, instead of the shared Δθ scalar.
+                            # Buffer accumulates (state_t) snapshots; only when matured at t+K
+                            # do we have (state_{t-K}, prox_t) pairs to store.
+                            if getattr(model, 'gsp_prediction_target', 'delta_theta') == 'future_prox':
+                                model.push_pending_gsp_obs(states, states)
+                                matured = model.pop_matured_gsp_label(
+                                    np.asarray(agent_prox_flags, dtype=np.float32)
+                                )
+                                if matured is not None:
+                                    for i in range(Utility.params['num_robots']):
+                                        s_to_store = matured['state_per_robot'][i]
+                                        label_to_store = float(matured['label_per_robot'][i])
+                                        model.store_gsp_transition(s_to_store, label_to_store, 0, s_to_store, 0)
+                            else:
+                                for i in range(Utility.params['num_robots']):
+                                    if np.sum(state_prox_flags[i]) > 0 and stats[i][0] > force_thr:
+                                        if model.gsp_networks['learning_scheme'] == 'attention':
+                                            model.store_gsp_transition(states[i], label, 0, 0, 0)
+                                        else:
+                                            state = states[i]
+                                            new_state = new_states[i]
+                                            model.store_gsp_transition(state, label, 0, new_state, 0)
                         elif model.gsp_broadcast:
                             states = model.make_gsp_states_broadcast(old_agent_prox_flags, neighbors_old_heading_gsp)
                             new_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
@@ -639,9 +655,13 @@ try:
                             for m in models:
                                 if hasattr(m, 'reset_hidden_states'):
                                     m.reset_hidden_states()
+                                if hasattr(m, 'reset_gsp_label_buffer'):
+                                    m.reset_gsp_label_buffer()
                         else:
                             if hasattr(model, 'reset_hidden_states'):
                                 model.reset_hidden_states()
+                            if hasattr(model, 'reset_gsp_label_buffer'):
+                                model.reset_gsp_label_buffer()
                         run_time = time.time() - episode_start_time
 
                         # Per-episode diagnostics hook. Runs before write_episode so the

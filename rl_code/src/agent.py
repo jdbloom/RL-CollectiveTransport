@@ -7,7 +7,7 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
-from collections import namedtuple
+from collections import deque, namedtuple
 from torch.optim import Adam
 
 
@@ -107,7 +107,15 @@ class Agent(Actor):
                                        -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
         if self._neighbors:
             self.build_neighbors()
-        
+
+        # Candidate A — future-prox delayed-label buffer. Active only when
+        # GSP_PREDICTION_TARGET == 'future_prox'. Stores (state_per_robot,
+        # gsp_obs_per_robot) snapshots so that K steps later we can pair the
+        # snapshot with the robot's own current proximity reading as the label.
+        # FIFO of length up to K+1 — once full, push followed by pop yields
+        # the K-step-ago entry. K=GSP_PREDICTION_HORIZON.
+        self._gsp_label_buffer: deque = deque()
+
     @property
     def gsp_neighbors(self):
         return self._neighbors
@@ -124,6 +132,37 @@ class Agent(Actor):
         """Reset all per-agent LSTM hidden states. Call at episode boundaries."""
         for i in self._agent_hidden_states:
             self._agent_hidden_states[i] = None
+
+    def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot):
+        """Future-prox mode: snapshot per-robot (state, gsp_obs) for label maturation
+        K steps later. No-op when target != 'future_prox'."""
+        if getattr(self, 'gsp_prediction_target', 'delta_theta') != 'future_prox':
+            return
+        self._gsp_label_buffer.append({
+            'state_per_robot': [np.asarray(s).copy() for s in state_per_robot],
+            'gsp_obs_per_robot': [np.asarray(g).copy() for g in gsp_obs_per_robot],
+        })
+
+    def pop_matured_gsp_label(self, current_prox_per_robot):
+        """Future-prox mode: if buffer has K+1 entries, pop the oldest snapshot and
+        return it paired with current per-robot prox as the label. Returns None when
+        buffer is too small or target != 'future_prox'."""
+        if getattr(self, 'gsp_prediction_target', 'delta_theta') != 'future_prox':
+            return None
+        K = getattr(self, 'gsp_prediction_horizon', 5)
+        if len(self._gsp_label_buffer) < K + 1:
+            return None
+        oldest = self._gsp_label_buffer.popleft()
+        return {
+            'state_per_robot': oldest['state_per_robot'],
+            'gsp_obs_per_robot': oldest['gsp_obs_per_robot'],
+            'label_per_robot': np.asarray(current_prox_per_robot, dtype=np.float32).copy(),
+        }
+
+    def reset_gsp_label_buffer(self):
+        """Future-prox mode: clear the buffer. Call at episode boundaries so labels
+        from the previous episode never bleed into the next."""
+        self._gsp_label_buffer.clear()
 
     def build_neighbors(self):
         agents_available = np.arange(self.n_agents)
