@@ -662,6 +662,30 @@ try:
                                 model.reset_hidden_states()
                             if hasattr(model, 'reset_gsp_label_buffer'):
                                 model.reset_gsp_label_buffer()
+
+                        # Phase 4 — cross-target plasticity-recovery hook.
+                        # GSP_TARGET_SWITCH_AT_EP: episode at which the GSP prediction
+                        # target is swapped. GSP_TARGET_SWITCH_TO: the new target string.
+                        # Default values (0, '') keep the conditional permanently False,
+                        # making this a strict no-op for all historical runs.
+                        # Only applies to shared-model mode (not independent_learning)
+                        # because independent models would each need their own switch
+                        # logic and the OCP experiment is a single-model investigation.
+                        _switch_at = int(config.get('GSP_TARGET_SWITCH_AT_EP', 0))
+                        _switch_to = str(config.get('GSP_TARGET_SWITCH_TO', ''))
+                        if (not args.independent_learning
+                                and _switch_at > 0
+                                and ep_counter == _switch_at
+                                and _switch_to
+                                and hasattr(model, 'gsp_prediction_target')):
+                            old_target = model.gsp_prediction_target
+                            model.gsp_prediction_target = _switch_to
+                            model.reset_gsp_label_buffer()
+                            log.info(
+                                "GSP target switched at ep %d: %s -> %s",
+                                ep_counter, old_target, _switch_to,
+                            )
+
                         run_time = time.time() - episode_start_time
 
                         # Per-episode diagnostics hook. Runs before write_episode so the
