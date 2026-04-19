@@ -188,6 +188,17 @@ obstacles = 0
 obstacle_stats = 0
 ep_ticks = 0
 
+# GSP_OUTPUT_KIND — multi-target label computation support.
+# Read once at startup; default preserves legacy behavior.
+_gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
+
+# Input enrichment flags — need to pass env_observations to make_gsp_states
+# when any flag is active. Read once so the hot loop avoids repeated dict lookup.
+_gsp_input_include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
+_gsp_input_include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False))
+_gsp_input_full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
+_gsp_input_needs_env_obs = _gsp_input_include_goal or _gsp_input_include_cyl_rel or _gsp_input_full_prox
+
 try:
     while not exp_done:
         #receive initial observations
@@ -209,6 +220,16 @@ try:
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
             old_cyl_ang = obj_stats[5]
+
+            # Multi-target label state tracking (GSP_OUTPUT_KIND != delta_theta_1d).
+            # prev_obj_stats: cylinder position/heading snapshot from previous step,
+            #   used to compute (cyl_Δx, cyl_Δy, cyl_Δθ) for cyl_kinematics_* kinds.
+            # prev_cyl_dist2goal: cyl_dist2goal at previous step, used to compute
+            #   group_centroid_Δ_to_goal via -Δ(cyl_dist2goal).
+            # ep_step_counter: step count within current episode for time_to_goal_1d.
+            prev_obj_stats = obj_stats.copy()
+            prev_cyl_dist2goal = float(env_observations[0][6]) if len(env_observations) > 0 else 0.0
+            ep_step_counter = 0
 
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
@@ -368,9 +389,50 @@ try:
                     )
                     # print('[MAIN] GSP Reward', gsp_reward)
                     # print('[MAIN] GSP Label ', label)
+
+                    # Multi-target label computation (GSP_OUTPUT_KIND).
+                    # Computed once per timestep; stored per robot in the GSP
+                    # transition store block below. The scalar `label` from
+                    # calculate_gsp_reward is still used for logging/reward.
+                    ep_step_counter += 1
+                    if _gsp_output_kind == 'cyl_kinematics_3d':
+                        # (cyl_Δx, cyl_Δy, cyl_Δθ): delta cylinder position + heading
+                        # obj_stats: [0]=x_pos, [1]=y_pos, [5]=z_deg (heading)
+                        _multi_label = np.array([
+                            float(obj_stats[0]) - float(prev_obj_stats[0]),  # Δx
+                            float(obj_stats[1]) - float(prev_obj_stats[1]),  # Δy
+                            float(obj_stats[5]) - float(prev_obj_stats[5]),  # Δθ
+                        ], dtype=np.float32)
+                    elif _gsp_output_kind == 'cyl_kinematics_goal_4d':
+                        # (cyl_Δx, cyl_Δy, cyl_Δθ, group_centroid_Δ_to_goal)
+                        # group_centroid_Δ_to_goal: negative change in cyl_dist2goal
+                        # (positive = centroid moved toward goal).
+                        curr_cyl_dist2goal = float(env_observations[0][6]) if len(env_observations) > 0 else 0.0
+                        _centroid_delta_to_goal = prev_cyl_dist2goal - curr_cyl_dist2goal
+                        _multi_label = np.array([
+                            float(obj_stats[0]) - float(prev_obj_stats[0]),  # Δx
+                            float(obj_stats[1]) - float(prev_obj_stats[1]),  # Δy
+                            float(obj_stats[5]) - float(prev_obj_stats[5]),  # Δθ
+                            _centroid_delta_to_goal,
+                        ], dtype=np.float32)
+                        prev_cyl_dist2goal = curr_cyl_dist2goal
+                    elif _gsp_output_kind == 'time_to_goal_1d':
+                        # Regression on remaining episode steps until success.
+                        # At success (reached_goal=True) this is 0; otherwise we
+                        # don't know the future horizon, so we use 0 for non-terminal
+                        # steps and record 0 at success. This is a sparse target but
+                        # computable without lookahead.
+                        _multi_label = np.array([0.0 if reached_goal else 0.0], dtype=np.float32)
+                    else:
+                        # delta_theta_1d or future_prox_1d: scalar label unchanged
+                        _multi_label = np.array([label], dtype=np.float32)
+
+                    # Update previous cylinder stats for next step's delta computation.
+                    prev_obj_stats = obj_stats.copy()
+
                     e2e_gsp_label = None
                     if config.get('GSP_E2E_ENABLED'):
-                        e2e_gsp_label = np.array([label], dtype=np.float32)
+                        e2e_gsp_label = _multi_label
                     for i in range(len(gsp_reward)):
                         episode_gsp_rewards[i] += gsp_reward[i]
 
@@ -414,7 +476,12 @@ try:
                                 next_heading_gsp[i] = next_object_heading[i]
                         else:
                             if model.gsp_neighbors:
-                                agent_gsp_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                                # Pass env_observations when input enrichment flags are active.
+                                _env_obs_arg = env_observations if _gsp_input_needs_env_obs else None
+                                agent_gsp_states = model.make_gsp_states(
+                                    agent_prox_flags, old_heading_gsp,
+                                    env_observations=_env_obs_arg,
+                                )
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
                             elif model.gsp_broadcast:
@@ -442,8 +509,15 @@ try:
                         # 0.0 = filter disabled (legacy behavior).
                         force_thr = float(config.get('GSP_STORE_FORCE_THRESHOLD', 0.0))
                         if model.gsp_neighbors:
-                            states, state_prox_flags = model.make_gsp_states(old_agent_prox_flags, neighbors_old_heading_gsp, True)
-                            new_states = model.make_gsp_states(agent_prox_flags, old_heading_gsp)
+                            _env_obs_arg = env_observations if _gsp_input_needs_env_obs else None
+                            states, state_prox_flags = model.make_gsp_states(
+                                old_agent_prox_flags, neighbors_old_heading_gsp, True,
+                                env_observations=_env_obs_arg,
+                            )
+                            new_states = model.make_gsp_states(
+                                agent_prox_flags, old_heading_gsp,
+                                env_observations=_env_obs_arg,
+                            )
                             if config.get('GSP_E2E_ENABLED'):
                                 for i in range(Utility.params['num_robots']):
                                     e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
@@ -463,6 +537,11 @@ try:
                                         label_to_store = float(matured['label_per_robot'][i])
                                         model.store_gsp_transition(s_to_store, label_to_store, 0, s_to_store, 0)
                             else:
+                                # Multi-target label: use _multi_label for all non-future_prox kinds.
+                                # For scalar kinds (_multi_label.size==1) the store_gsp_transition
+                                # call is identical to the legacy path. For vector kinds, the numpy
+                                # array is stored as the action field in the replay buffer.
+                                _label_to_store = _multi_label if _multi_label.size > 1 else float(_multi_label[0])
                                 for i in range(Utility.params['num_robots']):
                                     if np.sum(state_prox_flags[i]) > 0 and stats[i][0] > force_thr:
                                         if model.gsp_networks['learning_scheme'] == 'attention':
@@ -470,14 +549,16 @@ try:
                                         else:
                                             state = states[i]
                                             new_state = new_states[i]
-                                            model.store_gsp_transition(state, label, 0, new_state, 0)
+                                            model.store_gsp_transition(state, _label_to_store, 0, new_state, 0)
                         elif model.gsp_broadcast:
                             states = model.make_gsp_states_broadcast(old_agent_prox_flags, neighbors_old_heading_gsp)
                             new_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
+                            _label_to_store = _multi_label if _multi_label.size > 1 else float(_multi_label[0])
                             for i in range(Utility.params['num_robots']):
                                 if states[i][0] != 0 and stats[i][0] > force_thr:
-                                    model.store_gsp_transition(states[i], label, 0, new_states[i], 0)
+                                    model.store_gsp_transition(states[i], _label_to_store, 0, new_states[i], 0)
                         else:
+                            _label_to_store = _multi_label if _multi_label.size > 1 else float(_multi_label[0])
                             for i in range(Utility.params['num_robots']):
                                 state = np.array(old_agent_prox_flags)
                                 if np.sum(state) > 0 and stats[i][0] > force_thr:
@@ -485,10 +566,10 @@ try:
                                         model.store_gsp_transition(state, label, 0, 0, 0)
                                     elif args.independent_learning:
                                         new_state = np.array(agent_prox_flags)
-                                        models[i].store_gsp_transition(state, label, 0, new_state, 0)
+                                        models[i].store_gsp_transition(state, _label_to_store, 0, new_state, 0)
                                     else:
                                         new_state = np.array(agent_prox_flags)
-                                        model.store_gsp_transition(state, label, 0, new_state, 0)
+                                        model.store_gsp_transition(state, _label_to_store, 0, new_state, 0)
 
 
                     #Define Global Knowledge: [positions, velocities]
