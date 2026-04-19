@@ -14,6 +14,7 @@ from struct import pack, unpack, Struct
 import numpy as np
 import math
 
+import copy
 import zmq
 import csv
 import os
@@ -295,6 +296,28 @@ try:
             #
             # Start the Episode Loop
             #
+
+            # Churn diagnostic: snapshot network weights at episode start so that
+            # after the episode's learn steps complete we can measure activation
+            # churn (L2 distance of outputs before vs after). Only snapshot when
+            # diagnostics are enabled — zero overhead on legacy runs.
+            # Strategy: start-of-episode vs end-of-episode.  This captures the
+            # cumulative weight change across all learn steps within the episode
+            # (every learn_every timesteps), which is the most representative
+            # "update" the network actually received.  No extra learn call is
+            # triggered — we reuse the natural training boundary.
+            _churn_actor_before = None
+            _churn_gsp_before = None
+            if (not args.independent_learning
+                    and getattr(model, 'diagnostics_enabled', False)
+                    and getattr(model, 'diagnose_churn', True)):
+                _actor_net = model._main_network(model.networks)
+                if _actor_net is not None:
+                    _churn_actor_before = copy.deepcopy(_actor_net.state_dict())
+                if model.gsp_networks is not None:
+                    _gsp_net = model._main_network(model.gsp_networks)
+                    if _gsp_net is not None:
+                        _churn_gsp_before = copy.deepcopy(_gsp_net.state_dict())
 
             episode_start_time = time.time()
             while not episode_done:
@@ -722,8 +745,32 @@ try:
                                     if diag_episode_predictions
                                     else None
                                 )
+                                # Capture end-of-episode snapshots for churn computation.
+                                # The "after" snapshot is taken here — after all in-episode
+                                # learn steps have completed — paired with the "before"
+                                # snapshot taken at episode start above. This gives churn
+                                # over the episode's cumulative weight update with zero
+                                # extra learn calls.
+                                _churn_actor_after = None
+                                _churn_gsp_after = None
+                                if getattr(model, 'diagnose_churn', True):
+                                    _actor_net = model._main_network(model.networks)
+                                    if _actor_net is not None:
+                                        _churn_actor_after = copy.deepcopy(
+                                            _actor_net.state_dict()
+                                        )
+                                    if model.gsp_networks is not None:
+                                        _gsp_net = model._main_network(model.gsp_networks)
+                                        if _gsp_net is not None:
+                                            _churn_gsp_after = copy.deepcopy(
+                                                _gsp_net.state_dict()
+                                            )
                                 diag_result = model.compute_diagnostics(
-                                    gsp_predictions_this_episode=preds
+                                    gsp_predictions_this_episode=preds,
+                                    actor_before_state_dict=_churn_actor_before,
+                                    actor_after_state_dict=_churn_actor_after,
+                                    gsp_before_state_dict=_churn_gsp_before,
+                                    gsp_after_state_dict=_churn_gsp_after,
                                 )
                                 if diag_result:
                                     hdf5_writer.record_episode_diagnostics(diag_result)
