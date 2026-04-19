@@ -50,11 +50,50 @@ class Agent(Actor):
             # GSP-B: each agent's view is (self_prox, self_prev_gsp) + (other_prox, other_prev_gsp)
             # for all (n_agents - 1) other agents. Total 2*n_agents. Known limitation:
             # coupled to team size, not transferable across num_robots.
-            gsp_input_size = 2 * n_agents  
+            gsp_input_size = 2 * n_agents
+
+        # Input enrichment flags (Change 2). Computed before super().__init__ so
+        # the effective gsp_input_size can be passed to the parent Actor constructor.
+        # Each flag adds extra dimensions to the per-agent slice in make_gsp_states.
+        _include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
+        _include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False))
+        _full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
+        # Base slot: self_avg_prox (1) + self_prev_gsp (1) + 2 per neighbor pair
+        # When neighbors=True, gsp_input_size is already the base neighbor layout.
+        # Enrichment flags are additive on top of the base per-agent layout:
+        #   GSP_INPUT_INCLUDE_GOAL:    +2 per agent (cos/sin of angle_to_goal)
+        #   GSP_INPUT_INCLUDE_CYL_REL: +2 per agent (dist_to_cyl, angle_to_cyl)
+        #   GSP_INPUT_FULL_PROX:       replace avg_prox(1) with raw_prox(24) → net +23
+        #
+        # For the GSP-N layout each agent's slot is 2 (self_prox, self_prev_gsp).
+        # The additions are per-slot, not per-neighbor. We compute the enrichment
+        # delta per agent slot and multiply by the number of slots (1 self + N neighbors).
+        if neighbors and (gsp_input_size > 0):
+            n_slots = 1 + n_hop_neighbors * 2  # self + neighbors
+        else:
+            n_slots = 1  # non-neighbors: single shared state vector (not per-agent slots)
+        _extra_per_slot = (2 if _include_goal else 0) + (2 if _include_cyl_rel else 0)
+        _prox_delta = 23 if _full_prox else 0  # replace 1 avg_prox with 24 raw_prox
+        if neighbors:
+            # Only self-slot gets enrichment; neighbor slots keep their (prox, gsp) layout.
+            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta
+        else:
+            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta
 
         output_size = n_actions
         if network in ['DQN', 'DDQN']:
             output_size = options_per_action**n_actions
+
+        # Store enrichment flags before super().__init__ so make_gsp_states
+        # can reference them. They must be set BEFORE the Actor constructor runs
+        # because Actor.__init__ → NetworkAids.__init__ → Hyperparameters.__init__
+        # only reads config keys, not these attributes; we set them here directly.
+        # (They are also stored on self after super() returns — this pre-assignment
+        # is to make them available if any super().__init__ code calls back into
+        # Agent methods, which currently does not happen but guards future changes.)
+        self._gsp_input_include_goal = _include_goal
+        self._gsp_input_include_cyl_rel = _include_cyl_rel
+        self._gsp_input_full_prox = _full_prox
 
         gsp_rl_args = {
             'config': config,
@@ -174,45 +213,31 @@ class Agent(Actor):
             self.neighbors_dict[agent] = neighbors
     
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
-        # robot_cos_to_goal = math.cos(env_obs[1])
-        # robot_sin_to_goal = math.sin(env_obs[1])
-        # robot_tan_to_goal = math.tan(env_obs[1])
-
-        # cyl_cos_to_goal = math.cos(env_obs[5])
-        # cyl_sin_to_goal = math.sin(env_obs[5])
-        # cyl_tan_to_goal = math.tan(env_obs[5])
-
-        # anlges = np.array((
-        #     robot_cos_to_goal, 
-        #     robot_sin_to_goal,
-        #     robot_tan_to_goal,
-        #     cyl_cos_to_goal,
-        #     cyl_sin_to_goal,
-        #     cyl_tan_to_goal
-        # ))
-        # env_obs = np.concatenate((env_obs, anlges))
-        # # Normalize the angles
-        # env_obs[1] /= math.pi
-        # env_obs[5] /= math.pi
-        # print('===============================')
-        # print('robot_dist2goal ', env_obs[0])
-        # print('robot_angle2goal', env_obs[1])
-        # print('robot_lwheel    ', env_obs[2])
-        # print('robot_rwheel    ', env_obs[3])
-        # print('cyl_dist2robot  ', env_obs[4])
-        # print('cyl_angle2robot ', env_obs[5])
-        # print('cyl_dist2goal   ', env_obs[6])
-
         if heading_gsp is not None:
             # H-14 GSP-minus ablation: if the zero-out flag is set, the GSP slot
-            # in the actor's augmented observation is forced to 0 regardless of
+            # in the actor's augmented observation is forced to zeros regardless of
             # what the GSP head predicted. The head itself still runs and trains
             # normally; only the signal path from head to actor is severed.
             # This is the QMIP-minus test of "does the prediction contribute?".
             if getattr(self, 'gsp_zero_out_signal', False):
-                gsp_slot = np.array([0.0])
+                gsp_output_size = getattr(self, 'gsp_network_output', 1)
+                gsp_slot = np.zeros(gsp_output_size, dtype=np.float32)
             else:
-                gsp_slot = np.array([np.degrees(heading_gsp/10)])
+                # Multi-dim GSP output support (Change 1 — GSP_OUTPUT_KIND):
+                # heading_gsp may be a scalar (legacy, O=1) or a numpy array (O>1).
+                # For the legacy scalar case, apply the historical degrees/10 scaling
+                # so that network weights trained on 'delta_theta_1d' are compatible.
+                # For vector cases (cyl_kinematics_3d/goal_4d/time_to_goal_1d) the
+                # values are already in physical units from the label computation in
+                # Main.py and are concatenated as-is (no extra scaling).
+                heading_gsp_arr = np.asarray(heading_gsp, dtype=np.float32)
+                if heading_gsp_arr.ndim == 0 or heading_gsp_arr.size == 1:
+                    # Scalar path — preserve legacy degrees/10 normalization.
+                    scalar_val = float(heading_gsp_arr.ravel()[0])
+                    gsp_slot = np.array([np.degrees(scalar_val / 10)], dtype=np.float32)
+                else:
+                    # Vector path — physical units from label computation, no rescaling.
+                    gsp_slot = heading_gsp_arr.ravel()
             if global_knowledge is not None:
                 env_obs = np.concatenate((env_obs, gsp_slot, global_knowledge))
             else:
@@ -255,21 +280,83 @@ class Agent(Actor):
             states.append(agent_state)
         return states
 
-    def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags = False):
+    def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags=False,
+                        env_observations=None):
+        """Build per-agent GSP input vectors for GSP-N (neighbor) variant.
+
+        Base layout per agent (2 dims for self + 2 per neighbor pair):
+            [self_avg_prox, self_prev_gsp, n0_prox, n0_prev_gsp, ...]
+
+        Optional enrichment (Change 2 — GSP_INPUT_INCLUDE_* flags):
+            GSP_INPUT_INCLUDE_GOAL:    appends (cos(angle_to_goal), sin(angle_to_goal))
+                                       to the self-slot using env_observations[i][1].
+            GSP_INPUT_INCLUDE_CYL_REL: appends (dist_to_cyl, angle_to_cyl) to the
+                                       self-slot using env_observations[i][4:6].
+            GSP_INPUT_FULL_PROX:       replaces self_avg_prox (1 value) with the full
+                                       24-dim raw proximity vector from
+                                       env_observations[i][7:31], net +23 dims.
+
+        Enrichment only applies to the self-slot; neighbor slots always stay at their
+        compact (prox, prev_gsp) layout — those agents' goal/cyl data is unavailable
+        from the current agent's perspective in a decentralized system.
+
+        Args:
+            agent_prox_values: per-agent averaged (filtered) proximity scalars.
+            agent_prev_gsp: per-agent previous GSP prediction scalars.
+            return_prox_flags: if True, also return the flat list of prox values used.
+            env_observations: list of raw per-robot observation vectors from ARGoS.
+                Required when any GSP_INPUT_INCLUDE_* or GSP_INPUT_FULL_PROX flag is
+                True; ignored otherwise. Indices used:
+                  [1]    — robot's angle to goal (radians)
+                  [4]    — cyl distance to robot
+                  [5]    — cyl angle to robot (radians)
+                  [7:31] — 24-dim raw proximity readings (when GSP_INPUT_FULL_PROX)
+        """
+        include_goal = getattr(self, '_gsp_input_include_goal', False)
+        include_cyl_rel = getattr(self, '_gsp_input_include_cyl_rel', False)
+        full_prox = getattr(self, '_gsp_input_full_prox', False)
+        need_env_obs = include_goal or include_cyl_rel or full_prox
+
         states = []
         prox_flags = []
         for agent in range(self._n_agents):
             agent_state = np.zeros(self.gsp_network_input)
             neighbors = self.neighbors_dict[agent]
-            agent_state[0] = agent_prox_values[agent]
-            agent_state[1] = agent_prev_gsp[agent]
+
+            # --- Self slot ---
+            idx = 0
+            if full_prox and need_env_obs and env_observations is not None:
+                # Replace scalar avg_prox with full 24-dim raw prox vector.
+                raw_prox = np.asarray(env_observations[agent][7:31], dtype=np.float32)
+                agent_state[idx:idx + 24] = raw_prox
+                idx += 24
+            else:
+                agent_state[idx] = agent_prox_values[agent]
+                idx += 1
+            agent_state[idx] = agent_prev_gsp[agent]
+            idx += 1
             prox_flags.append(agent_prox_values[agent])
-            i=2
+
+            # Optional enrichment: goal direction (cos/sin of angle_to_goal)
+            if include_goal and need_env_obs and env_observations is not None:
+                angle_to_goal = float(env_observations[agent][1])
+                agent_state[idx] = math.cos(angle_to_goal)
+                agent_state[idx + 1] = math.sin(angle_to_goal)
+                idx += 2
+
+            # Optional enrichment: cylinder relative (dist_to_cyl, angle_to_cyl)
+            if include_cyl_rel and need_env_obs and env_observations is not None:
+                agent_state[idx] = float(env_observations[agent][4])
+                agent_state[idx + 1] = float(env_observations[agent][5])
+                idx += 2
+
+            # --- Neighbor slots (compact layout — no enrichment) ---
             for neighbor in neighbors:
-                agent_state[i] = agent_prox_values[neighbor]
-                agent_state[i+1] = agent_prev_gsp[neighbor]
+                agent_state[idx] = agent_prox_values[neighbor]
+                agent_state[idx + 1] = agent_prev_gsp[neighbor]
                 prox_flags.append(agent_prox_values[neighbor])
-                i+=2
+                idx += 2
+
             self.gsp_observation[agent].pop(0)
             self.gsp_observation[agent].append(agent_state)
             states.append(agent_state)
