@@ -231,6 +231,11 @@ try:
             prev_cyl_dist2goal = float(env_observations[0][6]) if len(env_observations) > 0 else 0.0
             ep_step_counter = 0
 
+            # Raw (pre-scale/clip) diff_rad accumulator for the 2026-04-20 signal-
+            # distribution diagnostic. Populated in the env.calculate_gsp_reward
+            # call inside the step loop; flushed to the episode HDF5 at episode_done.
+            _gsp_raw_diff_episode = []
+
             if Utility.params['num_obstacles'] > 0:
                 obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
             elif Utility.params['use_gate'] == 1:
@@ -380,13 +385,20 @@ try:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
 
                     ############################## gsp REWARD ##############################################
-                    gsp_reward, label, gsp_squared_error = calculate_gsp_reward(
+                    gsp_reward, label, gsp_squared_error, raw_diff_rad = calculate_gsp_reward(
                         config['GSP'],
                         old_cyl_ang,
                         obj_stats[5],
                         next_heading_gsp,
                         Utility.params['num_robots']
                     )
+                    # Diagnostic (2026-04-20 audit): accumulate raw per-step rotation
+                    # BEFORE the ×100 / clip[-1,1] step in env.calculate_gsp_reward.
+                    # Lets us measure the true signal distribution the supervised MSE
+                    # head is trying to predict and decide whether the current scaling
+                    # destroys the regression target.
+                    if _gsp_raw_diff_episode is not None:
+                        _gsp_raw_diff_episode.append(raw_diff_rad)
                     # print('[MAIN] GSP Reward', gsp_reward)
                     # print('[MAIN] GSP Label ', label)
 
@@ -857,6 +869,28 @@ try:
                                     hdf5_writer.record_episode_diagnostics(diag_result)
                             # Reset per-episode prediction accumulator regardless of cadence.
                             diag_episode_predictions = []
+
+                        # 2026-04-20 signal-distribution diagnostic: compute per-episode
+                        # stats of raw_diff_rad (pre-scale, pre-clip) to measure what the
+                        # supervised MSE target actually looks like before env.py applies
+                        # ×100 / clip[-1,1]. Answers: is the label-clipping destroying a
+                        # fine-grained signal, or capturing an already-saturated one?
+                        if _gsp_raw_diff_episode:
+                            _arr = np.asarray(_gsp_raw_diff_episode, dtype=np.float32)
+                            _abs = np.abs(_arr)
+                            _diag = {
+                                'diag_raw_diff_rad_mean': float(np.mean(_arr)),
+                                'diag_raw_diff_rad_std': float(np.std(_arr)),
+                                'diag_raw_diff_rad_abs_mean': float(np.mean(_abs)),
+                                'diag_raw_diff_rad_abs_p50': float(np.percentile(_abs, 50)),
+                                'diag_raw_diff_rad_abs_p95': float(np.percentile(_abs, 95)),
+                                'diag_raw_diff_rad_abs_max': float(np.max(_abs)),
+                                # Clip frac: fraction of steps where |diff*100| >= 1
+                                # (i.e., the label was saturated to ±1 after scaling).
+                                'diag_raw_diff_rad_clip_frac': float(np.mean(_abs >= 0.01)),
+                                'diag_raw_diff_rad_n_steps': float(len(_arr)),
+                            }
+                            hdf5_writer.record_episode_diagnostics(_diag)
 
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
                         # gate was always-true dead code. Removed during the same cleanup
