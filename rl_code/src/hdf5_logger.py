@@ -28,9 +28,40 @@ import numpy as np
 class HDF5Logger:
     """Accumulates timestep data and writes to HDF5 at episode boundaries."""
 
-    def __init__(self, hdf5_path: str):
+    def __init__(
+        self,
+        hdf5_path: str,
+        stelaris_sha: Optional[str] = None,
+        rl_ct_sha: Optional[str] = None,
+        stelaris_branch: Optional[str] = None,
+        rl_ct_branch: Optional[str] = None,
+    ):
+        """
+        Args:
+            hdf5_path: File to write to.
+            stelaris_sha: Outer Stelaris repo commit sha at cell launch.
+                Written as the ``stelaris_sha`` root attr. Enables post-hoc
+                partitioning by code version. None is allowed (legacy paths).
+            rl_ct_sha: RL-CollectiveTransport submodule commit sha at launch.
+                Written as ``rl_ct_sha`` root attr.
+            stelaris_branch: Branch name for outer repo — written as
+                ``stelaris_branch`` root attr for human readability.
+            rl_ct_branch: Branch name for submodule — written as
+                ``rl_ct_branch`` root attr.
+        """
         self.hdf5_path = hdf5_path
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
+        # Write provenance attrs once, at file creation. Subsequent episodes
+        # append without touching root attrs.
+        with h5py.File(self.hdf5_path, "a") as h5f:
+            if stelaris_sha:
+                h5f.attrs["stelaris_sha"] = str(stelaris_sha)
+            if rl_ct_sha:
+                h5f.attrs["rl_ct_sha"] = str(rl_ct_sha)
+            if stelaris_branch:
+                h5f.attrs["stelaris_branch"] = str(stelaris_branch)
+            if rl_ct_branch:
+                h5f.attrs["rl_ct_branch"] = str(rl_ct_branch)
         self._reset()
 
     def _reset(self):

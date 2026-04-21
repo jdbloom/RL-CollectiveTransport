@@ -152,6 +152,39 @@ def test_vector_label_reduced_to_mean(tmp_path):
         assert float(g.attrs["gsp_label_mean"]) == pytest.approx(0.35, rel=1e-5)
 
 
+def test_commit_shas_written_as_root_attrs(tmp_path):
+    """Provenance attrs: stelaris_sha + rl_ct_sha + branch names at file root.
+
+    Added 2026-04-21 after the Mac/Ubuntu code-drift incident. The dispatcher
+    gate reads these from the launch-time verification step and passes them
+    through; any h5 file lacking these attrs was written under pre-gate code
+    and its commit sha is unknown.
+    """
+    p = str(tmp_path / "e.h5")
+    HDF5Logger(
+        p,
+        stelaris_sha="abc123def456",
+        rl_ct_sha="999999000000",
+        stelaris_branch="main",
+        rl_ct_branch="feat/foo",
+    )
+    with h5py.File(p, "r") as f:
+        assert f.attrs["stelaris_sha"] == "abc123def456"
+        assert f.attrs["rl_ct_sha"] == "999999000000"
+        assert f.attrs["stelaris_branch"] == "main"
+        assert f.attrs["rl_ct_branch"] == "feat/foo"
+
+
+def test_commit_shas_absent_when_not_provided(tmp_path):
+    """Backward-compat: older callers that don't pass shas should not fail,
+    and root attrs should simply be absent."""
+    p = str(tmp_path / "e.h5")
+    HDF5Logger(p)
+    with h5py.File(p, "r") as f:
+        assert "stelaris_sha" not in f.attrs
+        assert "rl_ct_sha" not in f.attrs
+
+
 def test_buffers_reset_between_episodes(tmp_path):
     p = str(tmp_path / "e.h5")
     logger = HDF5Logger(p)

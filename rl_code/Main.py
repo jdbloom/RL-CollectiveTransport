@@ -92,9 +92,17 @@ Utility.set_obstacles_fields()
 # Path to save data
 data_file_path = recording_path + '/Data/'
 
-# Initialize HDF5 logger (one per experiment)
+# Initialize HDF5 logger (one per experiment). Commit shas + branches come from
+# the dispatcher's pre-launch code_verification step; they are written as h5
+# root attrs so cross-machine comparisons can filter by code version.
 hdf5_path = os.path.join(recording_path, os.path.basename(recording_path) + ".h5")
-hdf5_writer = HDF5Logger(hdf5_path)
+hdf5_writer = HDF5Logger(
+    hdf5_path,
+    stelaris_sha=config.get("STELARIS_SHA"),
+    rl_ct_sha=config.get("RL_CT_SHA"),
+    stelaris_branch=config.get("STELARIS_BRANCH"),
+    rl_ct_branch=config.get("RL_CT_BRANCH"),
+)
 
 # Per-episode diagnostics (FAU / weight norms / effective rank / Q-gap / pred
 # diversity). Opt-in via config['DIAGNOSTICS_ENABLED']. The rolling gsp_obs_pool
