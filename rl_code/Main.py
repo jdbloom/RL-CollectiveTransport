@@ -548,6 +548,7 @@ try:
                                         s_to_store = matured['state_per_robot'][i]
                                         label_to_store = float(matured['label_per_robot'][i])
                                         model.store_gsp_transition(s_to_store, label_to_store, 0, s_to_store, 0)
+                                        hdf5_writer.record_stored_transition(label_to_store, s_to_store)
                             else:
                                 # Multi-target label: use _multi_label for all non-future_prox kinds.
                                 # For scalar kinds (_multi_label.size==1) the store_gsp_transition
@@ -558,10 +559,12 @@ try:
                                     if np.sum(state_prox_flags[i]) > 0 and stats[i][0] > force_thr:
                                         if model.gsp_networks['learning_scheme'] == 'attention':
                                             model.store_gsp_transition(states[i], label, 0, 0, 0)
+                                            hdf5_writer.record_stored_transition(label, states[i])
                                         else:
                                             state = states[i]
                                             new_state = new_states[i]
                                             model.store_gsp_transition(state, _label_to_store, 0, new_state, 0)
+                                            hdf5_writer.record_stored_transition(_label_to_store, state)
                         elif model.gsp_broadcast:
                             states = model.make_gsp_states_broadcast(old_agent_prox_flags, neighbors_old_heading_gsp)
                             new_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
@@ -569,6 +572,7 @@ try:
                             for i in range(Utility.params['num_robots']):
                                 if states[i][0] != 0 and stats[i][0] > force_thr:
                                     model.store_gsp_transition(states[i], _label_to_store, 0, new_states[i], 0)
+                                    hdf5_writer.record_stored_transition(_label_to_store, states[i])
                         else:
                             _label_to_store = _multi_label if _multi_label.size > 1 else float(_multi_label[0])
                             for i in range(Utility.params['num_robots']):
@@ -576,12 +580,15 @@ try:
                                 if np.sum(state) > 0 and stats[i][0] > force_thr:
                                     if model.gsp_networks['learning_scheme'] == 'attention':
                                         model.store_gsp_transition(state, label, 0, 0, 0)
+                                        hdf5_writer.record_stored_transition(label, state)
                                     elif args.independent_learning:
                                         new_state = np.array(agent_prox_flags)
                                         models[i].store_gsp_transition(state, _label_to_store, 0, new_state, 0)
+                                        hdf5_writer.record_stored_transition(_label_to_store, state)
                                     else:
                                         new_state = np.array(agent_prox_flags)
                                         model.store_gsp_transition(state, _label_to_store, 0, new_state, 0)
+                                        hdf5_writer.record_stored_transition(_label_to_store, state)
 
 
                     #Define Global Knowledge: [positions, velocities]

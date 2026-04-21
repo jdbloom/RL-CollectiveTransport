@@ -89,6 +89,12 @@ class HDF5Logger:
         self.e2e_gsp_pred_std = []
         self.e2e_gsp_label_mean = []
         self.e2e_gsp_label_std = []
+        # Sample-quality diagnostics (schema v4+) — (label, input) pairs captured at
+        # each store_gsp_transition call site. Needed because the replay buffer lives
+        # in the external gsp_rl library and we have no hook to query its composition.
+        # Aggregated into attrs on write_episode; not stored as full datasets.
+        self.stored_gsp_labels: list = []
+        self.stored_gsp_inputs: list = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -155,6 +161,30 @@ class HDF5Logger:
         Called per GSP learning step (cadence differs from per-timestep writerow).
         """
         self.gsp_loss.append(float(loss_value))
+
+    def record_stored_transition(self, label, input_vec) -> None:
+        """Record one (label, input) pair at the moment it's stored in the GSP
+        replay buffer. Per Phase 1 sample-quality spec — gives us label/input
+        distribution summaries without having to reach into the external gsp_rl
+        replay buffer.
+
+        ``label`` is typically a scalar (delta_theta, future_prox, time_to_goal);
+        vector labels (e.g. cyl_kinematics_*) are reduced to their mean as a
+        proxy — the full vector-label distribution is out of scope for v4.
+        ``input_vec`` is the per-robot GSP head input that produced this label.
+        """
+        try:
+            self.stored_gsp_labels.append(float(label))
+        except (TypeError, ValueError):
+            arr = np.asarray(label, dtype=np.float32).ravel()
+            if arr.size > 0:
+                self.stored_gsp_labels.append(float(np.mean(arr)))
+        try:
+            self.stored_gsp_inputs.append(
+                np.asarray(input_vec, dtype=np.float32).ravel()
+            )
+        except (TypeError, ValueError):
+            pass
 
     def record_episode_diagnostics(self, diag: dict) -> None:
         """Record per-episode diagnostic scalars (FAU, weight norms, effective rank,
@@ -245,6 +275,13 @@ class HDF5Logger:
                 gsp_loss_arr = np.array(self.gsp_loss, dtype=np.float32)
                 grp.create_dataset("gsp_loss", data=gsp_loss_arr,
                                    compression="gzip", compression_opts=4)
+                # Summary attrs for cheap cross-episode comparison. Finite-mask so a
+                # single numerical spike doesn't poison the aggregate.
+                finite_loss = gsp_loss_arr[np.isfinite(gsp_loss_arr)]
+                if finite_loss.size > 0:
+                    grp.attrs["gsp_loss_mean"] = float(np.mean(finite_loss))
+                    grp.attrs["gsp_loss_std"] = float(np.std(finite_loss))
+                    grp.attrs["gsp_loss_count"] = int(finite_loss.size)
 
             # E2E per-learn-step diagnostics (schema v3+).
             e2e_fields = [
@@ -291,13 +328,41 @@ class HDF5Logger:
             else:
                 gsp_per_robot = []
 
+            # Sample-quality attrs: distribution of stored (label, input) pairs this
+            # episode. Captured at each store_gsp_transition call site in Main.py.
+            # Necessary because the gsp_rl replay buffer is external; we cannot query
+            # its composition directly. Phase 1 spec: docs/specs/2026-04-21-phase1-verification.md.
+            if self.stored_gsp_labels:
+                lbl = np.asarray(self.stored_gsp_labels, dtype=np.float64)
+                finite = lbl[np.isfinite(lbl)]
+                grp.attrs["gsp_label_count"] = int(finite.size)
+                if finite.size > 0:
+                    grp.attrs["gsp_label_mean"] = float(np.mean(finite))
+                    grp.attrs["gsp_label_std"] = float(np.std(finite))
+                    grp.attrs["gsp_label_min"] = float(np.min(finite))
+                    grp.attrs["gsp_label_max"] = float(np.max(finite))
+            if self.stored_gsp_inputs:
+                # Stack only if all captured inputs have the same dim (they should,
+                # within a single episode for a single variant). Heterogeneous shapes
+                # would indicate a bug worth surfacing, so log and skip rather than coerce.
+                shapes = {tuple(x.shape) for x in self.stored_gsp_inputs}
+                if len(shapes) == 1:
+                    X = np.stack(self.stored_gsp_inputs)  # (n_stored, input_dim)
+                    per_dim_std = np.nanstd(X, axis=0)
+                    finite_std = per_dim_std[np.isfinite(per_dim_std)]
+                    if finite_std.size > 0:
+                        grp.attrs["gsp_train_input_std"] = float(np.mean(finite_std))
+                        grp.attrs["gsp_train_input_count"] = int(X.shape[0])
+
             # Logging schema version. Bump on every change that adds/removes a field
             # or changes semantics of an existing field. Analyzer reads this attr
             # to know which metrics are computable for this run vs gaps.
             # v1 — implicit (pre-2026-04-15); treated as default in analyzer
             # v2 — 2026-04-15: explicit log_schema_version attr added
             # v3 — 2026-04-15: e2e diagnostics (11 per-learn-step metrics) added
-            grp.attrs["log_schema_version"] = 3
+            # v4 — 2026-04-21: sample-quality attrs (gsp_loss_mean/std/count,
+            #                  gsp_label_mean/std/min/max/count, gsp_train_input_std/count)
+            grp.attrs["log_schema_version"] = 4
             grp.attrs["episode_num"] = episode_num
             grp.attrs["timesteps"] = timesteps
             grp.attrs["success"] = success

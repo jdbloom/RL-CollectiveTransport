@@ -186,12 +186,13 @@ class TestRecordE2eDiagnostics:
             assert f["episode_0000"]["e2e_ddqn_loss"].shape == (4,)
             assert f["episode_0001"]["e2e_ddqn_loss"].shape == (2,)
 
-    def test_schema_version_bumped_to_3(self, tmp_path):
-        """Schema version must be 3 after adding e2e fields."""
+    def test_schema_version_at_or_above_3(self, tmp_path):
+        """Schema v3 added e2e fields; v4 and later must continue to write them,
+        so the version floor for this test is 3, not equality."""
         path = str(tmp_path / "ep.h5")
         logger = HDF5Logger(path)
         logger.writerow(**_base_writerow_kwargs())
         logger.write_episode(0)
 
         with h5py.File(path) as f:
-            assert f["episode_0000"].attrs["log_schema_version"] == 3
+            assert f["episode_0000"].attrs["log_schema_version"] >= 3
