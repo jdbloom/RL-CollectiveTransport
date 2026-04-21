@@ -16,4 +16,4 @@ argos/argos/*
 *.bdb
 *.bo
 *.fasl
-*.pyc
+*.pyc.DS_Store
