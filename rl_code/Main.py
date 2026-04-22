@@ -489,6 +489,15 @@ try:
                     # input vector at this timestep so it can be logged alongside gsp_target.
                     # Set in the GSP branch below; remains None for non-GSP runs.
                     gsp_obs_per_robot = None
+                    # The actual GSP head input vector(s) this timestep. Used only to
+                    # populate the rolling diagnostics pool so freeze_diagnostic_batch
+                    # gets shape-correct samples. Distinct from gsp_obs_per_robot (which
+                    # is h5-logged per-robot, shape (R, 1) for plain-GSP) because the
+                    # plain-GSP head takes one shared (GSP_INPUT_SIZE,) vector, not R
+                    # scalar inputs. Conflating the two (the original B-004 regression)
+                    # caused all plain-GSP cells to crash in freeze_diagnostic_batch at
+                    # DIAGNOSTICS_FREEZE_EPISODE with a shape-mismatch in the head's fc1.
+                    diag_gsp_head_input = None
 
                     if config['GSP']:
                         # GSP Predict
@@ -506,12 +515,16 @@ try:
                                 )
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
+                                # GSP-N head takes (GSP_INPUT_SIZE,) per robot; agent_gsp_states
+                                # is already shape (R, GSP_INPUT_SIZE) — use directly.
+                                diag_gsp_head_input = agent_gsp_states
                             elif model.gsp_broadcast:
                                 # GSP-B: per-agent self-centric view with full-broadcast
                                 # [self_prox, self_prev_gsp, other_i_prox, other_i_prev_gsp, ...]
                                 agent_gsp_states = model.make_gsp_states_broadcast(agent_prox_flags, old_heading_gsp)
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
+                                diag_gsp_head_input = agent_gsp_states
                             else:
                                 # GSP single-shot: head sees each robot's own scalar prox only.
                                 # Stored as (R, 1) so the h5 gsp_obs dataset has canonical (T, R, D)
@@ -521,6 +534,10 @@ try:
                                 # per-robot corr metric for plain GSP cells (BLOCKED B-004).
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
                                 gsp_obs_per_robot = np.asarray(agent_prox_flags, dtype=np.float32).reshape(-1, 1)
+                                # The actual head input is one shared (GSP_INPUT_SIZE,) vector —
+                                # the full agent_prox_flags list. Wrap in a length-1 batch dim so
+                                # the pool-populating loop yields one sample per step.
+                                diag_gsp_head_input = np.asarray(agent_prox_flags, dtype=np.float32).reshape(1, -1)
                             for i in range(Utility.params['num_robots']):
                                 if len(ctde_gsp) > 1:
                                     next_heading_gsp[i] = ctde_gsp[i][-1].item()
@@ -777,10 +794,14 @@ try:
                     # Populate diagnostics pools from the live training loop.
                     # See docs/specs/2026-04-17-diagnostics-instrumentation.md.
                     if getattr(model, 'diagnostics_enabled', False):
-                        # Rolling pool of recent GSP head inputs (one per robot per step).
+                        # Rolling pool of recent GSP head inputs. Uses diag_gsp_head_input
+                        # (the actual head-input shape, (N, GSP_INPUT_SIZE)) rather than
+                        # gsp_obs_per_robot, because the latter is shape (R, 1) for plain-GSP
+                        # (h5 per-robot dataset) and would crash freeze_diagnostic_batch →
+                        # head.fc1 with a shape mismatch. See B-008 postmortem.
                         # Capped to keep memory bounded on long runs.
-                        if gsp_obs_per_robot is not None:
-                            for obs in gsp_obs_per_robot:
+                        if diag_gsp_head_input is not None:
+                            for obs in diag_gsp_head_input:
                                 diag_gsp_obs_pool.append(np.asarray(obs, dtype=np.float32))
                             while len(diag_gsp_obs_pool) > _DIAG_POOL_MAX_SIZE:
                                 diag_gsp_obs_pool.pop(0)
