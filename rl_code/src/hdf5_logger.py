@@ -33,8 +33,10 @@ class HDF5Logger:
         hdf5_path: str,
         stelaris_sha: Optional[str] = None,
         rl_ct_sha: Optional[str] = None,
+        gsp_rl_sha: Optional[str] = None,
         stelaris_branch: Optional[str] = None,
         rl_ct_branch: Optional[str] = None,
+        gsp_rl_branch: Optional[str] = None,
     ):
         """
         Args:
@@ -44,10 +46,15 @@ class HDF5Logger:
                 partitioning by code version. None is allowed (legacy paths).
             rl_ct_sha: RL-CollectiveTransport submodule commit sha at launch.
                 Written as ``rl_ct_sha`` root attr.
+            gsp_rl_sha: GSP-RL submodule commit sha at launch. Written as
+                ``gsp_rl_sha`` root attr. Third repo in the three-sha provenance
+                trio — see BLOCKED B-001 in repo root.
             stelaris_branch: Branch name for outer repo — written as
                 ``stelaris_branch`` root attr for human readability.
             rl_ct_branch: Branch name for submodule — written as
                 ``rl_ct_branch`` root attr.
+            gsp_rl_branch: Branch name for GSP-RL — written as
+                ``gsp_rl_branch`` root attr.
         """
         self.hdf5_path = hdf5_path
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
@@ -58,10 +65,14 @@ class HDF5Logger:
                 h5f.attrs["stelaris_sha"] = str(stelaris_sha)
             if rl_ct_sha:
                 h5f.attrs["rl_ct_sha"] = str(rl_ct_sha)
+            if gsp_rl_sha:
+                h5f.attrs["gsp_rl_sha"] = str(gsp_rl_sha)
             if stelaris_branch:
                 h5f.attrs["stelaris_branch"] = str(stelaris_branch)
             if rl_ct_branch:
                 h5f.attrs["rl_ct_branch"] = str(rl_ct_branch)
+            if gsp_rl_branch:
+                h5f.attrs["gsp_rl_branch"] = str(gsp_rl_branch)
         self._reset()
 
     def _reset(self):

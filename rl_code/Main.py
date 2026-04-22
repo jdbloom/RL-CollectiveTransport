@@ -100,8 +100,10 @@ hdf5_writer = HDF5Logger(
     hdf5_path,
     stelaris_sha=config.get("STELARIS_SHA"),
     rl_ct_sha=config.get("RL_CT_SHA"),
+    gsp_rl_sha=config.get("GSP_RL_SHA"),
     stelaris_branch=config.get("STELARIS_BRANCH"),
     rl_ct_branch=config.get("RL_CT_BRANCH"),
+    gsp_rl_branch=config.get("GSP_RL_BRANCH"),
 )
 
 # Per-episode diagnostics (FAU / weight norms / effective rank / Q-gap / pred
@@ -511,7 +513,14 @@ try:
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
                             else:
+                                # GSP single-shot: head sees each robot's own scalar prox only.
+                                # Stored as (R, 1) so the h5 gsp_obs dataset has canonical (T, R, D)
+                                # shape — needed by scripts/future_prox_recorrelation.py to
+                                # reconstruct per-robot labels at t+K horizon. Previously this
+                                # branch left gsp_obs_per_robot=None, blocking the recomputed
+                                # per-robot corr metric for plain GSP cells (BLOCKED B-004).
                                 ctde_gsp = model.choose_agent_gsp(agent_prox_flags, test_mode)
+                                gsp_obs_per_robot = np.asarray(agent_prox_flags, dtype=np.float32).reshape(-1, 1)
                             for i in range(Utility.params['num_robots']):
                                 if len(ctde_gsp) > 1:
                                     next_heading_gsp[i] = ctde_gsp[i][-1].item()

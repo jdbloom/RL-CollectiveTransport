@@ -152,6 +152,59 @@ def test_vector_label_reduced_to_mean(tmp_path):
         assert float(g.attrs["gsp_label_mean"]) == pytest.approx(0.35, rel=1e-5)
 
 
+def test_plain_gsp_obs_dataset_shape(tmp_path):
+    """B-004: plain GSP (not GSP-N, not GSP-B) now emits gsp_obs with per-
+    timestep (R, 1) shape so scripts/future_prox_recorrelation.py can
+    reconstruct per-robot labels. Previously gsp_obs_per_robot was None for
+    single-shot, leaving the dataset absent.
+
+    This test exercises only the HDF5 storage contract, not the Main.py
+    call site. Simulates 20 timesteps with R=4 robots; verifies the h5
+    gsp_obs dataset has shape (20, 4, 1).
+    """
+    p = str(tmp_path / "e.h5")
+    logger = HDF5Logger(p)
+    R = 4
+    T = 20
+    for _ in range(T):
+        logger.writerow(
+            rewards=[0.0] * R, epsilons=0.5, terminations=False, losses=0.0,
+            force_magnitudes=[0.0] * R, force_angles=[0.0] * R,
+            average_force_vectors=[0.0, 0.0],
+            cyl_x_poses=0.0, cyl_y_poses=0.0, cyl_angles=0.0,
+            gate_stats=0, obstacle_stats=0,
+            gsp_rewards=[0.0] * R, gsp_headings=[0.0] * R,
+            run_times=0.0,
+            robots_x_poses=[0.0] * R, robots_y_poses=[0.0] * R,
+            robot_angles=[0.0] * R, robot_failure=[False] * R,
+            gsp_obs=np.zeros((R, 1), dtype=np.float32),
+        )
+    logger.write_episode(0)
+    with h5py.File(p, "r") as f:
+        assert "gsp_obs" in f["episode_0000"], \
+            "plain-GSP gsp_obs dataset missing; B-004 regression"
+        assert f["episode_0000"]["gsp_obs"].shape == (T, R, 1)
+
+
+def test_gsp_rl_sha_and_branch_round_trip(tmp_path):
+    """B-001: HDF5Logger must persist gsp_rl_sha and gsp_rl_branch. Closes the
+    gap where commit 7e1ee97 added the kwargs but Main.py never plumbed them.
+    """
+    p = str(tmp_path / "e.h5")
+    HDF5Logger(
+        p,
+        stelaris_sha="s" * 40,
+        rl_ct_sha="r" * 40,
+        gsp_rl_sha="g" * 40,
+        stelaris_branch="feat/a",
+        rl_ct_branch="feat/b",
+        gsp_rl_branch="feat/c",
+    )
+    with h5py.File(p, "r") as f:
+        assert f.attrs["gsp_rl_sha"] == "g" * 40
+        assert f.attrs["gsp_rl_branch"] == "feat/c"
+
+
 def test_commit_shas_written_as_root_attrs(tmp_path):
     """Provenance attrs: stelaris_sha + rl_ct_sha + branch names at file root.
 
