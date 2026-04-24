@@ -58,12 +58,26 @@ class Agent(Actor):
         _include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
         _include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False))
         _full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
+        # Change 3 enrichment flags (self-slot additions, GSP-N only):
+        #   GSP_INPUT_INCLUDE_PAYLOAD_STATE: +5 dims (payload vx/vy/omega + payload-to-goal dx/dy)
+        #   GSP_INPUT_INCLUDE_SELF_DYNAMICS: +4 dims (robot vx/vy + force magnitude/angle)
+        #   GSP_INPUT_TEMPORAL_STACK_K:      int ≥1; K>1 stacks last K obs, multiplies total size
+        _include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_STATE', False))
+        _include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
+        _temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
+        if _temporal_stack_k < 1:
+            raise ValueError(
+                f"GSP_INPUT_TEMPORAL_STACK_K must be >= 1, got {_temporal_stack_k}"
+            )
         # Base slot: self_avg_prox (1) + self_prev_gsp (1) + 2 per neighbor pair
         # When neighbors=True, gsp_input_size is already the base neighbor layout.
         # Enrichment flags are additive on top of the base per-agent layout:
-        #   GSP_INPUT_INCLUDE_GOAL:    +2 per agent (cos/sin of angle_to_goal)
-        #   GSP_INPUT_INCLUDE_CYL_REL: +2 per agent (dist_to_cyl, angle_to_cyl)
-        #   GSP_INPUT_FULL_PROX:       replace avg_prox(1) with raw_prox(24) → net +23
+        #   GSP_INPUT_INCLUDE_GOAL:           +2 per agent (cos/sin of angle_to_goal)
+        #   GSP_INPUT_INCLUDE_CYL_REL:        +2 per agent (dist_to_cyl, angle_to_cyl)
+        #   GSP_INPUT_FULL_PROX:              replace avg_prox(1) with raw_prox(24) → net +23
+        #   GSP_INPUT_INCLUDE_PAYLOAD_STATE:  +5 per agent (self-slot only)
+        #   GSP_INPUT_INCLUDE_SELF_DYNAMICS:  +4 per agent (self-slot only)
+        #   GSP_INPUT_TEMPORAL_STACK_K:       multiplicative — total × K after all additive flags
         #
         # For the GSP-N layout each agent's slot is 2 (self_prox, self_prev_gsp).
         # The additions are per-slot, not per-neighbor. We compute the enrichment
@@ -74,11 +88,14 @@ class Agent(Actor):
             n_slots = 1  # non-neighbors: single shared state vector (not per-agent slots)
         _extra_per_slot = (2 if _include_goal else 0) + (2 if _include_cyl_rel else 0)
         _prox_delta = 23 if _full_prox else 0  # replace 1 avg_prox with 24 raw_prox
+        _self_slot_extra = (5 if _include_payload_state else 0) + (4 if _include_self_dynamics else 0)
         if neighbors:
             # Only self-slot gets enrichment; neighbor slots keep their (prox, gsp) layout.
-            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta
+            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta + _self_slot_extra
         else:
-            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta
+            gsp_input_size = gsp_input_size + _extra_per_slot + _prox_delta + _self_slot_extra
+        # Temporal stacking multiplies the total (base + all additive enrichments).
+        gsp_input_size = gsp_input_size * _temporal_stack_k
 
         output_size = n_actions
         if network in ['DQN', 'DDQN']:
@@ -94,6 +111,9 @@ class Agent(Actor):
         self._gsp_input_include_goal = _include_goal
         self._gsp_input_include_cyl_rel = _include_cyl_rel
         self._gsp_input_full_prox = _full_prox
+        self._gsp_input_include_payload_state = _include_payload_state
+        self._gsp_input_include_self_dynamics = _include_self_dynamics
+        self._gsp_input_temporal_stack_k = _temporal_stack_k
 
         gsp_rl_args = {
             'config': config,
@@ -125,14 +145,22 @@ class Agent(Actor):
         self._prox_filter_angle_deg = prox_filter_angle_deg
 
 
+        # Ring buffer slot size: when temporal stacking is active (K>1), each slot
+        # stores a single-step vector of size gsp_network_input // K. The K-step
+        # stacked output is assembled in make_gsp_states from the last K slots.
+        # When K=1 (default), slot size equals gsp_network_input — identical to
+        # previous behavior so K=1 is a strict no-op.
+        _k = getattr(self, '_gsp_input_temporal_stack_k', 1)
+        _ring_slot_size = self.gsp_network_input // _k
+
         if self._neighbors or self._broadcast:
             # Per-agent observation ring buffers: GSP-N and GSP-B both produce
             # per-agent self-centric views, so each agent has its own history.
             self.gsp_observation = []
             for _ in range(self._n_agents):
-                self.gsp_observation.append([[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)])
+                self.gsp_observation.append([[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)])
         else:
-            self.gsp_observation = [[0 for _ in range(self.gsp_network_input)] for _ in range(self.gsp_sequence_length)]
+            self.gsp_observation = [[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)]
 
         # Per-agent LSTM hidden state for R-GSP-N inference
         self._agent_hidden_states = {}
@@ -281,7 +309,7 @@ class Agent(Actor):
         return states
 
     def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags=False,
-                        env_observations=None):
+                        env_observations=None, payload_state=None, self_dynamics=None):
         """Build per-agent GSP input vectors for GSP-N (neighbor) variant.
 
         Base layout per agent (2 dims for self + 2 per neighbor pair):
@@ -295,6 +323,19 @@ class Agent(Actor):
             GSP_INPUT_FULL_PROX:       replaces self_avg_prox (1 value) with the full
                                        24-dim raw proximity vector from
                                        env_observations[i][7:31], net +23 dims.
+
+        Optional enrichment (Change 3 — new flags, GSP-N self-slot only):
+            GSP_INPUT_INCLUDE_PAYLOAD_STATE: appends 5 dims to self-slot:
+                (payload_vx, payload_vy, payload_omega, payload_to_goal_dx, payload_to_goal_dy)
+                Requires payload_state kwarg: dict with per-robot keys
+                  'vx', 'vy', 'omega', 'dx_to_goal', 'dy_to_goal' (lists/arrays, indexed by agent).
+            GSP_INPUT_INCLUDE_SELF_DYNAMICS: appends 4 dims to self-slot:
+                (self_vx, self_vy, force_magnitude, force_angle)
+                Requires self_dynamics kwarg: dict with per-robot keys
+                  'vx', 'vy', 'force_mag', 'force_ang' (lists/arrays, indexed by agent).
+            GSP_INPUT_TEMPORAL_STACK_K (int, default 1): after building the per-agent
+                vector, flatten the last K entries from the ring buffer (current + K-1
+                previous). K=1 is a strict no-op. Effective input size becomes base×K.
 
         Enrichment only applies to the self-slot; neighbor slots always stay at their
         compact (prox, prev_gsp) layout — those agents' goal/cyl data is unavailable
@@ -311,16 +352,31 @@ class Agent(Actor):
                   [4]    — cyl distance to robot
                   [5]    — cyl angle to robot (radians)
                   [7:31] — 24-dim raw proximity readings (when GSP_INPUT_FULL_PROX)
+            payload_state: dict with keys 'vx', 'vy', 'omega', 'dx_to_goal',
+                'dy_to_goal' — each a list/array indexed by agent id. Required when
+                GSP_INPUT_INCLUDE_PAYLOAD_STATE is True; ignored otherwise.
+            self_dynamics: dict with keys 'vx', 'vy', 'force_mag', 'force_ang' —
+                each a list/array indexed by agent id. Required when
+                GSP_INPUT_INCLUDE_SELF_DYNAMICS is True; ignored otherwise.
         """
         include_goal = getattr(self, '_gsp_input_include_goal', False)
         include_cyl_rel = getattr(self, '_gsp_input_include_cyl_rel', False)
         full_prox = getattr(self, '_gsp_input_full_prox', False)
+        include_payload_state = getattr(self, '_gsp_input_include_payload_state', False)
+        include_self_dynamics = getattr(self, '_gsp_input_include_self_dynamics', False)
+        temporal_stack_k = getattr(self, '_gsp_input_temporal_stack_k', 1)
         need_env_obs = include_goal or include_cyl_rel or full_prox
+
+        # When K>1 we need to know the unflattened single-step size so we can
+        # correctly index into the ring buffer. The ring buffer stores single-step
+        # vectors; gsp_network_input is already total_size * K when K>1.
+        # Derive the per-step size by dividing by K.
+        single_step_size = self.gsp_network_input // temporal_stack_k
 
         states = []
         prox_flags = []
         for agent in range(self._n_agents):
-            agent_state = np.zeros(self.gsp_network_input)
+            agent_state = np.zeros(single_step_size)
             neighbors = self.neighbors_dict[agent]
 
             # --- Self slot ---
@@ -350,6 +406,27 @@ class Agent(Actor):
                 agent_state[idx + 1] = float(env_observations[agent][5])
                 idx += 2
 
+            # Optional enrichment: payload kinematics + payload-to-goal offset.
+            # 5 dims: payload_vx, payload_vy, payload_omega, payload_to_goal_dx,
+            # payload_to_goal_dy. All values shared across agents (same payload),
+            # but indexed per agent for API consistency with self_dynamics.
+            if include_payload_state and payload_state is not None:
+                agent_state[idx] = float(payload_state['vx'][agent])
+                agent_state[idx + 1] = float(payload_state['vy'][agent])
+                agent_state[idx + 2] = float(payload_state['omega'][agent])
+                agent_state[idx + 3] = float(payload_state['dx_to_goal'][agent])
+                agent_state[idx + 4] = float(payload_state['dy_to_goal'][agent])
+                idx += 5
+
+            # Optional enrichment: per-robot kinematics + applied force.
+            # 4 dims: self_vx, self_vy, force_magnitude, force_angle.
+            if include_self_dynamics and self_dynamics is not None:
+                agent_state[idx] = float(self_dynamics['vx'][agent])
+                agent_state[idx + 1] = float(self_dynamics['vy'][agent])
+                agent_state[idx + 2] = float(self_dynamics['force_mag'][agent])
+                agent_state[idx + 3] = float(self_dynamics['force_ang'][agent])
+                idx += 4
+
             # --- Neighbor slots (compact layout — no enrichment) ---
             for neighbor in neighbors:
                 agent_state[idx] = agent_prox_values[neighbor]
@@ -357,9 +434,26 @@ class Agent(Actor):
                 prox_flags.append(agent_prox_values[neighbor])
                 idx += 2
 
+            # Update ring buffer with the new single-step vector.
+            # For K=1 the ring buffer stores full-size vectors (same as before).
+            # For K>1 the ring buffer stores single-step vectors; the stacked output
+            # is assembled below from the last K entries.
             self.gsp_observation[agent].pop(0)
             self.gsp_observation[agent].append(agent_state)
-            states.append(agent_state)
+
+            # Temporal stacking: flatten last K entries from ring buffer.
+            # gsp_observation[agent] is a list of single-step vectors, newest last.
+            # K=1 returns the single-step vector unchanged — strict no-op.
+            if temporal_stack_k == 1:
+                stacked = agent_state
+            else:
+                # Take the last K entries (newest at end); flatten in temporal order
+                # oldest-first so the model sees a causal sequence.
+                history = self.gsp_observation[agent]
+                k_entries = history[-temporal_stack_k:]
+                stacked = np.concatenate(k_entries).astype(np.float32)
+
+            states.append(stacked)
         if return_prox_flags:
             return states, prox_flags
         return states
