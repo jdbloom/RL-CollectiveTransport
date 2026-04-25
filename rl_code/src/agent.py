@@ -52,6 +52,12 @@ class Agent(Actor):
             # coupled to team size, not transferable across num_robots.
             gsp_input_size = 2 * n_agents
 
+        # Determinism flag (Phase 4). When true, the caller must have already applied
+        # determinism settings via apply_determinism_settings() before constructing
+        # the Agent. This attribute is stored on the Agent so it can be queried by
+        # tests and by Main.py. Default false so all existing batches are unaffected.
+        self.determinism_enabled = bool(config.get('DETERMINISM_ENABLED', False))
+
         # Input enrichment flags (Change 2). Computed before super().__init__ so
         # the effective gsp_input_size can be passed to the parent Actor constructor.
         # Each flag adds extra dimensions to the per-agent slice in make_gsp_states.
