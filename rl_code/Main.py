@@ -1,10 +1,67 @@
 from urllib.parse import uses_relative
+
+# -----------------------------------------------------------------------
+# DETERMINISM EARLY-INIT — must happen before any torch / numpy import.
+#
+# We need to know whether DETERMINISM_ENABLED=true is set in the YAML
+# config.  The config path is argv[1] (the recording_path argument).
+# We do a minimal YAML parse here using only the stdlib so we can set
+# the CUBLAS workspace env var before torch initialises its CUDA backend.
+# CUBLAS_WORKSPACE_CONFIG is read once at CUDA init time; setting it
+# after "import torch" has no effect.  On MPS/CPU this is a no-op.
+# -----------------------------------------------------------------------
+import os as _os
+import sys as _sys
+
+
+def _early_read_determinism():
+    """Read DETERMINISM_ENABLED and SEED from agent_config.yml via argv.
+
+    Returns (enabled: bool, seed: int).  Falls back to (False, 42) on any
+    error (missing arg, missing file, parse failure) so the normal startup
+    error path still handles them with proper logging.
+    """
+    try:
+        import yaml as _yaml
+        _recording_arg = None
+        for _a in _sys.argv[1:]:
+            if not _a.startswith("-"):
+                _recording_arg = _a
+                break
+        if _recording_arg is None:
+            return False, 42
+        _here = _os.path.dirname(_os.path.realpath(__file__))
+        _cfg_path = _os.path.join(_here, _recording_arg, "agent_config.yml")
+        with open(_cfg_path, "r") as _f:
+            _cfg = _yaml.safe_load(_f)
+        _enabled = bool(_cfg.get("DETERMINISM_ENABLED", False))
+        _seed = int(_cfg.get("SEED", 42))
+        return _enabled, _seed
+    except Exception:
+        return False, 42
+
+
+_det_enabled, _det_seed = _early_read_determinism()
+
+if _det_enabled:
+    # Must be set before torch is imported — CUDA reads this once at init.
+    _os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    # Reduce OpenMP threads to 1 before any BLAS library is loaded.
+    _os.environ["OMP_NUM_THREADS"] = "1"
+
+# Clean up temporary names so they don't leak into module namespace.
+del _os, _sys, _early_read_determinism
+# -----------------------------------------------------------------------
+# End determinism early-init.
+# -----------------------------------------------------------------------
+
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
 from src.hdf5_logger import HDF5Logger
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
+from src.determinism import apply_determinism_settings
 
 #from python_code.comms_viz import viz
 
@@ -54,6 +111,16 @@ config_path = os.path.join(recording_path, 'agent_config.yml')
 
 with open(config_path, 'r') as file:
     config = yaml.safe_load(file)
+
+# Apply determinism settings now that all imports are complete and config is
+# loaded.  The CUBLAS_WORKSPACE_CONFIG and OMP_NUM_THREADS env vars were set
+# at the very top of this file (before any torch import) when DETERMINISM_ENABLED
+# was detected via the early-init block.  This call seeds all RNGs and activates
+# torch.use_deterministic_algorithms(True) + torch.set_num_threads(1).
+apply_determinism_settings(
+    seed=int(config.get("SEED", 42)),
+    enabled=bool(config.get("DETERMINISM_ENABLED", False)),
+)
 
 if args.model_path is not None:
     model_file_path = os.path.join(containing_folder, args.model_path)

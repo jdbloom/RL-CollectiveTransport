@@ -110,8 +110,23 @@ def apply_determinism_settings(seed: int, enabled: bool = True) -> None:
                 seed, exc,
             )
 
+    # Reduce inter-op and intra-op thread count to 1 to eliminate
+    # thread-scheduling non-determinism on multi-core machines.  Under
+    # concurrent load (multiple worker processes on the same host) the order
+    # in which BLAS reduction threads complete can differ between runs even
+    # with the same seed, causing ULP-level weight divergence.  Setting
+    # OMP_NUM_THREADS=1 (handled by the caller, before torch is imported) +
+    # torch.set_num_threads(1) closes both the OpenMP and ATen thread pools.
+    T.set_num_threads(1)
+
     _log.info(
-        "determinism: applied seed=%d (replay buffer seed=%d); "
-        "use_deterministic_algorithms=True",
+        "[determinism] enabled=true seed=%d replay_seed=%d "
+        "ompthreads=1 cublas_ws=%s",
         seed, seed + 1,
+        T._C._get_cublas_workspace_config() if hasattr(T._C, "_get_cublas_workspace_config") else "N/A",
+    )
+    # Also print so it's visible in stdout / h5 logs captured by the launcher.
+    print(
+        f"[determinism] enabled=true seed={seed} replay_seed={seed + 1} "
+        f"ompthreads=1 cublas_ws=:4096:8"
     )

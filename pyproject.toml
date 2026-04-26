@@ -31,4 +31,5 @@ addopts = "-m 'not slow and not integration'"
 markers = [
     "slow: convergence tests (deselect with '-m \"not slow\"')",
     "integration: full ARGoS integration tests requiring simulator installed",
+    "determinism: determinism integration tests (subprocess + ZMQ stub, no ARGoS required)",
 ]
