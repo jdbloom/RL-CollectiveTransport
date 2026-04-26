@@ -304,6 +304,11 @@ try:
                 global_knowledge[i*4+2] = stats[i][2]               #velocity X
                 global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
+            # H-phase4-6: apply per-timestep prediction shuffle before building
+            # initial agent states. The shuffle method is a no-op when
+            # GSP_SHUFFLE_PREDICTIONS=false, so this line is safe for all runs.
+            _gsp_for_initial_states = (model if not args.independent_learning else models[0]).shuffle_gsp_predictions(next_heading_gsp) if config['GSP'] else next_heading_gsp
+
             for i in range(Utility.params['num_robots']):
                 g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
                 counter = 0
@@ -318,22 +323,22 @@ try:
                     running_reward.append(0)
                     if config['GSP']:
                         if args.global_knowledge:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = _gsp_for_initial_states[i], global_knowledge=g_knowledge)
                         else:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = _gsp_for_initial_states[i])
                     else:
                         if args.global_knowledge:
                             agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
                         else:
                             agent_state = env_observations[i]
-                    
+
                 else:
                     if config['GSP']:
                         if args.global_knowledge:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=_gsp_for_initial_states[i], global_knowledge=g_knowledge)
                         else:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                    else: 
+                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=_gsp_for_initial_states[i])
+                    else:
                         if args.share_prox_values:
                             agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                         else:
@@ -727,6 +732,12 @@ try:
                         global_knowledge[i*4+3] = stats[i][3]               #velocity Y
 
 
+                    # H-phase4-6: apply per-timestep prediction shuffle before
+                    # rebuilding agent states. Fresh permutation each timestep
+                    # (the shuffle RNG advances on each call). No-op when
+                    # GSP_SHUFFLE_PREDICTIONS=false.
+                    _gsp_for_new_states = (model if not args.independent_learning else models[0]).shuffle_gsp_predictions(next_heading_gsp) if config['GSP'] else next_heading_gsp
+
                     for i in range(Utility.params['num_robots']):
                         g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
                         counter = 0
@@ -746,22 +757,22 @@ try:
                         if args.independent_learning:
                             if config['GSP']:
                                 if args.global_knowledge:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = _gsp_for_new_states[i], global_knowledge=g_knowledge)
                                 else:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = _gsp_for_new_states[i])
                             else:
                                 if args.global_knowledge:
                                     new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
                                 else:
                                     new_agent_state = env_observations[i]
-                            
+
                         else:
                             if config['GSP']:
                                 if args.global_knowledge:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=_gsp_for_new_states[i], global_knowledge=g_knowledge)
                                 else:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                            else: 
+                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=_gsp_for_new_states[i])
+                            else:
                                 if args.share_prox_values:
                                     new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
                                 else:

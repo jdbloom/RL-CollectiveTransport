@@ -181,6 +181,15 @@ class Agent(Actor):
         if self._neighbors:
             self.build_neighbors()
 
+        # H-phase4-6 shuffle RNG: seeded with config seed + 7 so it is deterministic
+        # given the run seed but distinct from the policy/env/buffer RNG streams.
+        # Seed offset +7 is arbitrary but consistent across all W2c cells; it is
+        # documented in the pre-reg amendment and hard-coded here so every caller
+        # automatically gets the same deterministic shuffle sequence.
+        # Used only when gsp_shuffle_predictions=True; harmless when flag is off.
+        _run_seed = int(config.get('SEED', 42))
+        self._shuffle_rng = np.random.default_rng(_run_seed + 7)
+
         # Candidate A — future-prox delayed-label buffer. Active only when
         # GSP_PREDICTION_TARGET == 'future_prox'. Stores (state_per_robot,
         # gsp_obs_per_robot) snapshots so that K steps later we can pair the
@@ -246,6 +255,39 @@ class Agent(Actor):
                 neighbors.append(agents_available[(agent+1)%self.n_agents])
             self.neighbors_dict[agent] = neighbors
     
+    def shuffle_gsp_predictions(self, predictions):
+        """H-phase4-6 ablation: permute GSP predictions across agents.
+
+        When GSP_SHUFFLE_PREDICTIONS is True, randomly permutes the full per-agent
+        prediction array using the dedicated shuffle RNG (seeded with run_seed + 7).
+        This destroys the information content of predictions while preserving the
+        broadcast channel structure (same shapes, same wire format).
+
+        Permutation design choice: we permute the entire predictions array (all
+        agents receive permuted values). An alternative would be to keep self_prev_gsp
+        intact and permute only other-agent slots, but that requires knowing the
+        GSP-N layout structure here. The coarser full-permutation approach is
+        cleaner and cleanly answers the research question: do prediction VALUES
+        (vs broadcast channel structure) contribute to actor performance?
+
+        Called once per timestep by the outer training loop BEFORE the per-agent
+        make_agent_state calls. Non-destructive: returns a new array, never modifies
+        the input in place.
+
+        Args:
+            predictions: numpy array of shape (n_agents,) or (n_agents, output_size)
+                containing the current GSP head predictions for each agent.
+
+        Returns:
+            If gsp_shuffle_predictions is True: a permuted copy of predictions.
+            If False: predictions unchanged (same object, no copy).
+        """
+        if not getattr(self, 'gsp_shuffle_predictions', False):
+            return predictions
+        predictions = np.asarray(predictions)
+        idx = self._shuffle_rng.permutation(len(predictions))
+        return predictions[idx]
+
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
         if heading_gsp is not None:
             # H-14 GSP-minus ablation: if the zero-out flag is set, the GSP slot
