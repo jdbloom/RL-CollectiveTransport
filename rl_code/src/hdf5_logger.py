@@ -137,6 +137,13 @@ class HDF5Logger:
         # Aggregated into attrs on write_episode; not stored as full datasets.
         self.stored_gsp_labels: list = []
         self.stored_gsp_inputs: list = []
+        # Phase 4 loss-step correlation diagnostic. One float per GSP learn step:
+        # the Pearson correlation between the fresh forward-pass predictions used
+        # in the MSE loss and the replay-buffer labels for that same batch.
+        # Populated by record_gsp_loss_step_corr(); aggregated into
+        # gsp_loss_step_corr_{mean,std,min,max} attrs on write_episode().
+        # Empty list → no attrs written (non-GSP runs unaffected).
+        self.gsp_loss_step_corr_samples: list = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -203,6 +210,25 @@ class HDF5Logger:
         Called per GSP learning step (cadence differs from per-timestep writerow).
         """
         self.gsp_loss.append(float(loss_value))
+
+    def record_gsp_loss_step_corr(self, corr_value: float) -> None:
+        """Record one per-batch Pearson correlation from the GSP MSE loss step.
+
+        ``corr_value`` is the Pearson r between the fresh forward-pass predictions
+        used to compute the MSE loss and the replay-buffer labels for that same
+        batch.  Called once per GSP learn step (same cadence as record_gsp_loss).
+        NaN values are silently dropped — they represent batches where one of the
+        inputs had zero variance (undefined correlation); aggregation over finite
+        samples is still meaningful.
+
+        This is intentionally separate from the episode-level gsp_pred_target_corr
+        attr (which measures the actor-input-path predictions over a full episode
+        — a different code path with a 1-timestep lag).  Comparing the two metrics
+        reveals whether the head IS learning but the actor-input measurement is
+        broken, or whether the head genuinely fails to learn.
+        """
+        if not np.isnan(corr_value):
+            self.gsp_loss_step_corr_samples.append(float(corr_value))
 
     def record_stored_transition(self, label, input_vec) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
@@ -463,6 +489,21 @@ class HDF5Logger:
                     else:
                         corr = float("nan")
                     grp.attrs["gsp_pred_target_corr"] = corr
+
+            # Phase 4 loss-step correlation diagnostic attrs.
+            # gsp_loss_step_corr_mean: mean Pearson r between fresh forward-pass preds
+            #   and replay-buffer labels, averaged over all GSP learn steps this episode.
+            # gsp_loss_step_corr_std / _min / _max: spread and range across batches.
+            # Written only when at least one valid (non-NaN) batch correlation was
+            # recorded.  Non-GSP runs, test runs, and warm-up episodes where the replay
+            # buffer is not yet full produce no attrs, preserving backward compatibility.
+            if self.gsp_loss_step_corr_samples:
+                _corr_arr = np.array(self.gsp_loss_step_corr_samples, dtype=np.float64)
+                grp.attrs["gsp_loss_step_corr_mean"] = float(np.nanmean(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_std"] = float(np.nanstd(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_min"] = float(np.nanmin(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_max"] = float(np.nanmax(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_n_batches"] = int(len(_corr_arr))
 
         # Reset for next episode
         summary = {

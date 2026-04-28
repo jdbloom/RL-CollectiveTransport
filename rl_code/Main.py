@@ -1030,6 +1030,25 @@ try:
                             }
                             hdf5_writer.record_episode_diagnostics(_diag)
 
+                        # Phase 4 loss-step correlation — flush per-episode batch corr samples.
+                        # The actor accumulates one float per GSP learn step in
+                        # last_gsp_loss_step_corr_samples; we consume them here at episode
+                        # boundary and clear the list so they don't leak into the next episode.
+                        # Independent-learning mode: aggregate across per-robot models.
+                        if args.independent_learning:
+                            _all_corr_samples = []
+                            for _m in models:
+                                _samples = getattr(_m, 'last_gsp_loss_step_corr_samples', [])
+                                _all_corr_samples.extend(_samples)
+                                _m.last_gsp_loss_step_corr_samples = []
+                            for _c in _all_corr_samples:
+                                hdf5_writer.record_gsp_loss_step_corr(_c)
+                        else:
+                            _samples = getattr(model, 'last_gsp_loss_step_corr_samples', [])
+                            for _c in _samples:
+                                hdf5_writer.record_gsp_loss_step_corr(_c)
+                            model.last_gsp_loss_step_corr_samples = []
+
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
                         # gate was always-true dead code. Removed during the same cleanup
                         # that dropped the data_logger references.
