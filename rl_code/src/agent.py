@@ -41,11 +41,32 @@ class Agent(Actor):
                 "GSP variants neighbors=True and broadcast=True are mutually exclusive — "
                 "they overload gsp_input_size differently. Pick one."
             )
+        # Multi-dim GSP output support (Change 1 — GSP_OUTPUT_KIND).
+        # Source of truth for the size dict is GSP-RL learning_aids.py:287.
+        # This local copy is kept in sync via test_multi_dim_gsp_input_size (sync
+        # test in tests/test_agent/test_multi_dim_gsp.py). Update both together.
+        _GSP_OUTPUT_KIND_SIZES = {
+            'delta_theta_1d': 1,
+            'future_prox_1d': 1,
+            'cyl_kinematics_3d': 3,
+            'cyl_kinematics_goal_4d': 4,
+            'time_to_goal_1d': 1,
+        }
+        _gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
+        if _gsp_output_kind not in _GSP_OUTPUT_KIND_SIZES:
+            raise ValueError(
+                f"Unknown GSP_OUTPUT_KIND '{_gsp_output_kind}'. "
+                f"Valid values: {list(_GSP_OUTPUT_KIND_SIZES)}"
+            )
+        # K = effective output dims for the GSP head.  Used to compute gsp_input_size
+        # so the head's recurrent prev_gsp slot accommodates the full prediction vector.
+        _K = _GSP_OUTPUT_KIND_SIZES[_gsp_output_kind]
+
         if neighbors:
-            # 2 inputs from ownship (prev_gsp, avg_prox)
-            # 2 inputs from each neighbor (prev_gsp, avg_prox)
+            # (1 + K) inputs from ownship (avg_prox × 1, prev_gsp × K)
+            # (1 + K) inputs from each neighbor (avg_prox × 1, prev_gsp × K)
             # 2*n_hop_neighbors for symmetry in both CW and CCW
-            gsp_input_size = 2+2*(n_hop_neighbors*2)
+            gsp_input_size = (1 + _K) + (1 + _K) * (n_hop_neighbors * 2)
         if broadcast:
             # GSP-B: each agent's view is (self_prox, self_prev_gsp) + (other_prox, other_prev_gsp)
             # for all (n_agents - 1) other agents. Total 2*n_agents. Known limitation:
@@ -395,8 +416,19 @@ class Agent(Actor):
             else:
                 agent_state[idx] = agent_prox_values[agent]
                 idx += 1
-            agent_state[idx] = agent_prev_gsp[agent]
-            idx += 1
+            # Multi-dim GSP output: write K dims for the self prev_gsp slot.
+            # When K=1 (legacy), this is identical to the previous scalar write.
+            # When K>1 (cyl_kinematics_3d/goal_4d), the full prediction vector from
+            # the previous step is stored so the head sees its own prior output.
+            _slot_k = self.gsp_network_output  # set by super().__init__ from gsp_output_size_effective
+            _prev = np.asarray(agent_prev_gsp[agent], dtype=np.float32).ravel()
+            if _prev.size != _slot_k:
+                # Defensive: pad/truncate if sizes mismatch (should not happen at
+                # steady state, but protects the first step when next_heading_gsp
+                # is initialised to zeros of shape (num_robots, K)).
+                _prev = np.resize(_prev, _slot_k)
+            agent_state[idx:idx + _slot_k] = _prev
+            idx += _slot_k
             prox_flags.append(agent_prox_values[agent])
 
             # Optional enrichment: goal direction (cos/sin of angle_to_goal)
@@ -434,11 +466,17 @@ class Agent(Actor):
                 idx += 4
 
             # --- Neighbor slots (compact layout — no enrichment) ---
+            # Each neighbor slot is (1 + K) dims: avg_prox × 1, prev_gsp × K.
+            # When K=1 (legacy) this is identical to the previous 2-dim write.
             for neighbor in neighbors:
                 agent_state[idx] = agent_prox_values[neighbor]
-                agent_state[idx + 1] = agent_prev_gsp[neighbor]
+                idx += 1
+                _nbr_prev = np.asarray(agent_prev_gsp[neighbor], dtype=np.float32).ravel()
+                if _nbr_prev.size != _slot_k:
+                    _nbr_prev = np.resize(_nbr_prev, _slot_k)
+                agent_state[idx:idx + _slot_k] = _nbr_prev
                 prox_flags.append(agent_prox_values[neighbor])
-                idx += 2
+                idx += _slot_k
 
             # Update ring buffer with the new single-step vector.
             # For K=1 the ring buffer stores full-size vectors (same as before).

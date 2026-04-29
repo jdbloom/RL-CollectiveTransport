@@ -312,6 +312,13 @@ class HDF5Logger:
                 twod_specs.append(("gsp_squared_error", self.gsp_squared_error))
             for key, data in twod_specs:
                 arr = np.array(data, dtype=np.float32)
+                # Multi-dim GSP output: gsp_heading may be (T, R, K) when K>1.
+                # Per plan §4 (out-of-scope for this PR): store only the FIRST dim to
+                # keep the h5 dataset shape as (T, R) for backward compatibility.
+                # The last-dim extraction for the Pearson metric happens above in
+                # write_episode before this block (via _heading_last_dim).
+                if key == "gsp_heading" and arr.ndim == 3:
+                    arr = arr[:, :, 0]  # keep first dim only: (T, R)
                 if arr.size > 0:
                     grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
 
@@ -469,7 +476,32 @@ class HDF5Logger:
                         "be passed on every writerow call within an episode once it's been "
                         "passed on any call."
                     )
-                pred_arr = np.array(self.gsp_heading, dtype=np.float64).ravel()
+                # Multi-dim GSP output: extract the LAST dim of gsp_heading for the
+                # Δθ correlation metric. Convention: for cyl_kinematics_3d/goal_4d
+                # the last dim is the cylinder Δθ component (matching env.py's convention).
+                # For legacy 1d shapes (T,) or (T,R) with K=1, [-1] on the inner axis
+                # is identical to the sole element — so 1d behavior is preserved exactly.
+                # gsp_heading is a list of per-timestep values; each entry may be:
+                #   - a scalar (legacy 1d flat)
+                #   - a list/array of per-robot scalars (legacy, shape R)
+                #   - a list/array of per-robot K-dim vectors (multi-dim, shape R×K)
+                # We build a flat array of the last-dim of each robot's prediction across
+                # all timesteps, then correlate against the ravelled target.
+                _heading_last_dim = []
+                for _step_entry in self.gsp_heading:
+                    _entry_arr = np.asarray(_step_entry, dtype=np.float64)
+                    if _entry_arr.ndim == 0:
+                        # Scalar — single value
+                        _heading_last_dim.append(float(_entry_arr))
+                    elif _entry_arr.ndim == 1:
+                        # Either (R,) scalars or (K,) dims for 1 robot
+                        # Treat as per-robot scalars; take each element as-is
+                        # (for K>1 single-robot case this picks [-1] per step, correct)
+                        _heading_last_dim.extend(_entry_arr.ravel().tolist())
+                    else:
+                        # (R, K) — take last dim per robot
+                        _heading_last_dim.extend(_entry_arr[:, -1].ravel().tolist())
+                pred_arr = np.array(_heading_last_dim, dtype=np.float64)
                 target_arr = np.array(self.gsp_target, dtype=np.float64).ravel()
                 if pred_arr.size > 0:
                     pred_std = float(np.nanstd(pred_arr))

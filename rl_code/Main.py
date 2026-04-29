@@ -240,8 +240,14 @@ try:
             agent_prox_flags = []
             last_object_heading = None
 
-            next_heading_gsp = np.zeros(Utility.params['num_robots'])
-            old_heading_gsp = np.zeros(Utility.params['num_robots'])
+            # Multi-dim GSP output (Change 1 — GSP_OUTPUT_KIND):
+            # Always 2D (num_robots, K) so all downstream code gets a consistent array.
+            # For K=1 (legacy delta_theta_1d) next_heading_gsp[i] is a 1-element array
+            # instead of a scalar — make_agent_state handles both via the ndim/size check.
+            _gsp_K = getattr(model if not args.independent_learning else models[0],
+                             'gsp_network_output', 1) if config.get('GSP') else 1
+            next_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
+            old_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
             episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
 
             # Reset Change-3 prev-step ring buffers at episode boundaries so
@@ -628,10 +634,21 @@ try:
                                 # the pool-populating loop yields one sample per step.
                                 diag_gsp_head_input = np.asarray(agent_prox_flags, dtype=np.float32).reshape(1, -1)
                             for i in range(Utility.params['num_robots']):
+                                # Multi-dim GSP output: store the full K-dim prediction
+                                # vector for each robot. ctde_gsp[i][-1] is a torch tensor
+                                # of shape (K,) (or scalar for K=1). We detach and convert
+                                # to numpy; .ravel() makes it 1D for safe slice assignment.
                                 if len(ctde_gsp) > 1:
-                                    next_heading_gsp[i] = ctde_gsp[i][-1].item()
+                                    _pred_vec = np.asarray(
+                                        ctde_gsp[i][-1].detach().cpu(), dtype=np.float32
+                                    ).ravel()
                                 else:
-                                    next_heading_gsp[i] = ctde_gsp[-1].item()
+                                    _pred_vec = np.asarray(
+                                        ctde_gsp[-1].detach().cpu(), dtype=np.float32
+                                    ).ravel()
+                                if _pred_vec.size != _gsp_K:
+                                    _pred_vec = np.resize(_pred_vec, _gsp_K)
+                                next_heading_gsp[i] = _pred_vec
                         # print("-------------------------------------------------")
                         # print('[GSP]', next_heading_gsp)
 
