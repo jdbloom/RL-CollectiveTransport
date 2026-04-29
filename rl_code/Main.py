@@ -634,18 +634,16 @@ try:
                                 # the pool-populating loop yields one sample per step.
                                 diag_gsp_head_input = np.asarray(agent_prox_flags, dtype=np.float32).reshape(1, -1)
                             for i in range(Utility.params['num_robots']):
-                                # Multi-dim GSP output: store the full K-dim prediction
-                                # vector for each robot. ctde_gsp[i][-1] is a torch tensor
-                                # of shape (K,) (or scalar for K=1). We detach and convert
-                                # to numpy; .ravel() makes it 1D for safe slice assignment.
-                                if len(ctde_gsp) > 1:
-                                    _pred_vec = np.asarray(
-                                        ctde_gsp[i][-1].detach().cpu(), dtype=np.float32
-                                    ).ravel()
-                                else:
-                                    _pred_vec = np.asarray(
-                                        ctde_gsp[-1].detach().cpu(), dtype=np.float32
-                                    ).ravel()
+                                # Multi-dim GSP output: store the full K-dim prediction vector
+                                # for each robot. Per-agent predictions come back as either a
+                                # numpy array (DDPG / continuous head) or a torch tensor
+                                # (depending on choose_action's return path). Handle both.
+                                # NOTE: do NOT use `[-1]` here — that would truncate the K-dim
+                                # vector to its last element. Take the whole per-agent prediction.
+                                _pred_raw = ctde_gsp[i] if len(ctde_gsp) > 1 else ctde_gsp
+                                if hasattr(_pred_raw, 'detach'):
+                                    _pred_raw = _pred_raw.detach().cpu().numpy()
+                                _pred_vec = np.asarray(_pred_raw, dtype=np.float32).ravel()
                                 if _pred_vec.size != _gsp_K:
                                     _pred_vec = np.resize(_pred_vec, _gsp_K)
                                 next_heading_gsp[i] = _pred_vec
