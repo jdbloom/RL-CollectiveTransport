@@ -214,6 +214,13 @@ _gsp_input_include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_ST
 _gsp_input_include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
 _gsp_input_temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
 
+# Phase 5 lag-elimination flag. When True, make_gsp_states replaces lagged
+# agent_prev_gsp reads with a fresh GSP head forward call on the current prox.
+# Default False preserves bit-identical behavior for all existing batches.
+# Passed to Agent via the config dict; no additional kwarg is needed.
+_gsp_fresh_head_read = bool(config.get('GSP_FRESH_HEAD_READ', False))
+log.info("GSP_FRESH_HEAD_READ = %s", _gsp_fresh_head_read)
+
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
 # Initialized to None; on the first step the velocity terms default to zero.

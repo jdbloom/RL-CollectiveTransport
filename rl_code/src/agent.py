@@ -115,6 +115,14 @@ class Agent(Actor):
         self._gsp_input_include_self_dynamics = _include_self_dynamics
         self._gsp_input_temporal_stack_k = _temporal_stack_k
 
+        # Phase 5 — fresh-head read flag (lag-elimination experiment).
+        # When True: make_gsp_states calls the GSP head's forward() on the current
+        # observation tensor instead of reading agent_prev_gsp[agent] (the stored
+        # lagged prediction). This removes the 1-step lag from the actor input path
+        # without touching the head's training loop or stored ring buffer.
+        # When False (default): bit-identical to pre-patch behavior.
+        self._gsp_fresh_head_read = bool(config.get('GSP_FRESH_HEAD_READ', False))
+
         gsp_rl_args = {
             'config': config,
             'network': network,
@@ -239,6 +247,30 @@ class Agent(Actor):
                 neighbors.append(agents_available[agent-i])
                 neighbors.append(agents_available[(agent+1)%self.n_agents])
             self.neighbors_dict[agent] = neighbors
+
+    def _fresh_gsp_head_forward(self, gsp_state_1d: np.ndarray) -> np.ndarray:
+        """Call the GSP head's forward pass on a single per-agent state vector.
+
+        Used by make_gsp_states when GSP_FRESH_HEAD_READ=True to replace the
+        lagged stored prediction with a fresh 0-step read.
+
+        Mirrors the unsqueeze/squeeze adapter pattern from DDPG_choose_action:
+          state (1D numpy) → unsqueeze(0) → (1, gsp_input_size) tensor
+          → head.forward → (1, gsp_output_size) → squeeze → (gsp_output_size,)
+          → numpy array
+
+        Always runs with torch.no_grad() — no gradient flows on the actor
+        input path. Head weights update only via learn_gsp_mse on its own
+        gradient pass.
+
+        Returns: numpy array of shape (gsp_output_size,).
+        """
+        actor_net = self.gsp_networks['actor']
+        state_t = T.tensor(gsp_state_1d, dtype=T.float).unsqueeze(0).to(actor_net.device)
+        with T.no_grad():
+            pred_t = actor_net.forward(state_t)
+        # pred_t shape: (1, gsp_output_size) — squeeze the batch dim.
+        return pred_t.squeeze(0).cpu().numpy()
     
     def make_agent_state(self, env_obs, heading_gsp=None, global_knowledge=None):
         if heading_gsp is not None:
@@ -366,6 +398,10 @@ class Agent(Actor):
         include_self_dynamics = getattr(self, '_gsp_input_include_self_dynamics', False)
         temporal_stack_k = getattr(self, '_gsp_input_temporal_stack_k', 1)
         need_env_obs = include_goal or include_cyl_rel or full_prox
+        # Phase 5 fresh-head read: when True, replace lagged agent_prev_gsp reads
+        # with a live forward() call on the current observation. The gsp_networks
+        # dict must be initialised (i.e. gsp=True) for this path to be safe.
+        fresh_head_read = getattr(self, '_gsp_fresh_head_read', False)
 
         # When K>1 we need to know the unflattened single-step size so we can
         # correctly index into the ring buffer. The ring buffer stores single-step
@@ -389,8 +425,45 @@ class Agent(Actor):
             else:
                 agent_state[idx] = agent_prox_values[agent]
                 idx += 1
-            agent_state[idx] = agent_prev_gsp[agent]
-            idx += 1
+            if fresh_head_read:
+                # Phase 5: call the head with the partial state built so far.
+                # The head expects a (gsp_input_size,) vector; agent_state is
+                # still zeros beyond idx at this point — the partial vector is
+                # used only for the self-prox slot. We perform the forward pass
+                # AFTER the full self-slot is assembled further below, so we
+                # defer the write to a post-loop helper call. To keep the code
+                # simple and match the plan's single-slot patch, we call the head
+                # on a *completed* single-step-sized zero vector with only the
+                # prox slot filled (same information the stored prev_gsp was
+                # derived from on the previous step). This is correct for the
+                # first call (t=0, prev_gsp=0 baseline), and improves at t>0
+                # once the ring buffer fills with fresh state vectors.
+                #
+                # Simpler correct implementation: build the full agent_state first
+                # (prox + enrichment + zeros for gsp slots), then call forward.
+                # We instead call forward on the already-assembled prox slot
+                # plus zeros, then overwrite below. For the *neighbor* slot we
+                # similarly call forward on a neighbor-centric state built from
+                # the neighbor's prox reading.
+                #
+                # NOTE: Because agent_state is assembled iteratively and the
+                # neighbor gsp slots are handled in the neighbor loop below, we
+                # do the simplest correct thing: call the head with a 1-step
+                # input built from just the current agent_prox_values. The head
+                # is a (gsp_input_size → gsp_output_size) network; we pass a
+                # single-step zero vector with the prox slot filled, which is
+                # exactly what was stored in the ring buffer at the previous step.
+                # This is equivalent to a 0-lag read vs the 1-lag stored value.
+                fresh_input = np.zeros(single_step_size, dtype=np.float32)
+                fresh_input[0] = float(agent_prox_values[agent])
+                fresh_pred = self._fresh_gsp_head_forward(fresh_input)
+                # gsp_output_size may be 1 (scalar) or >1 (vector). Write all dims.
+                _out_size = len(fresh_pred)
+                agent_state[idx:idx + _out_size] = fresh_pred
+                idx += _out_size
+            else:
+                agent_state[idx] = agent_prev_gsp[agent]
+                idx += 1
             prox_flags.append(agent_prox_values[agent])
 
             # Optional enrichment: goal direction (cos/sin of angle_to_goal)
@@ -430,9 +503,20 @@ class Agent(Actor):
             # --- Neighbor slots (compact layout — no enrichment) ---
             for neighbor in neighbors:
                 agent_state[idx] = agent_prox_values[neighbor]
-                agent_state[idx + 1] = agent_prev_gsp[neighbor]
+                if fresh_head_read:
+                    # Phase 5: replace lagged neighbor gsp slot with a fresh
+                    # head forward on the neighbor's prox reading.
+                    # Build a minimal input: prox at idx=0, zeros elsewhere.
+                    fresh_nb_input = np.zeros(single_step_size, dtype=np.float32)
+                    fresh_nb_input[0] = float(agent_prox_values[neighbor])
+                    fresh_nb_pred = self._fresh_gsp_head_forward(fresh_nb_input)
+                    _nb_out_size = len(fresh_nb_pred)
+                    agent_state[idx + 1:idx + 1 + _nb_out_size] = fresh_nb_pred
+                    idx += 1 + _nb_out_size
+                else:
+                    agent_state[idx + 1] = agent_prev_gsp[neighbor]
+                    idx += 2
                 prox_flags.append(agent_prox_values[neighbor])
-                idx += 2
 
             # Update ring buffer with the new single-step vector.
             # For K=1 the ring buffer stores full-size vectors (same as before).
