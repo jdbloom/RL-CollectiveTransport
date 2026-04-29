@@ -488,7 +488,18 @@ class HDF5Logger:
                             corr = float("nan")
                     else:
                         corr = float("nan")
-                    grp.attrs["gsp_pred_target_corr"] = corr
+                    # Phase 5 metric cleanup (2026-04-29): the existing name
+                    # `gsp_pred_target_corr` is misleading because pred=future_prox
+                    # (head's training target at horizon=5) but target=delta_theta
+                    # (cylinder's per-step heading change from calculate_gsp_reward).
+                    # These are different physical quantities, so the correlation
+                    # was apples-vs-oranges. The new name `production_pred_vs_deltatheta_corr`
+                    # describes what's actually computed. Both names are written
+                    # during a one-batch migration window; the deprecated alias
+                    # will be removed in a follow-up PR after H-phase5-1 lands.
+                    # See docs/superpowers/plans/2026-04-29-metric-cleanup.md.
+                    grp.attrs["production_pred_vs_deltatheta_corr"] = corr
+                    grp.attrs["gsp_pred_target_corr"] = corr  # DEPRECATED — see above
 
             # Phase 4 loss-step correlation diagnostic attrs.
             # gsp_loss_step_corr_mean: mean Pearson r between fresh forward-pass preds
