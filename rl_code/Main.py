@@ -214,6 +214,14 @@ _gsp_input_include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_ST
 _gsp_input_include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
 _gsp_input_temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
 
+# H-phase5-2 reward shaping. When > 0, gsp_reward (negative penalty for prediction
+# error from env.calculate_gsp_reward, range [-2, 0]) is added to the actor's
+# training reward stream at coef * gsp_reward[i] per robot per timestep. Default
+# 0.0 preserves bit-identical reward stream for all pre-Phase-5.2 batches.
+# See docs/predictions/2026-04-30-h-phase5-2-prereg.md.
+_gsp_reward_coef = float(config.get('GSP_REWARD_COEF', 0.0))
+log.info("GSP_REWARD_COEF = %s", _gsp_reward_coef)
+
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
 # Initialized to None; on the first step the velocity terms default to zero.
@@ -755,6 +763,14 @@ try:
                         prox_values = env_observations[i][7:]
                         prox_value = np.sum(prox_values)
                         rewards[i] += (-1)*prox_value
+                        # H-phase5-2 reward shaping: when GSP_REWARD_COEF > 0, add
+                        # gsp_reward[i] (signed prediction-error penalty in [-2, 0])
+                        # scaled by coef to the actor's training reward. Default 0.0
+                        # is bit-identical (the if branch is skipped). gsp_reward was
+                        # computed at line 429 by env.calculate_gsp_reward and is in
+                        # scope here as a per-robot list.
+                        if _gsp_reward_coef > 0.0:
+                            rewards[i] += _gsp_reward_coef * float(gsp_reward[i])
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
 
