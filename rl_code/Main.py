@@ -221,6 +221,12 @@ _gsp_input_temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
 # See docs/predictions/2026-04-30-h-phase5-2-prereg.md.
 _gsp_reward_coef = float(config.get('GSP_REWARD_COEF', 0.0))
 log.info("GSP_REWARD_COEF = %s", _gsp_reward_coef)
+# H-phase5-4 random-noise control. When True, the per-step augmentation at
+# Main.py:772 uses a random Gaussian-squared penalty in [-2, 0] of matched
+# magnitude instead of gsp_reward. Disambiguates "prediction signal helps"
+# from "any aux reward of right scale helps." Default False is unchanged.
+_gsp_reward_random_noise = bool(config.get('GSP_REWARD_RANDOM_NOISE', False))
+log.info("GSP_REWARD_RANDOM_NOISE = %s", _gsp_reward_random_noise)
 
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
@@ -770,7 +776,15 @@ try:
                         # computed at line 429 by env.calculate_gsp_reward and is in
                         # scope here as a per-robot list.
                         if _gsp_reward_coef > 0.0:
-                            rewards[i] += _gsp_reward_coef * float(gsp_reward[i])
+                            if _gsp_reward_random_noise:
+                                # Replace gsp_reward with a Gaussian-squared
+                                # penalty of matched magnitude. Same clip range
+                                # [-2, 0] so the additive perturbation is
+                                # statistically comparable to gsp_reward.
+                                _noise = float(np.clip(-(np.random.normal(0.0, 1.0))**2, -2.0, 0.0))
+                                rewards[i] += _gsp_reward_coef * _noise
+                            else:
+                                rewards[i] += _gsp_reward_coef * float(gsp_reward[i])
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
 
