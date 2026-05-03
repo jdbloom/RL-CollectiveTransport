@@ -276,6 +276,8 @@ class Agent(Actor):
             # This is the QMIP-minus test of "does the prediction contribute?".
             if getattr(self, 'gsp_zero_out_signal', False):
                 gsp_output_size = getattr(self, 'gsp_network_output', 1)
+                if getattr(self, 'gsp_jepa_enabled', False):
+                    gsp_output_size = getattr(self, 'gsp_encoder_dim', 32)
                 gsp_slot = np.zeros(gsp_output_size, dtype=np.float32)
             else:
                 # Multi-dim GSP output support (Change 1 — GSP_OUTPUT_KIND):
@@ -285,8 +287,14 @@ class Agent(Actor):
                 # For vector cases (cyl_kinematics_3d/goal_4d/time_to_goal_1d) the
                 # values are already in physical units from the label computation in
                 # Main.py and are concatenated as-is (no extra scaling).
+                # JEPA path: heading_gsp is a 32-d encoder latent — concatenate raw,
+                # no scaling. Detected by: array dim > 0 and size > 5 (the existing
+                # multi-dim outputs top out at 4; 32 is unambiguous).
                 heading_gsp_arr = np.asarray(heading_gsp, dtype=np.float32)
-                if heading_gsp_arr.ndim == 0 or heading_gsp_arr.size == 1:
+                if heading_gsp_arr.ndim > 0 and heading_gsp_arr.size > 5:
+                    # JEPA latent vector — concatenate raw, skip degrees/10.
+                    gsp_slot = heading_gsp_arr.ravel()
+                elif heading_gsp_arr.ndim == 0 or heading_gsp_arr.size == 1:
                     # Scalar path — preserve legacy degrees/10 normalization.
                     scalar_val = float(heading_gsp_arr.ravel()[0])
                     gsp_slot = np.array([np.degrees(scalar_val / 10)], dtype=np.float32)
@@ -567,6 +575,28 @@ class Agent(Actor):
         return actions, action_num
     
     def choose_agent_gsp(self, agent_gsp_states, test = False):
+        # JEPA path: run the online encoder on each agent's GSP input state.
+        # Returns a list of 32-d latent vectors (one per agent), or a single
+        # 32-d array for the non-neighbor/non-broadcast flat case.
+        if getattr(self, 'gsp_jepa_enabled', False):
+            import torch as T
+            enc = self.gsp_encoder_online
+            enc.eval()
+            with T.no_grad():
+                if self._neighbors or self._broadcast:
+                    latents = []
+                    for i in range(self._n_agents):
+                        state_np = np.asarray(agent_gsp_states[i], dtype=np.float32)
+                        state_t = T.tensor(state_np, dtype=T.float32).unsqueeze(0).to(enc.device)
+                        latent = enc(state_t).squeeze(0).cpu().numpy()
+                        latents.append(latent)
+                    return latents
+                else:
+                    state_np = np.asarray(agent_gsp_states, dtype=np.float32)
+                    state_t = T.tensor(state_np, dtype=T.float32).unsqueeze(0).to(enc.device)
+                    latent = enc(state_t).squeeze(0).cpu().numpy()
+                    return latent
+
         if self._neighbors or self._broadcast:
             # Per-agent predictions with self-centric inputs. GSP-N (neighbors)
             # and GSP-B (broadcast) share the same per-agent forward-pass shape;
@@ -595,7 +625,7 @@ class Agent(Actor):
                 self.gsp_observation.pop(0)
                 action = self.choose_action(self.gsp_observation, self.gsp_networks, test)
                 return action
-            
+
             observation = np.array(agent_gsp_states)
             return self.choose_action(observation, self.gsp_networks, test)
 

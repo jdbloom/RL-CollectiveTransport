@@ -861,6 +861,14 @@ try:
                                 ]
                                 if gsp_losses:
                                     hdf5_writer.record_gsp_loss(float(np.mean(gsp_losses)))
+                                if config.get('GSP_JEPA_ENABLED'):
+                                    for _m in models:
+                                        _js = getattr(_m, 'last_gsp_jepa_stats', None)
+                                        if _js is not None:
+                                            hdf5_writer.record_jepa_pred_mse(_js.get('pred_mse', 0.0))
+                                            hdf5_writer.record_jepa_latent_var(_js.get('var', 0.0))
+                                            hdf5_writer.record_jepa_latent_rank(_js.get('rank', 0.0))
+                                            break  # one learn step per tick; first non-None wins
                                 if config.get('GSP_E2E_ENABLED'):
                                     e2e_diag = getattr(models[0], 'last_e2e_diagnostics', None)
                                     if e2e_diag is not None:
@@ -872,6 +880,12 @@ try:
                                 gsp_step_loss = getattr(model, "last_gsp_loss", None)
                                 if gsp_step_loss is not None:
                                     hdf5_writer.record_gsp_loss(gsp_step_loss)
+                                if config.get('GSP_JEPA_ENABLED'):
+                                    _js = getattr(model, 'last_gsp_jepa_stats', None)
+                                    if _js is not None:
+                                        hdf5_writer.record_jepa_pred_mse(_js.get('pred_mse', 0.0))
+                                        hdf5_writer.record_jepa_latent_var(_js.get('var', 0.0))
+                                        hdf5_writer.record_jepa_latent_rank(_js.get('rank', 0.0))
                                 if config.get('GSP_E2E_ENABLED'):
                                     e2e_diag = getattr(model, 'last_e2e_diagnostics', None)
                                     if e2e_diag is not None:

@@ -144,6 +144,14 @@ class HDF5Logger:
         # gsp_loss_step_corr_{mean,std,min,max} attrs on write_episode().
         # Empty list → no attrs written (non-GSP runs unaffected).
         self.gsp_loss_step_corr_samples: list = []
+        # JEPA latent-space diagnostic scalars. Populated when GSP_JEPA_ENABLED=True.
+        # jepa_pred_mse:    per-learn-step MSE between predictor output and target latent.
+        # jepa_latent_var:  mean per-dim variance of the online encoder output z_t.
+        # jepa_latent_rank: approximate effective rank of z_t (SVD-based threshold count).
+        # Empty lists → no attrs written (non-JEPA runs unaffected).
+        self.jepa_pred_mse: list = []
+        self.jepa_latent_var: list = []
+        self.jepa_latent_rank: list = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -229,6 +237,18 @@ class HDF5Logger:
         """
         if not np.isnan(corr_value):
             self.gsp_loss_step_corr_samples.append(float(corr_value))
+
+    def record_jepa_pred_mse(self, v: float) -> None:
+        """Record one per-learn-step JEPA prediction MSE (z_pred vs z_target)."""
+        self.jepa_pred_mse.append(float(v))
+
+    def record_jepa_latent_var(self, v: float) -> None:
+        """Record one per-learn-step mean per-dim variance of the online encoder z_t."""
+        self.jepa_latent_var.append(float(v))
+
+    def record_jepa_latent_rank(self, v: float) -> None:
+        """Record one per-learn-step approximate effective rank of the online encoder z_t."""
+        self.jepa_latent_rank.append(float(v))
 
     def record_stored_transition(self, label, input_vec) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
@@ -547,6 +567,15 @@ class HDF5Logger:
                 grp.attrs["gsp_loss_step_corr_min"] = float(np.nanmin(_corr_arr))
                 grp.attrs["gsp_loss_step_corr_max"] = float(np.nanmax(_corr_arr))
                 grp.attrs["gsp_loss_step_corr_n_batches"] = int(len(_corr_arr))
+
+            # JEPA latent-space diagnostic attrs.
+            # Written as episode-group attrs when at least one learn step fired.
+            if self.jepa_pred_mse:
+                grp.attrs["jepa_pred_mse_mean"] = float(np.mean(self.jepa_pred_mse))
+            if self.jepa_latent_var:
+                grp.attrs["jepa_latent_var_mean"] = float(np.mean(self.jepa_latent_var))
+            if self.jepa_latent_rank:
+                grp.attrs["jepa_latent_rank_mean"] = float(np.mean(self.jepa_latent_rank))
 
         # Reset for next episode
         summary = {
