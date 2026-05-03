@@ -17,12 +17,36 @@ Usage:
 """
 
 import os
+import time
 from typing import Optional
 
 import h5py
 import numpy as np
 
 # Notification handled by ingestion worker (optional, external)
+
+_SWMR_RETRY_COUNT = 3
+_SWMR_RETRY_DELAY = 0.5  # seconds
+
+
+def _open_h5_writer(path: str, mode: str = "a"):
+    """Open an HDF5 file for writing with SWMR-compatible settings.
+
+    Uses libver='latest' (required for SWMR) and retries up to
+    _SWMR_RETRY_COUNT times on BlockingIOError (errno 35) which occurs on
+    macOS APFS when an external reader briefly holds the file lock.
+
+    Returns an open h5py.File handle; caller is responsible for closing it.
+    """
+    last_exc: Optional[Exception] = None
+    for attempt in range(_SWMR_RETRY_COUNT):
+        try:
+            return h5py.File(path, mode, libver="latest")
+        except BlockingIOError as exc:
+            last_exc = exc
+            if attempt < _SWMR_RETRY_COUNT - 1:
+                time.sleep(_SWMR_RETRY_DELAY)
+    raise last_exc  # type: ignore[misc]
 
 
 class HDF5Logger:
@@ -60,7 +84,9 @@ class HDF5Logger:
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
         # Write provenance attrs once, at file creation. Subsequent episodes
         # append without touching root attrs.
-        with h5py.File(self.hdf5_path, "a") as h5f:
+        # libver='latest' is required for SWMR; swmr_mode=True is set here so
+        # external probes can open with swmr=True immediately after __init__.
+        with _open_h5_writer(self.hdf5_path) as h5f:
             if stelaris_sha:
                 h5f.attrs["stelaris_sha"] = str(stelaris_sha)
             if rl_ct_sha:
@@ -73,6 +99,7 @@ class HDF5Logger:
                 h5f.attrs["rl_ct_branch"] = str(rl_ct_branch)
             if gsp_rl_branch:
                 h5f.attrs["gsp_rl_branch"] = str(gsp_rl_branch)
+            h5f.swmr_mode = True
         self._reset()
 
     def _reset(self):
@@ -309,7 +336,8 @@ class HDF5Logger:
         """
         group_name = f"episode_{episode_num:04d}"
 
-        with h5py.File(self.hdf5_path, "a") as h5f:
+        with _open_h5_writer(self.hdf5_path) as h5f:
+            h5f.swmr_mode = True
             if group_name in h5f:
                 del h5f[group_name]
             grp = h5f.create_group(group_name)
