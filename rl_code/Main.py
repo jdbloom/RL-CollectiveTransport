@@ -258,8 +258,12 @@ try:
             # Always 2D (num_robots, K) so all downstream code gets a consistent array.
             # For K=1 (legacy delta_theta_1d) next_heading_gsp[i] is a 1-element array
             # instead of a scalar — make_agent_state handles both via the ndim/size check.
-            _gsp_K = getattr(model if not args.independent_learning else models[0],
-                             'gsp_network_output', 1) if config.get('GSP') else 1
+            _model_for_gsp_k = model if not args.independent_learning else models[0]
+            if config.get('GSP_JEPA_ENABLED', False):
+                # JEPA path: actor input slot for GSP signal is the encoder latent (default 32).
+                _gsp_K = int(config.get('GSP_ENCODER_DIM', 32)) if config.get('GSP') else 1
+            else:
+                _gsp_K = getattr(_model_for_gsp_k, 'gsp_network_output', 1) if config.get('GSP') else 1
             next_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
             old_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
             episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
