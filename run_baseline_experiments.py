@@ -129,7 +129,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "TEST_PRISM": 0,
         "LEARNING_SCHEME": "DQN",
         "OPTIONS_PER_ACTION": 3,
-        "MIN_MAX_ACTION": 0.1,
+        "MIN_MAX_ACTION": 1.0,
         "META_PARAM_SIZE": 1,
         "PROX_FILTER_ANGLE_DEG": 60.0,
         "GLOBAL_KNOWLEDGE": False,
