@@ -18,26 +18,40 @@ def angle_normalize_signed_deg(a):
   return a
 
 def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots):
-    """Return (clipped_rewards, label, squared_errors) per robot.
+    """Return (clipped_rewards, label, squared_errors, raw_diff_rad) per robot.
 
     The clipped reward saturates at -2 and hides the magnitude of large prediction errors.
     squared_errors carries the raw (diff - prediction)^2 per robot — needed for the
     information-collapse diagnostic (paper outline: "Revamped Reward structure for GSP
     to prevent information collapse").
+
+    raw_diff_rad is the signed radian rotation BEFORE the ×100 / clip step; it's the
+    quantity the supervised MSE is trying to predict. Returned so Main.py can log the
+    per-step distribution for calibration diagnostics (2026-04-20 audit — the current
+    ×100 scaling with clip to [-1, 1] likely degenerates the regression task into
+    near-binary classification, but we need the actual distribution to confirm).
     """
     gsp_reward = []
     squared_errors = []
     label = 0
+    raw_diff_rad = 0.0
     if GSP:
         old_cyl_ang = angle_normalize_unsigned_deg(old_cyl_ang)
         new_cyl_ang = angle_normalize_unsigned_deg(cyl_ang)
         diff = angle_normalize_signed_deg(new_cyl_ang-old_cyl_ang)
         diff = math.radians(diff)
+        raw_diff_rad = float(diff)  # capture BEFORE scaling/clipping
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
         diff = np.clip(diff*100, -1, 1)
         label=diff
         for i in range(num_robots):
-            reward = diff - next_heading_gsp[i]
+            # Multi-dim GSP output: extract the scalar component for reward arithmetic.
+            # Convention: the LAST dim of cyl_kinematics_3d/goal_4d is the cylinder
+            # Δθ component, which is exactly what `diff` measures. For legacy 1d
+            # (delta_theta_1d, future_prox_1d, time_to_goal_1d) the only element
+            # is used — identical to previous behavior.
+            pred_for_reward = float(np.asarray(next_heading_gsp[i]).ravel()[-1])
+            reward = diff - pred_for_reward
             abs_reward = abs(reward)**2
             squared_errors.append(float(abs_reward))
             gsp_reward.append(np.clip(-1*abs_reward, -2, 0))
@@ -45,7 +59,7 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         gsp_reward = [0 for i in range(num_robots)]
         squared_errors = [0 for i in range(num_robots)]
 
-    return gsp_reward, label, squared_errors
+    return gsp_reward, label, squared_errors, raw_diff_rad
 
 
 class ZMQ_Utility:

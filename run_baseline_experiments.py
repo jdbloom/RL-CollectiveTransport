@@ -129,7 +129,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "TEST_PRISM": 0,
         "LEARNING_SCHEME": "DQN",
         "OPTIONS_PER_ACTION": 3,
-        "MIN_MAX_ACTION": 0.1,
+        "MIN_MAX_ACTION": 1.0,
         "META_PARAM_SIZE": 1,
         "PROX_FILTER_ANGLE_DEG": 60.0,
         "GLOBAL_KNOWLEDGE": False,
@@ -153,7 +153,12 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "EPSILON": 1.0,
         "EPS_MIN": 0.01,
         "EPS_DEC": 0.0001,
-        "BATCH_SIZE": 256,
+        # Bisect 2026-04-14: BATCH_SIZE 64 → 256 in commit a1c4d6e broke DDPG.
+        # DDPG at LE=4 BS=64 is a learned baseline (job 120, n=118, 100% last50 success,
+        # PR=-2375, 101/109 rolling windows in target band -1800 to -3500 per robot).
+        # Same mechanism likely broke GSP_BATCH_SIZE (the GSP head uses DDPGActorNetwork too).
+        # Reverting both batch sizes to dissertation values here.
+        "BATCH_SIZE": 64,
         "MEM_SIZE": 100000,
         "REPLACE_TARGET_COUNTER": 1000,
         "NOISE": 0.1,
@@ -161,7 +166,7 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "WARMUP": 1000,
         "GSP_LEARNING_FREQUENCY": 4,
         "LEARN_EVERY": 4,
-        "GSP_BATCH_SIZE": 256,
+        "GSP_BATCH_SIZE": 128,
         # Per-robot force_magnitude threshold for GSP replay buffer store filter.
         # 0.0 = disabled (store every transition with prox activity, legacy behavior).
         # > 0 = only store transitions where stats[i][0] (force_magnitude) exceeds
@@ -171,6 +176,36 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         # docs/research/2026-04-13-gsp-ddpg-vs-attention-collapse.md in Stelaris).
         # Recommended starting point: ~4.0 (≈ p75 of force_magnitude in 2-obstacle runs).
         "GSP_STORE_FORCE_THRESHOLD": 0.0,
+        # Task 0 ablation knobs — GSP head only, main policy actor untouched.
+        # GSP_WEIGHT_DECAY: Adam weight_decay on the GSP-head optimizer.
+        #   Default 1e-4 = legacy. Set to 0.0 to test the decoupled-decay
+        #   pull-to-mean collapse hypothesis.
+        # GSP_INIT_W: half-range of uniform init on the GSP-head output layer
+        #   weights. Default 3e-3 = legacy (starts near tanh zero). Set to
+        #   0.1 to test whether starting far from zero escapes the collapse.
+        "GSP_WEIGHT_DECAY": 1e-4,
+        "GSP_INIT_W": 3e-3,
+        # Trunk capacity of the GSP head MLP. Defaults match DDPG actor (400, 300).
+        # Override for the 2026-04-14 trunk-capacity experiment.
+        "GSP_FC1_DIMS": 400,
+        "GSP_FC2_DIMS": 300,
+        # Task 1 of the stability plan: save a GSP-head weight snapshot every
+        # N episodes so post-hoc best-checkpoint selection can recover the
+        # highest-correlation predictor even if it regresses later. 0 = disabled.
+        "GSP_CHECKPOINT_EVERY": 0,
+        # Task 4: LayerNorm in the GSP head trunk (after fc1 and fc2, before ReLU).
+        # Default False = legacy. Enable via matrix YAML override per-batch.
+        "GSP_USE_LAYER_NORM": False,
+        # Task 5: VICReg variance+covariance penalty on the GSP head penultimate
+        # features. Default False (disabled). Enable via matrix YAML override
+        # per-batch. VAR_COEF/COV_COEF follow Bardes et al. ICLR 2022 Table 9.
+        "GSP_VICREG_ENABLED": False,
+        "GSP_VICREG_VAR_COEF": 1.0,
+        "GSP_VICREG_COV_COEF": 0.04,
+        # End-to-end GSP training (2026-04-16, DIAL pattern).
+        "GSP_E2E_ENABLED": False,
+        "GSP_E2E_LAMBDA": 1.0,
+        "GSP_E2E_LINEAR_OUTPUT": False,
     }
 
 
