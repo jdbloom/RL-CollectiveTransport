@@ -433,6 +433,22 @@ class HDF5Logger:
             if term_arr.size > 0:
                 grp.create_dataset("termination", data=term_arr)
 
+            # Episode-level static layout: obstacle and gate positions are set
+            # once at episode init and don't change within the episode. The
+            # accumulator stores them per-step but we only need the first row.
+            # Restored 2026-05-05 (task #110) — regression from the pkl format.
+            # Skip when the stat is a sentinel int 0 (no obstacles / no gate).
+            for fld_name, fld in [("obstacle_stats", self.obstacle_stats),
+                                  ("gate_stats", self.gate_stats)]:
+                if not fld:
+                    continue
+                first = fld[0]
+                if first is None or not hasattr(first, "__len__"):
+                    continue  # int sentinel like 0 — env had no obstacles/gate
+                arr = np.asarray(first, dtype=np.float32)
+                if arr.size > 0:
+                    grp.create_dataset(fld_name, data=arr)
+
             # Compute and store summary attributes
             rewards = np.array(self.reward, dtype=np.float32)
             gsp_rewards = np.array(self.gsp_reward, dtype=np.float32)
