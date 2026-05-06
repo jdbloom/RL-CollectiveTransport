@@ -579,7 +579,6 @@ class Agent(Actor):
         # Returns a list of 32-d latent vectors (one per agent), or a single
         # 32-d array for the non-neighbor/non-broadcast flat case.
         if getattr(self, 'gsp_jepa_enabled', False):
-            import torch as T
             enc = self.gsp_encoder_online
             enc.eval()
             with T.no_grad():
