@@ -44,13 +44,13 @@
                   max_robot_failures = "$$max_robot_failures$$"
 		              latest_failure_time = "1000"
 		              chance_failure = "$$chance_failure$$"
-                  goal = "4.5, 0"
-                  threshold = "2"
+                  goal = "$$goal_x$$, 0"
+                  threshold = "$$goal_radius$$"
                   threshold_freq = "100"
                   threshold_dec = "0.1"
-                  min_threshold = "2"
+                  min_threshold = "$$goal_radius$$"
                   num_episodes = "$$num_episodes$$"
-                  episode_time = "4500"
+                  episode_time = "$$episode_time$$"
                   time_out_reward = "0"
                   goal_reward = "0"
                   pytorch_url = "tcp://localhost:$$pytorch_port$$"
@@ -65,25 +65,28 @@
                   use_base_model = "0"
                   use_prisms = "$$use_prisms$$"
                   random_objs = "$$random_objs$$"
-                  test_prism = "$$test_prism$$"/>
+                  test_prism = "$$test_prism$$"
+                  cylinder_radius = "$$cylinder_radius$$"
+                  obstacle_radius = "$$obstacle_radius$$"
+                  obstacle_height = "$$obstacle_height$$"/>
 
 
   <!-- *********************** -->
   <!-- * Arena configuration * -->
   <!-- *********************** -->
-  <arena size="20, 10, 1" center="0,0,0.5">
+  <arena size="$$arena_x$$, $$arena_y$$, 1" center="0,0,0.5">
 
-    <box id="wall_north" size="20,0.1,0.5" movable="false">
-      <body position="0,4.9,0" orientation="0,0,0" />
+    <box id="wall_north" size="$$arena_x$$,0.1,0.5" movable="false">
+      <body position="0,$$wall_ns_y$$,0" orientation="0,0,0" />
     </box>
-    <box id="wall_south" size="20,0.1,0.5" movable="false">
-      <body position="0,-4.9,0" orientation="0,0,0" />
+    <box id="wall_south" size="$$arena_x$$,0.1,0.5" movable="false">
+      <body position="0,-$$wall_ns_y$$,0" orientation="0,0,0" />
     </box>
-    <box id="wall_east" size="0.1,10,0.5" movable="false">
-      <body position="9.9,0,0" orientation="0,0,0" />
+    <box id="wall_east" size="0.1,$$arena_y$$,0.5" movable="false">
+      <body position="$$wall_ew_x$$,0,0" orientation="0,0,0" />
     </box>
-    <box id="wall_west" size="0.1,10,0.5" movable="false">
-      <body position="-9.9,0,0" orientation="0,0,0" />
+    <box id="wall_west" size="0.1,$$arena_y$$,0.5" movable="false">
+      <body position="-$$wall_ew_x$$,0,0" orientation="0,0,0" />
     </box>
   </arena>
 

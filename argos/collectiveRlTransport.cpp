@@ -11,11 +11,11 @@ using namespace argos;
 
 static const std::string FB_CONTROLLER = "fgc";
 static const Real WALL_THICKNESS            = 0.2;  // m
-static const Real CYLINDER_RADIUS           = 0.5;  // m
+// m_fCylinderRadius now read from XML — see m_fCylinderRadius
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
-static const Real OBSTACLE_RADIUS           = 0.5;  // m
-static const Real OBSTACLE_HEIGHT           = 0.5;  // m
+// m_fObstacleRadius now read from XML — see m_fObstacleRadius
+// m_fObstacleHeight now read from XML — see m_fObstacleHeight
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
@@ -90,6 +90,9 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "test_prism", m_unUseTestPrism);
       GetNodeAttribute(t_tree, "random_objs", m_unRandomizeObjects);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
+      GetNodeAttribute(t_tree, "cylinder_radius", m_fCylinderRadius);
+      GetNodeAttribute(t_tree, "obstacle_radius", m_fObstacleRadius);
+      GetNodeAttribute(t_tree, "obstacle_height", m_fObstacleHeight);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -184,11 +187,11 @@ void CCollectiveRLTransport::CreateEntities() {
          CVector3(),
          CQuaternion(),
          true,
-         CYLINDER_RADIUS,
+         m_fCylinderRadius,
          CYLINDER_HEIGHT,
          CYLINDER_MASS);
       AddEntity(*m_pcCylinder);
-      max_length = CYLINDER_RADIUS;
+      max_length = m_fCylinderRadius;
       m_cObjCOMOffsetPos = CVector2::ZERO;
    }
    else if(m_unObjectChoice == 1) {
@@ -294,8 +297,8 @@ void CCollectiveRLTransport::CreateEntities() {
         CVector3(),
         CQuaternion(),
         false,
-        OBSTACLE_RADIUS,
-        OBSTACLE_HEIGHT,
+        m_fObstacleRadius,
+        m_fObstacleHeight,
         OBSTACLE_MASS);
      m_vecObstacles.push_back(pcC);
      AddEntity(*pcC);
@@ -378,8 +381,8 @@ void CCollectiveRLTransport::CreateEntities() {
    LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
    CRange<Real> cYObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + OBSTACLE_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - OBSTACLE_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + m_fObstacleRadius,
+      GetSpace().GetArenaLimits().GetMax().GetY() - m_fObstacleRadius
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       m_vecObstaclePos.push_back(std::vector<CVector3>());
