@@ -215,6 +215,20 @@ def write_yaml_config(config, path):
             f.write(f"{key}: {value}\n")
 
 
+_SCALE_GEOM_FLAGS = [
+    ("ARENA_X", "--arena_x"),
+    ("ARENA_Y", "--arena_y"),
+    ("WALL_NS_Y", "--wall_ns_y"),
+    ("WALL_EW_X", "--wall_ew_x"),
+    ("GOAL_X", "--goal_x"),
+    ("GOAL_RADIUS", "--goal_radius"),
+    ("EPISODE_TIME", "--episode_time"),
+    ("CYLINDER_RADIUS", "--cylinder_radius"),
+    ("OBSTACLE_RADIUS", "--obstacle_radius"),
+    ("OBSTACLE_HEIGHT", "--obstacle_height"),
+]
+
+
 def generate_argos_xml(config):
     cmd = [
         sys.executable, os.path.join(PROJECT_ROOT, "argos", "generate_argos.py"),
@@ -233,6 +247,9 @@ def generate_argos_xml(config):
         "--random_objs", str(config["RANDOM_OBJECTS"]),
         "--test_prism", str(config["TEST_PRISM"]),
     ]
+    for cfg_key, cli_arg in _SCALE_GEOM_FLAGS:
+        if cfg_key in config:
+            cmd.extend([cli_arg, str(config[cfg_key])])
     result = subprocess.run(cmd, cwd=os.path.join(PROJECT_ROOT, "argos"),
                             capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
