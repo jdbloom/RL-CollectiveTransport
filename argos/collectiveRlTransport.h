@@ -237,6 +237,15 @@ private:
    /** Number of obstacles to fill in the environment*/
    UInt32 m_unNumObstacles;
 
+   /** Payload cylinder radius (m) — XML-readable for scale studies */
+   Real m_fCylinderRadius;
+
+   /** Obstacle cylinder radius (m) — XML-readable for scale studies */
+   Real m_fObstacleRadius;
+
+   /** Obstacle cylinder height (m) — XML-readable for scale studies */
+   Real m_fObstacleHeight;
+
    /** Use the gate model for an obstacle */
    UInt32 m_unUseGate;
 
