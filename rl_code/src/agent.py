@@ -91,6 +91,12 @@ class Agent(Actor):
         #   GSP_INPUT_TEMPORAL_STACK_K:      int ≥1; K>1 stacks last K obs, multiplies total size
         _include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_STATE', False))
         _include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
+        # Eval-time neighbor ablation (correctness-critical). When True, the neighbor
+        # region of every per-agent GSP input vector is zeroed in make_gsp_states
+        # (before ring-buffer/temporal stacking), neutralizing the neighbor signal
+        # while leaving the self-slot + enrichment dims and input size untouched.
+        # Default False is a strict bit-exact no-op vs current behavior.
+        self._gsp_eval_ablate_neighbors = bool(config.get('GSP_EVAL_ABLATE_NEIGHBORS', False))
         _temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
         if _temporal_stack_k < 1:
             raise ValueError(
@@ -476,6 +482,7 @@ class Agent(Actor):
             # --- Neighbor slots (compact layout — no enrichment) ---
             # Each neighbor slot is (1 + K) dims: avg_prox × 1, prev_gsp × K.
             # When K=1 (legacy) this is identical to the previous 2-dim write.
+            _neighbor_region_start = idx  # capture before the loop (after self+enrichment)
             for neighbor in neighbors:
                 agent_state[idx] = agent_prox_values[neighbor]
                 idx += 1
@@ -485,6 +492,15 @@ class Agent(Actor):
                 agent_state[idx:idx + _slot_k] = _nbr_prev
                 prox_flags.append(agent_prox_values[neighbor])
                 idx += _slot_k
+            _neighbor_region_end = idx  # capture after the loop
+
+            # Eval-time neighbor ablation: neutralize the neighbor region in place,
+            # BEFORE the vector is pushed to the ring buffer / temporally stacked, so
+            # the zeros propagate through stacking. The self-slot and all enrichment
+            # dims (everything before _neighbor_region_start) are untouched. Works for
+            # any _slot_k (K=1 and K>1) and for the temporal-stack-K path.
+            if getattr(self, '_gsp_eval_ablate_neighbors', False):
+                agent_state[_neighbor_region_start:_neighbor_region_end] = 0.0
 
             # Update ring buffer with the new single-step vector.
             # For K=1 the ring buffer stores full-size vectors (same as before).
