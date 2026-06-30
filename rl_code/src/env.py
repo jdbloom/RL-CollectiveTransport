@@ -1,7 +1,8 @@
 import math
+import struct as _struct
 import numpy as np
 from collections import namedtuple
-from struct import pack, unpack, Struct
+from struct import pack, unpack, Struct, calcsize
 
 def angle_normalize_unsigned_deg(a):
   if not np.isfinite(a):
@@ -106,6 +107,16 @@ class ZMQ_Utility:
         self.INT_SIZE = 4
         self._namedtuple_cache = {}
 
+        # T5: precomputed Struct for serialize_actions (cached at __init__, re-created
+        # only if ACTIONS_FMT changes — which it never does at runtime).
+        self._actions_packer: Struct = Struct(self.ACTIONS_FMT)
+        # T5: precomputed byte sizes for each per-robot message type.
+        self._obs_stride: int = calcsize(self.OBS_FMT)         # 31*4 = 124
+        self._fail_stride: int = self.INT_SIZE                  # 1*4  =   4
+        self._rew_stride: int = self.FLOAT_SIZE                 # 1*4  =   4
+        self._stat_stride: int = calcsize(self.STATS_FMT)      # 4*4  =  16
+        self._rs_stride: int = calcsize(self.ROBOT_STATS_FMT)  # 6*4  =  24
+
 
     def get_params(self, msg):
         self.params = self.parse_msg(msg, 'params', self.PARAMS_FIELDS, self.PARAMS_FMT)
@@ -185,67 +196,39 @@ class ZMQ_Utility:
     # Returns a list of numpy arrays, one per robot
     #
     def parse_obs(self, msg):
-        obs = []
-        # For each robot
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.params['num_obs'] * self.FLOAT_SIZE:(r+1) * self.params['num_obs'] * self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'obs', self.OBS_FIELDS, self.OBS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count=len(data))
-            # Append it to the observations
-            obs.append(nparr)
-        return obs
+        R = self.params['num_robots']
+        n = self.params['num_obs']
+        # T5: single frombuffer + reshape replaces R per-robot unpack+fromiter loops.
+        # Safe because ARGoS observation messages are contiguous LE float32 (T0.3).
+        matrix = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [matrix[r].copy() for r in range(R)]
 
     def parse_failures(self, msg):
-        failures = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.INT_SIZE:(r+1)*self.INT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'failure', self.FAILURE_FIELDS, self.FAILURE_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.intc, count = len(data))
-            # Append it to the rewards
-            failures.append(nparr)
-        return failures
+        R = self.params['num_robots']
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        # FAILURE_FMT is '1I' (unsigned int) — np.intc matches the legacy dtype.
+        raw = np.frombuffer(msg, dtype='<u4').reshape(R, 1)
+        return [raw[r].astype(np.intc) for r in range(R)]
 
     def parse_rewards(self, msg):
-        rewards = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.FLOAT_SIZE:(r+1)*self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'reward', self.REWARDS_FIELDS, self.REWARDS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-            # Append it to the rewards
-            rewards.append(nparr)
-        return rewards
+        R = self.params['num_robots']
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, 1)
+        return [raw[r].copy() for r in range(R)]
 
     def parse_stats(self, msg):
-        stats = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.params['num_stats'] * self.FLOAT_SIZE:(r+1) * self.params['num_stats'] * self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'stats', self.STATS_FIELDS, self.STATS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-            # Append it to the stats array
-            stats.append(nparr)
-        return stats
+        R = self.params['num_robots']
+        n = self.params['num_stats']
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [raw[r].copy() for r in range(R)]
     
     def parse_robot_stats(self, msg):
-        robot_stats = []
-        for r in range(0, self.params['num_robots']):
-            m = msg[r *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE:(r+1) *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE] 
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'robot_stats', self.ROBOT_STATS_FIELDS, self.ROBOT_STATS_FMT)
-            # Make a numpy array
-            robot_stats.append(np.fromiter(data.values(), dtype=np.float32, count = len(data)))
-        return robot_stats
+        R = self.params['num_robots']
+        n = len(self.ROBOT_STATS_FIELDS)   # always 6
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [raw[r].copy() for r in range(R)]
 
     def parse_obj_stats(self, msg):
         # Parse the bytes into a dictionary
@@ -270,7 +253,8 @@ class ZMQ_Utility:
 
 
     def serialize_actions(self, actions):
-        packer = Struct(self.ACTIONS_FMT)
+        # T5: use the Struct cached at __init__ rather than creating a new one per call.
+        packer = self._actions_packer
         msg = bytearray(self.FLOAT_SIZE * self.params['num_actions'] * self.params['num_robots'])
         # For each robot
         for r in range(0, self.params['num_robots']):
