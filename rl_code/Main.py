@@ -2,6 +2,7 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
+from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
@@ -321,23 +322,12 @@ try:
                     agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
         
             #Define Global Knowledge: [positions, velocities]
-            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-            for i in range(Utility.params['num_robots']):
-                global_knowledge[i*4] = robot_stats[i][0]           #x position
-                global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+            # T7: vectorized via src.knowledge (inert, golden-verified).
+            global_knowledge = build_global_knowledge(robot_stats, stats)
+            g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
             for i in range(Utility.params['num_robots']):
-                g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                counter = 0
-                for j in range(Utility.params['num_robots']):
-                    if i != j:
-                        g_knowledge[counter*4] = global_knowledge[j*4]
-                        g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                        g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                        g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                        counter+=1
+                g_knowledge = g_knowledge_all[i]
                 if args.independent_learning:
                     running_reward.append(0)
                     if config['GSP']:
@@ -752,24 +742,12 @@ try:
 
 
                     #Define Global Knowledge: [positions, velocities]
-                    global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-                    for i in range(Utility.params['num_robots']):
-                        global_knowledge[i*4] = robot_stats[i][0]           #x position
-                        global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                        global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                        global_knowledge[i*4+3] = stats[i][3]               #velocity Y
-
+                    # T7: vectorized via src.knowledge (inert, golden-verified).
+                    global_knowledge = build_global_knowledge(robot_stats, stats)
+                    g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
                     for i in range(Utility.params['num_robots']):
-                        g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                        counter = 0
-                        for j in range(Utility.params['num_robots']):
-                            if i != j:
-                                g_knowledge[counter*4] = global_knowledge[j*4]
-                                g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                                g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                                g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                                counter+=1
+                        g_knowledge = g_knowledge_all[i]
                         prox_values = env_observations[i][7:]
                         prox_value = np.sum(prox_values)
                         rewards[i] += (-1)*prox_value
