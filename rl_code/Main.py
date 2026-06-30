@@ -323,11 +323,17 @@ try:
         
             #Define Global Knowledge: [positions, velocities]
             # T7: vectorized via src.knowledge (inert, golden-verified).
-            global_knowledge = build_global_knowledge(robot_stats, stats)
-            g_knowledge_all = build_g_knowledge_all(global_knowledge)
+            # Perf guard: build only when --global_knowledge is active.
+            # Consumption analysis (PR #12): every read of g_knowledge is inside
+            # `if args.global_knowledge:`, so for IC/GSP runs this is dead work.
+            # At R=4 the np.delete-based vectorization was a NET SLOWDOWN (+3pp)
+            # vs the original 16-iteration loop that never showed up in profiles.
+            if args.global_knowledge:
+                global_knowledge = build_global_knowledge(robot_stats, stats)
+                g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
             for i in range(Utility.params['num_robots']):
-                g_knowledge = g_knowledge_all[i]
+                g_knowledge = g_knowledge_all[i] if args.global_knowledge else None
                 if args.independent_learning:
                     running_reward.append(0)
                     if config['GSP']:
@@ -743,11 +749,15 @@ try:
 
                     #Define Global Knowledge: [positions, velocities]
                     # T7: vectorized via src.knowledge (inert, golden-verified).
-                    global_knowledge = build_global_knowledge(robot_stats, stats)
-                    g_knowledge_all = build_g_knowledge_all(global_knowledge)
+                    # Perf guard (PR #12): skip build entirely for IC/GSP runs
+                    # where global_knowledge is never consumed. See call-site 1
+                    # comment above for the full consumption analysis.
+                    if args.global_knowledge:
+                        global_knowledge = build_global_knowledge(robot_stats, stats)
+                        g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
                     for i in range(Utility.params['num_robots']):
-                        g_knowledge = g_knowledge_all[i]
+                        g_knowledge = g_knowledge_all[i] if args.global_knowledge else None
                         prox_values = env_observations[i][7:]
                         prox_value = np.sum(prox_values)
                         rewards[i] += (-1)*prox_value
