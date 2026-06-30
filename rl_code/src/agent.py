@@ -201,10 +201,12 @@ class Agent(Actor):
             for i in range(self._n_agents):
                 self._agent_hidden_states[i] = None  # None = zeros on first call
 
-        self._ROBOT_PROXIMITY_ANGLES = [7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
-                                       112.5, 127.5, 142.5, 157.5, 172.5, -172.5, 
-                                       -157.5, -142.5, -127.5, -112.5, -97.5, 
-                                       -82.5, -67.5, -52.5, -37.5, -22.5, -7.5]
+        self._ROBOT_PROXIMITY_ANGLES = np.array([
+            7.5, 22.5, 37.5, 52.5, 67.5, 82.5, 97.5,
+            112.5, 127.5, 142.5, 157.5, 172.5, -172.5,
+            -157.5, -142.5, -127.5, -112.5, -97.5,
+            -82.5, -67.5, -52.5, -37.5, -22.5, -7.5,
+        ], dtype=np.float64)
         if self._neighbors:
             self.build_neighbors()
 
@@ -543,30 +545,18 @@ class Agent(Actor):
             cw_lim = self._prox_filter_angle_deg
             ccw_lim = -self._prox_filter_angle_deg
 
-        index = []
-        filtered_prox_values = []
+        angles = self._ROBOT_PROXIMITY_ANGLES  # precomputed np.array
         if angle_to_cyl > 180 - self._prox_filter_angle_deg:
-            for i in range(len(self._ROBOT_PROXIMITY_ANGLES)):
-                if self._ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
-                    index.append(i)
-                elif self._ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i])
-        elif angle_to_cyl < -180+self._prox_filter_angle_deg:
-            for i in range(len(self._ROBOT_PROXIMITY_ANGLES)):
-                if self._ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                elif self._ROBOT_PROXIMITY_ANGLES[i] > ccw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i]) 
+            # Wrap-around positive: indexed (filtered out) when angle > ccw_lim OR < cw_lim
+            mask_indexed = (angles > ccw_lim) | (angles < cw_lim)
+        elif angle_to_cyl < -180 + self._prox_filter_angle_deg:
+            # Wrap-around negative: indexed when angle < cw_lim OR > ccw_lim
+            mask_indexed = (angles < cw_lim) | (angles > ccw_lim)
         else:
-            for i in range(len(self._ROBOT_PROXIMITY_ANGLES)):
-                if self._ROBOT_PROXIMITY_ANGLES[i] > ccw_lim and self._ROBOT_PROXIMITY_ANGLES[i] < cw_lim:
-                    index.append(i)
-                else:
-                    filtered_prox_values.append(prox_values[i])
+            # Normal: indexed when ccw_lim < angle < cw_lim
+            mask_indexed = (angles > ccw_lim) & (angles < cw_lim)
+        index = list(np.where(mask_indexed)[0])
+        filtered_prox_values = list(np.asarray(prox_values)[~mask_indexed])
         return filtered_prox_values, index
     
     def choose_agent_action(self, observation, failures, test=False):

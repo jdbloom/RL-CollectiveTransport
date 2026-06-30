@@ -44,17 +44,14 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
         diff = np.clip(diff*100, -1, 1)
         label=diff
-        for i in range(num_robots):
-            # Multi-dim GSP output: extract the scalar component for reward arithmetic.
-            # Convention: the LAST dim of cyl_kinematics_3d/goal_4d is the cylinder
-            # Δθ component, which is exactly what `diff` measures. For legacy 1d
-            # (delta_theta_1d, future_prox_1d, time_to_goal_1d) the only element
-            # is used — identical to previous behavior.
-            pred_for_reward = float(np.asarray(next_heading_gsp[i]).ravel()[-1])
-            reward = diff - pred_for_reward
-            abs_reward = abs(reward)**2
-            squared_errors.append(float(abs_reward))
-            gsp_reward.append(np.clip(-1*abs_reward, -2, 0))
+        # Vectorised per-robot computation — fp-identical to the loop above.
+        # Extract the last element of each robot's (possibly multi-dim) prediction.
+        preds = np.array(
+            [float(np.asarray(next_heading_gsp[i]).ravel()[-1]) for i in range(num_robots)]
+        )
+        abs_reward_arr = (diff - preds) ** 2          # shape (num_robots,)
+        squared_errors = [float(v) for v in abs_reward_arr]
+        gsp_reward = list(np.clip(-abs_reward_arr, -2, 0))
     else:
         gsp_reward = [0 for i in range(num_robots)]
         squared_errors = [0 for i in range(num_robots)]
