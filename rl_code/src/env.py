@@ -1,5 +1,4 @@
 import math
-import struct as _struct
 import numpy as np
 from collections import namedtuple
 from struct import pack, unpack, Struct, calcsize
@@ -110,12 +109,6 @@ class ZMQ_Utility:
         # T5: precomputed Struct for serialize_actions (cached at __init__, re-created
         # only if ACTIONS_FMT changes — which it never does at runtime).
         self._actions_packer: Struct = Struct(self.ACTIONS_FMT)
-        # T5: precomputed byte sizes for each per-robot message type.
-        self._obs_stride: int = calcsize(self.OBS_FMT)         # 31*4 = 124
-        self._fail_stride: int = self.INT_SIZE                  # 1*4  =   4
-        self._rew_stride: int = self.FLOAT_SIZE                 # 1*4  =   4
-        self._stat_stride: int = calcsize(self.STATS_FMT)      # 4*4  =  16
-        self._rs_stride: int = calcsize(self.ROBOT_STATS_FMT)  # 6*4  =  24
 
 
     def get_params(self, msg):
@@ -198,6 +191,11 @@ class ZMQ_Utility:
     def parse_obs(self, msg):
         R = self.params['num_robots']
         n = self.params['num_obs']
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_obs: expected {expected} bytes (R={R}, num_obs={n}), got {len(msg)}"
+            )
         # T5: single frombuffer + reshape replaces R per-robot unpack+fromiter loops.
         # Safe because ARGoS observation messages are contiguous LE float32 (T0.3).
         matrix = np.frombuffer(msg, dtype='<f4').reshape(R, n)
@@ -219,6 +217,11 @@ class ZMQ_Utility:
     def parse_stats(self, msg):
         R = self.params['num_robots']
         n = self.params['num_stats']
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_stats: expected {expected} bytes (R={R}, num_stats={n}), got {len(msg)}"
+            )
         # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
         raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
         return [raw[r].copy() for r in range(R)]
@@ -226,6 +229,11 @@ class ZMQ_Utility:
     def parse_robot_stats(self, msg):
         R = self.params['num_robots']
         n = len(self.ROBOT_STATS_FIELDS)   # always 6
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_robot_stats: expected {expected} bytes (R={R}, n={n}), got {len(msg)}"
+            )
         # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
         raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
         return [raw[r].copy() for r in range(R)]
