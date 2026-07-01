@@ -51,7 +51,7 @@ def build_global_knowledge(robot_stats: list, stats: list) -> np.ndarray:
 
 
 def build_g_knowledge_all(global_knowledge: np.ndarray) -> list[np.ndarray]:
-    """Vectorized replacement for Main.py lines 331-340 / 763-772.
+    """Return all R per-robot leave-one-out neighbor views.
 
     Parameters
     ----------
@@ -63,16 +63,27 @@ def build_g_knowledge_all(global_knowledge: np.ndarray) -> list[np.ndarray]:
     g_knowledge_all : list of np.ndarray
         R arrays each of shape ((R-1)*4,).  ``g_knowledge_all[i]`` is the
         concatenated state of all robots except robot i, in the same order
-        as the nested-loop implementation (skip i, others in ascending j
-        order).
+        as the original nested-loop implementation (skip i, others in
+        ascending j order).
+
+    Notes
+    -----
+    At R=4 (16 inner iterations) the original nested-loop is faster than the
+    np.delete approach because np.delete allocates a new array on every call.
+    This is the verbatim Main.py logic (lines 331-340 / 763-772), kept in
+    this module for testability.
     """
     R = global_knowledge.shape[0] // 4
-    # Reshape to (R, 4) — one row per robot.
-    matrix = global_knowledge.reshape(R, 4)
     result = []
     for i in range(R):
-        # Take all rows except row i, then flatten — identical order to the
-        # original nested loop (j = 0,1,...,R-1, skip j==i).
-        neighbors = np.delete(matrix, i, axis=0)  # (R-1, 4)
-        result.append(neighbors.flatten())
+        g_knowledge = np.zeros((R - 1) * 4)
+        counter = 0
+        for j in range(R):
+            if i != j:
+                g_knowledge[counter * 4]     = global_knowledge[j * 4]
+                g_knowledge[counter * 4 + 1] = global_knowledge[j * 4 + 1]
+                g_knowledge[counter * 4 + 2] = global_knowledge[j * 4 + 2]
+                g_knowledge[counter * 4 + 3] = global_knowledge[j * 4 + 3]
+                counter += 1
+        result.append(g_knowledge)
     return result
