@@ -147,6 +147,14 @@ class Agent(Actor):
         self._gsp_input_include_payload_state = _include_payload_state
         self._gsp_input_include_self_dynamics = _include_self_dynamics
         self._gsp_input_temporal_stack_k = _temporal_stack_k
+        # Deterministic (greedy) GSP prediction. The GSP head is a SUPERVISED
+        # regressor (MSE against a true environment label), so adding DDPG
+        # exploration noise to its rollout prediction is a category error:
+        # the noise dominates the logged prediction, feeds back as the head's
+        # own prev_gsp input, and hands the policy noise instead of signal.
+        # When True, the prediction is greedy even during training (test=False).
+        # Default False keeps all existing experiments bit-identical.
+        self._gsp_prediction_deterministic = bool(config.get('GSP_PREDICTION_DETERMINISTIC', False))
 
         gsp_rl_args = {
             'config': config,
@@ -581,6 +589,12 @@ class Agent(Actor):
         return actions, action_num
     
     def choose_agent_gsp(self, agent_gsp_states, test = False):
+        # The GSP head is a supervised regressor; when configured deterministic,
+        # its prediction is greedy (no exploration noise) even during training.
+        # Only the choose_action calls below route through the noise-adding path;
+        # the JEPA encoder and the recurrent direct-forward path already run
+        # noise-free, so gsp_test does not gate them.
+        gsp_test = test or getattr(self, '_gsp_prediction_deterministic', False)
         # JEPA path: run the online encoder on each agent's GSP input state.
         # Returns a list of 32-d latent vectors (one per agent), or a single
         # 32-d array for the non-neighbor/non-broadcast flat case.
@@ -622,17 +636,17 @@ class Agent(Actor):
                     # Take the last timestep's action
                     actions.append(action_tensor[-1].cpu().detach().numpy())
                 else:
-                    actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, test))
+                    actions.append(self.choose_action(agent_gsp_states[i], self.gsp_networks, gsp_test))
             return actions
         else:
             if self.recurrent_gsp:
                 self.gsp_observation.append(agent_gsp_states)
                 self.gsp_observation.pop(0)
-                action = self.choose_action(self.gsp_observation, self.gsp_networks, test)
+                action = self.choose_action(self.gsp_observation, self.gsp_networks, gsp_test)
                 return action
 
             observation = np.array(agent_gsp_states)
-            return self.choose_action(observation, self.gsp_networks, test)
+            return self.choose_action(observation, self.gsp_networks, gsp_test)
 
     def parse_action(self, action_num):
         '''
