@@ -84,6 +84,12 @@ class Agent(Actor):
         # Each flag adds extra dimensions to the per-agent slice in make_gsp_states.
         _include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
         _include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False))
+        # Explicit wrap-safe one-step change in bearing-to-cylinder angle. The GSP
+        # target (cylinder rotation) is ~0.89-predictable from this delta, but raw
+        # angle_to_cyl (env_observations[i][5]) wraps at ±π, so the head can't recover
+        # the small delta from raw angles (offline corr ~0.13). This +1 self-slot dim
+        # feeds the pre-computed wrap-safe delta (radians). See make_gsp_states.
+        _include_cyl_bearing_delta = bool(config.get('GSP_INPUT_INCLUDE_CYL_BEARING_DELTA', False))
         _full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
         # Change 3 enrichment flags (self-slot additions, GSP-N only):
         #   GSP_INPUT_INCLUDE_PAYLOAD_STATE: +5 dims (payload vx/vy/omega + payload-to-goal dx/dy)
@@ -107,6 +113,7 @@ class Agent(Actor):
         # Enrichment flags are additive on top of the base per-agent layout:
         #   GSP_INPUT_INCLUDE_GOAL:           +2 per agent (cos/sin of angle_to_goal)
         #   GSP_INPUT_INCLUDE_CYL_REL:        +2 per agent (dist_to_cyl, angle_to_cyl)
+        #   GSP_INPUT_INCLUDE_CYL_BEARING_DELTA: +1 self-slot (wrap-safe Δ angle_to_cyl, rad)
         #   GSP_INPUT_FULL_PROX:              replace avg_prox(1) with raw_prox(24) → net +23
         #   GSP_INPUT_INCLUDE_PAYLOAD_STATE:  +5 per agent (self-slot only)
         #   GSP_INPUT_INCLUDE_SELF_DYNAMICS:  +4 per agent (self-slot only)
@@ -119,7 +126,7 @@ class Agent(Actor):
             n_slots = 1 + n_hop_neighbors * 2  # self + neighbors
         else:
             n_slots = 1  # non-neighbors: single shared state vector (not per-agent slots)
-        _extra_per_slot = (2 if _include_goal else 0) + (2 if _include_cyl_rel else 0)
+        _extra_per_slot = (2 if _include_goal else 0) + (2 if _include_cyl_rel else 0) + (1 if _include_cyl_bearing_delta else 0)
         _prox_delta = 23 if _full_prox else 0  # replace 1 avg_prox with 24 raw_prox
         _self_slot_extra = (5 if _include_payload_state else 0) + (4 if _include_self_dynamics else 0)
         if neighbors:
@@ -143,6 +150,11 @@ class Agent(Actor):
         # Agent methods, which currently does not happen but guards future changes.)
         self._gsp_input_include_goal = _include_goal
         self._gsp_input_include_cyl_rel = _include_cyl_rel
+        self._gsp_input_include_cyl_bearing_delta = _include_cyl_bearing_delta
+        # Per-agent previous angle_to_cyl (radians), keyed by agent id. Used by
+        # make_gsp_states to compute the wrap-safe one-step bearing delta. Empty
+        # until the first step; first step for any agent yields delta = 0.0.
+        self._prev_angle_to_cyl = {}
         self._gsp_input_full_prox = _full_prox
         self._gsp_input_include_payload_state = _include_payload_state
         self._gsp_input_include_self_dynamics = _include_self_dynamics
@@ -371,6 +383,11 @@ class Agent(Actor):
                                        to the self-slot using env_observations[i][1].
             GSP_INPUT_INCLUDE_CYL_REL: appends (dist_to_cyl, angle_to_cyl) to the
                                        self-slot using env_observations[i][4:6].
+            GSP_INPUT_INCLUDE_CYL_BEARING_DELTA: appends the wrap-safe signed one-step
+                                       change in angle_to_cyl (env_observations[i][5],
+                                       radians) as a single self-slot dim. Delta is
+                                       (a_now − a_prev) wrapped to (−π, π]; 0.0 on the
+                                       first step. Placed immediately after cyl_rel.
             GSP_INPUT_FULL_PROX:       replaces self_avg_prox (1 value) with the full
                                        24-dim raw proximity vector from
                                        env_observations[i][7:31], net +23 dims.
@@ -412,11 +429,12 @@ class Agent(Actor):
         """
         include_goal = getattr(self, '_gsp_input_include_goal', False)
         include_cyl_rel = getattr(self, '_gsp_input_include_cyl_rel', False)
+        include_cyl_bearing_delta = getattr(self, '_gsp_input_include_cyl_bearing_delta', False)
         full_prox = getattr(self, '_gsp_input_full_prox', False)
         include_payload_state = getattr(self, '_gsp_input_include_payload_state', False)
         include_self_dynamics = getattr(self, '_gsp_input_include_self_dynamics', False)
         temporal_stack_k = getattr(self, '_gsp_input_temporal_stack_k', 1)
-        need_env_obs = include_goal or include_cyl_rel or full_prox
+        need_env_obs = include_goal or include_cyl_rel or include_cyl_bearing_delta or full_prox
 
         # When K>1 we need to know the unflattened single-step size so we can
         # correctly index into the ring buffer. The ring buffer stores single-step
@@ -467,6 +485,26 @@ class Agent(Actor):
                 agent_state[idx] = float(env_observations[agent][4])
                 agent_state[idx + 1] = float(env_observations[agent][5])
                 idx += 2
+
+            # Optional enrichment: wrap-safe one-step change in bearing-to-cylinder.
+            # The GSP target (cylinder rotation) is ~0.89-predictable from this delta,
+            # but raw angle_to_cyl wraps at ±π so the head can't recover the small delta
+            # from raw angles. Compute the signed wrapped difference in radians:
+            #   d = a_now - a_prev; d = (d + π) mod 2π − π  ∈ (−π, π]
+            # First step for an agent (no prev) → delta = 0.0. Must stay in the SAME
+            # position (immediately after cyl_rel) with the SAME +1 size every step so
+            # the input-size accounting (_extra_per_slot) matches exactly.
+            if include_cyl_bearing_delta and need_env_obs and env_observations is not None:
+                a_now = float(env_observations[agent][5])
+                a_prev = self._prev_angle_to_cyl.get(agent, None)
+                if a_prev is None:
+                    d = 0.0
+                else:
+                    d = a_now - a_prev
+                    d = (d + math.pi) % (2 * math.pi) - math.pi
+                agent_state[idx] = float(d)
+                idx += 1
+                self._prev_angle_to_cyl[agent] = a_now
 
             # Optional enrichment: payload kinematics + payload-to-goal offset.
             # 5 dims: payload_vx, payload_vy, payload_omega, payload_to_goal_dx,
