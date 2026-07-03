@@ -1,19 +1,26 @@
 """Tests for GSP_INPUT_INCLUDE_CYL_BEARING_DELTA.
 
 The GSP prediction head is inert because the target (cylinder rotation) is
-0.89-predictable from the WRAP-SAFE one-step change in a robot's bearing-to-
-cylinder angle, but the head's raw angle_to_cyl input (env_observations[i][5])
-wraps at ±π, so the head can only reach corr ~0.13 offline. This flag feeds the
-explicit, wrap-safe bearing-delta (in radians) as a +1 self-slot input.
+~0.77-0.89 predictable from the WRAP-SAFE one-step change in the robot's
+WORLD-FRAME bearing around the cylinder (atan2(robot_y - cyl_y, robot_x - cyl_x)),
+verified on run h5. An earlier (buggy) version used the delta of the BODY-FRAME
+angle_to_cyl (env_observations[i][5]) which correlates only ~0.003 with the target.
+
+The world-frame bearing is computed in Main.py from world positions and passed to
+make_gsp_states via the cyl_bearing_delta arg. This +1 self-slot dim feeds that
+pre-computed wrap-safe delta (radians).
 
 Verifies:
 - Input-size accounting exactly matches the written feature dims (no shape
   mismatch between agent.gsp_network_input and make_gsp_states output length).
 - Adding the flag grows the per-agent vector by exactly 1 per temporal-stack unit.
-- The written delta is wrap-safe: +3.10 → −3.10 rad yields the small wrapped
-  delta (~+0.083), not ~−6.2.
-- Default OFF is functionally inert: flag absent → _gsp_input_include_cyl_bearing_delta
-  is False and input size unchanged.
+- The written delta equals the value passed via the cyl_bearing_delta arg, at the
+  correct self-slot position (right after cyl_rel, or after the self-slot base when
+  cyl_rel is off).
+- Default OFF is functionally inert: flag absent → attribute False, size unchanged.
+- cyl_bearing_delta=None (arg absent) → the delta dim is written as 0.0.
+- The wrap-safe world-frame computation (now living in Main.py) is unit-tested
+  directly against a small reference implementation.
 """
 import math
 import numpy as np
@@ -55,9 +62,11 @@ def _make_agent(config_overrides: dict, n_hop_neighbors: int = 1) -> Agent:
 
 
 def _env_obs(angle_to_cyl_by_agent, n_agents: int = 4) -> list:
-    """Minimal env_observations with the indices used by enrichment.
+    """Minimal env_observations with the indices used by the goal/cyl_rel enrichment.
 
     angle_to_cyl_by_agent: list of angle_to_cyl (radians) per agent → index 5.
+    (No longer used for the bearing delta — that comes via the arg — but cyl_rel
+    still reads index 4/5, and full_prox reads 7:31.)
     """
     obs = []
     for i in range(n_agents):
@@ -115,17 +124,19 @@ def test_accounting_matches_make_gsp_states_length():
     """Critical correctness: each returned vector length == gsp_network_input.
 
     Build a GSP-N agent with CYL_REL and BEARING_DELTA both on, call
-    make_gsp_states with a 2-... (4-agent conftest) synthetic env, and assert
-    each per-agent state vector length == agent.gsp_network_input. Then compare
-    to the same agent WITHOUT the delta flag → length is exactly 1 larger.
+    make_gsp_states with a 4-agent synthetic env, and assert each per-agent state
+    vector length == agent.gsp_network_input. Then compare to the same agent
+    WITHOUT the delta flag → length is exactly 1 larger.
     """
     env = _env_obs([-0.2, -0.1, 0.0, 0.1])
+    delta = {'delta': [0.01, 0.02, 0.03, 0.04]}
 
     agent_with = _make_agent({
         "GSP_INPUT_INCLUDE_CYL_REL": True,
         "GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True,
     })
-    states_with = agent_with.make_gsp_states(_PROX, _PREV_GSP, env_observations=env)
+    states_with = agent_with.make_gsp_states(
+        _PROX, _PREV_GSP, env_observations=env, cyl_bearing_delta=delta)
     assert len(states_with) == 4
     for s in states_with:
         assert len(s) == agent_with.gsp_network_input
@@ -141,60 +152,44 @@ def test_accounting_matches_make_gsp_states_length():
 
 def test_accounting_matches_with_temporal_stack():
     """With K=2, +1 self-slot becomes +2 total; length still == gsp_network_input."""
-    env = _env_obs([-0.2, -0.1, 0.0, 0.1])
+    delta = {'delta': [0.01, 0.02, 0.03, 0.04]}
     agent = _make_agent({
         "GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True,
         "GSP_INPUT_TEMPORAL_STACK_K": 2,
     })
     # (base 6 + 1) * 2 = 14
     assert agent.gsp_network_input == 14
-    states = agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env)
+    states = agent.make_gsp_states(_PROX, _PREV_GSP, cyl_bearing_delta=delta)
     for s in states:
         assert len(s) == agent.gsp_network_input
 
 
-# ── Wrap-safe delta content ───────────────────────────────────────────────────
+# ── Arg-write contract: the value flows through unchanged ─────────────────────
 
-def test_first_step_delta_is_zero():
-    """First step for an agent (no prev) → delta = 0.0 at the delta position."""
+def test_delta_written_from_arg_per_agent():
+    """The delta dim equals the value passed via cyl_bearing_delta, per agent.
+
+    Uses a 2-agent-style contract on the 4-agent fixture: assert agent 0 gets
+    0.05 and agent 1 gets -0.03 at the self-slot delta position (index 2, right
+    after avg_prox and prev_gsp; cyl_rel off).
+    """
     agent = _make_agent({"GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True})
-    env = _env_obs([1.0, 1.0, 1.0, 1.0])
-    states = agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env)
+    delta = {'delta': [0.05, -0.03, 0.11, -0.07]}
+    states = agent.make_gsp_states(_PROX, _PREV_GSP, cyl_bearing_delta=delta)
     # Self slot layout: [avg_prox(0), prev_gsp(1), bearing_delta(2), n0..]
+    assert states[0][2] == pytest.approx(0.05, abs=1e-9)
+    assert states[1][2] == pytest.approx(-0.03, abs=1e-9)
+    assert states[2][2] == pytest.approx(0.11, abs=1e-9)
+    assert states[3][2] == pytest.approx(-0.07, abs=1e-9)
+
+
+def test_delta_none_writes_zero():
+    """cyl_bearing_delta=None → the delta dim is 0.0; size unchanged."""
+    agent = _make_agent({"GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True})
+    states = agent.make_gsp_states(_PROX, _PREV_GSP, cyl_bearing_delta=None)
     for s in states:
-        assert s[2] == pytest.approx(0.0, abs=1e-9)
-
-
-def test_wrap_safe_delta_across_pi_boundary():
-    """+3.10 rad → −3.10 rad crosses the ±π wrap; delta must be the SMALL
-    wrapped value (~+0.083), not ~−6.2. This is the whole point of the feature."""
-    agent = _make_agent({"GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True})
-
-    env1 = _env_obs([3.10, 3.10, 3.10, 3.10])
-    agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env1)  # seeds prev
-
-    env2 = _env_obs([-3.10, -3.10, -3.10, -3.10])
-    states2 = agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env2)
-
-    # Expected wrapped delta: d = -3.10 - 3.10 = -6.20;
-    # (d + pi) % (2*pi) - pi ≈ +0.0832 rad
-    expected = ((-3.10 - 3.10) + math.pi) % (2 * math.pi) - math.pi
-    for s in states2:
-        assert s[2] == pytest.approx(expected, abs=1e-5)
-        assert abs(s[2]) < 0.2            # small wrapped value
-        assert s[2] > 0.0                 # sign is positive, not ~-6.2
-        assert abs(s[2] + 6.2) > 5.0      # definitely NOT the raw -6.2
-
-
-def test_non_wrap_delta_is_plain_difference():
-    """Within (-π, π] the delta is the ordinary signed difference."""
-    agent = _make_agent({"GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True})
-    env1 = _env_obs([0.10, 0.10, 0.10, 0.10])
-    agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env1)
-    env2 = _env_obs([0.35, 0.35, 0.35, 0.35])
-    states2 = agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env2)
-    for s in states2:
-        assert s[2] == pytest.approx(0.25, abs=1e-6)
+        assert len(s) == agent.gsp_network_input
+        assert s[2] == pytest.approx(0.0, abs=1e-12)
 
 
 def test_delta_position_after_cyl_rel():
@@ -206,13 +201,76 @@ def test_delta_position_after_cyl_rel():
         "GSP_INPUT_INCLUDE_CYL_REL": True,
         "GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True,
     })
-    env1 = _env_obs([0.10, 0.10, 0.10, 0.10])
-    agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env1)
-    env2 = _env_obs([0.30, 0.30, 0.30, 0.30])
-    states2 = agent.make_gsp_states(_PROX, _PREV_GSP, env_observations=env2)
-    s0 = states2[0]
+    env = _env_obs([0.30, 0.30, 0.30, 0.30])
+    delta = {'delta': [0.20, 0.21, 0.22, 0.23]}
+    states = agent.make_gsp_states(
+        _PROX, _PREV_GSP, env_observations=env, cyl_bearing_delta=delta)
+    s0 = states[0]
     # cyl_rel pair still correct
-    assert s0[2] == pytest.approx(float(env2[0][4]), abs=1e-5)  # dist_to_cyl
-    assert s0[3] == pytest.approx(float(env2[0][5]), abs=1e-5)  # angle_to_cyl
-    # bearing delta at position 4
-    assert s0[4] == pytest.approx(0.20, abs=1e-6)
+    assert s0[2] == pytest.approx(float(env[0][4]), abs=1e-5)  # dist_to_cyl
+    assert s0[3] == pytest.approx(float(env[0][5]), abs=1e-5)  # angle_to_cyl
+    # bearing delta at position 4 (right after cyl_rel), from the arg
+    assert s0[4] == pytest.approx(0.20, abs=1e-9)
+    assert states[1][4] == pytest.approx(0.21, abs=1e-9)
+
+
+# ── World-frame wrap-safe computation (mirrors the Main.py block) ──────────────
+
+def _worldframe_bearing_delta(robot_xy, cyl_xy, prev_bearing):
+    """Reference implementation of the Main.py per-step computation.
+
+    Returns (deltas, bearings_now). prev_bearing is None on the first step.
+    """
+    bearings_now = []
+    deltas = []
+    for (rx, ry) in robot_xy:
+        b = math.atan2(ry - cyl_xy[1], rx - cyl_xy[0])
+        if prev_bearing is None:
+            d = 0.0
+        else:
+            d = b - prev_bearing[len(bearings_now)]
+            d = (d + math.pi) % (2 * math.pi) - math.pi
+        bearings_now.append(b)
+        deltas.append(d)
+    return deltas, bearings_now
+
+
+def test_worldframe_bearing_uses_world_positions_not_body_frame():
+    """The feature is the world-frame bearing atan2(ry-cy, rx-cx), NOT env_obs[5]."""
+    cyl = (0.0, 0.0)
+    # Robot due east of the cylinder → bearing 0; due north → bearing +pi/2.
+    deltas0, prev = _worldframe_bearing_delta([(1.0, 0.0)], cyl, None)
+    assert deltas0[0] == pytest.approx(0.0)          # first step
+    # Move to due north: bearing goes 0 → +pi/2, delta = +pi/2.
+    deltas1, _ = _worldframe_bearing_delta([(0.0, 1.0)], cyl, prev)
+    assert deltas1[0] == pytest.approx(math.pi / 2, abs=1e-9)
+
+
+def test_worldframe_bearing_wrap_safe_across_pi():
+    """Crossing the ±π branch cut yields the SMALL wrapped delta, not ~±2π."""
+    cyl = (0.0, 0.0)
+    eps = 0.05
+    # Just below +pi (2nd quadrant, near the cut) then just above -pi (3rd quadrant).
+    p_below = (math.cos(math.pi - eps), math.sin(math.pi - eps))
+    p_above = (math.cos(-math.pi + eps), math.sin(-math.pi + eps))
+    _, prev = _worldframe_bearing_delta([p_below], cyl, None)
+    deltas, _ = _worldframe_bearing_delta([p_above], cyl, prev)
+    # True angular step is +2*eps across the branch cut, not ~-2*pi.
+    assert deltas[0] == pytest.approx(2 * eps, abs=1e-6)
+    assert abs(deltas[0]) < 0.2
+    assert deltas[0] > 0.0
+
+
+def test_worldframe_arg_matches_agent_write():
+    """End-to-end: feed the reference-computed delta arg into make_gsp_states and
+    confirm the agent writes exactly that value."""
+    agent = _make_agent({"GSP_INPUT_INCLUDE_CYL_BEARING_DELTA": True})
+    cyl = (0.5, -0.3)
+    robots_t0 = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
+    robots_t1 = [(1.1, 0.2), (0.1, 1.2), (-1.2, 0.1), (0.05, -1.1)]
+    _, prev = _worldframe_bearing_delta(robots_t0, cyl, None)
+    deltas, _ = _worldframe_bearing_delta(robots_t1, cyl, prev)
+    states = agent.make_gsp_states(
+        _PROX, _PREV_GSP, cyl_bearing_delta={'delta': deltas})
+    for i in range(4):
+        assert states[i][2] == pytest.approx(deltas[i], abs=1e-9)
