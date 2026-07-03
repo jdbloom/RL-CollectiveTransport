@@ -621,10 +621,17 @@ try:
                         _n_r = Utility.params['num_robots']
                         _bearings_now = []
                         _deltas = []
+                        # Reference point is the CYLINDER position (obj_stats[0]/[1],
+                        # logged as cyl_x_pos/cyl_y_pos), NOT the payload COM
+                        # (obj_stats[7]/[8]). The bearing-around-cylinder delta vs the
+                        # cylinder centre correlates ~0.77 with the target; vs the COM it
+                        # correlates ~0 (verified on run h5).
+                        _cyl_x = float(obj_stats[0])
+                        _cyl_y = float(obj_stats[1])
                         for _ri in range(_n_r):
                             _bearing = math.atan2(
-                                float(robot_stats[_ri][1]) - float(com_Y_poses),
-                                float(robot_stats[_ri][0]) - float(com_X_poses),
+                                float(robot_stats[_ri][1]) - _cyl_y,
+                                float(robot_stats[_ri][0]) - _cyl_x,
                             )
                             if _prev_cyl_bearing is None:
                                 _d = 0.0
