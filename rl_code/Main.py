@@ -210,6 +210,13 @@ _gsp_input_include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False)
 _gsp_input_full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
 _gsp_input_needs_env_obs = _gsp_input_include_goal or _gsp_input_include_cyl_rel or _gsp_input_full_prox
 
+# Wrap-safe one-step delta of the robot's WORLD-FRAME bearing around the cylinder.
+# Computed here from world positions (atan2(robot_y - cyl_y, robot_x - cyl_x)) and
+# passed to make_gsp_states via the cyl_bearing_delta arg. The body-frame angle_to_cyl
+# delta correlates only ~0.003 with the GSP target; the world-frame bearing delta
+# correlates ~0.77-0.89 (verified on run h5).
+_gsp_input_include_cyl_bearing_delta = bool(config.get('GSP_INPUT_INCLUDE_CYL_BEARING_DELTA', False))
+
 # Change 3 enrichment flags (GSP-N self-slot additions).
 _gsp_input_include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_STATE', False))
 _gsp_input_include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
@@ -240,6 +247,11 @@ _prev_payload_cyl_angle: float = None
 # Initialized to None; on the first step velocity defaults to zero.
 _prev_robot_x: list = None
 _prev_robot_y: list = None
+
+# Ring buffer for previous-step per-robot WORLD-FRAME bearing around the cylinder
+# (radians), needed for the wrap-safe cyl-bearing delta. None until the first step;
+# first step yields delta = 0.0.
+_prev_cyl_bearing: list = None
 
 try:
     while not exp_done:
@@ -276,6 +288,7 @@ try:
             _prev_payload_cyl_angle = None
             _prev_robot_x = None
             _prev_robot_y = None
+            _prev_cyl_bearing = None
 
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
@@ -600,6 +613,30 @@ try:
                         _prev_robot_x = [float(robot_stats[_ri][0]) for _ri in range(_n_r)]
                         _prev_robot_y = [float(robot_stats[_ri][1]) for _ri in range(_n_r)]
 
+                    # Wrap-safe world-frame cyl-bearing delta. Computed once per
+                    # timestep from world positions and passed to BOTH make_gsp_states
+                    # calls. The prev-bearing buffer advances exactly once per step here.
+                    _cyl_bearing_delta_arg = None
+                    if _gsp_input_include_cyl_bearing_delta:
+                        _n_r = Utility.params['num_robots']
+                        _bearings_now = []
+                        _deltas = []
+                        for _ri in range(_n_r):
+                            _bearing = math.atan2(
+                                float(robot_stats[_ri][1]) - float(com_Y_poses),
+                                float(robot_stats[_ri][0]) - float(com_X_poses),
+                            )
+                            if _prev_cyl_bearing is None:
+                                _d = 0.0
+                            else:
+                                _d = _bearing - float(_prev_cyl_bearing[_ri])
+                                _d = (_d + math.pi) % (2 * math.pi) - math.pi
+                            _bearings_now.append(_bearing)
+                            _deltas.append(_d)
+                        _cyl_bearing_delta_arg = {'delta': _deltas}
+                        # Advance prev-bearing buffer exactly once per timestep.
+                        _prev_cyl_bearing = _bearings_now
+
                     if config['GSP']:
                         # GSP Predict
                         if args.independent_learning:
@@ -615,6 +652,7 @@ try:
                                     env_observations=_env_obs_arg,
                                     payload_state=_payload_state_arg,
                                     self_dynamics=_self_dynamics_arg,
+                                    cyl_bearing_delta=_cyl_bearing_delta_arg,
                                 )
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
@@ -673,12 +711,14 @@ try:
                                 env_observations=_env_obs_arg,
                                 payload_state=_payload_state_arg,
                                 self_dynamics=_self_dynamics_arg,
+                                cyl_bearing_delta=_cyl_bearing_delta_arg,
                             )
                             new_states = model.make_gsp_states(
                                 agent_prox_flags, old_heading_gsp,
                                 env_observations=_env_obs_arg,
                                 payload_state=_payload_state_arg,
                                 self_dynamics=_self_dynamics_arg,
+                                cyl_bearing_delta=_cyl_bearing_delta_arg,
                             )
                             if config.get('GSP_E2E_ENABLED'):
                                 for i in range(Utility.params['num_robots']):

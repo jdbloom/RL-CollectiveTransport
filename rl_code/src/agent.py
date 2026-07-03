@@ -84,11 +84,14 @@ class Agent(Actor):
         # Each flag adds extra dimensions to the per-agent slice in make_gsp_states.
         _include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
         _include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False))
-        # Explicit wrap-safe one-step change in bearing-to-cylinder angle. The GSP
-        # target (cylinder rotation) is ~0.89-predictable from this delta, but raw
-        # angle_to_cyl (env_observations[i][5]) wraps at ±π, so the head can't recover
-        # the small delta from raw angles (offline corr ~0.13). This +1 self-slot dim
-        # feeds the pre-computed wrap-safe delta (radians). See make_gsp_states.
+        # Explicit wrap-safe one-step change in the robot's WORLD-FRAME bearing
+        # around the cylinder. The GSP target (cylinder rotation) is ~0.77-0.89
+        # predictable from this delta (verified on run h5), whereas the delta of the
+        # BODY-FRAME angle_to_cyl (env_observations[i][5]) correlates only ~0.003
+        # with the target. The world-frame bearing atan2(robot_y - cyl_y,
+        # robot_x - cyl_x) is computed in Main.py from world positions and passed in
+        # via the cyl_bearing_delta arg. This +1 self-slot dim feeds that pre-computed
+        # wrap-safe delta (radians). See make_gsp_states.
         _include_cyl_bearing_delta = bool(config.get('GSP_INPUT_INCLUDE_CYL_BEARING_DELTA', False))
         _full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
         # Change 3 enrichment flags (self-slot additions, GSP-N only):
@@ -151,10 +154,6 @@ class Agent(Actor):
         self._gsp_input_include_goal = _include_goal
         self._gsp_input_include_cyl_rel = _include_cyl_rel
         self._gsp_input_include_cyl_bearing_delta = _include_cyl_bearing_delta
-        # Per-agent previous angle_to_cyl (radians), keyed by agent id. Used by
-        # make_gsp_states to compute the wrap-safe one-step bearing delta. Empty
-        # until the first step; first step for any agent yields delta = 0.0.
-        self._prev_angle_to_cyl = {}
         self._gsp_input_full_prox = _full_prox
         self._gsp_input_include_payload_state = _include_payload_state
         self._gsp_input_include_self_dynamics = _include_self_dynamics
@@ -372,7 +371,8 @@ class Agent(Actor):
         return states
 
     def make_gsp_states(self, agent_prox_values, agent_prev_gsp, return_prox_flags=False,
-                        env_observations=None, payload_state=None, self_dynamics=None):
+                        env_observations=None, payload_state=None, self_dynamics=None,
+                        cyl_bearing_delta=None):
         """Build per-agent GSP input vectors for GSP-N (neighbor) variant.
 
         Base layout per agent (2 dims for self + 2 per neighbor pair):
@@ -384,10 +384,12 @@ class Agent(Actor):
             GSP_INPUT_INCLUDE_CYL_REL: appends (dist_to_cyl, angle_to_cyl) to the
                                        self-slot using env_observations[i][4:6].
             GSP_INPUT_INCLUDE_CYL_BEARING_DELTA: appends the wrap-safe signed one-step
-                                       change in angle_to_cyl (env_observations[i][5],
-                                       radians) as a single self-slot dim. Delta is
-                                       (a_now − a_prev) wrapped to (−π, π]; 0.0 on the
-                                       first step. Placed immediately after cyl_rel.
+                                       change in the robot's WORLD-FRAME bearing around
+                                       the cylinder as a single self-slot dim. The value
+                                       is computed in Main.py from world positions
+                                       (atan2(robot_y − cyl_y, robot_x − cyl_x)) and passed
+                                       in via the cyl_bearing_delta kwarg. Placed
+                                       immediately after cyl_rel. 0.0 when the arg is None.
             GSP_INPUT_FULL_PROX:       replaces self_avg_prox (1 value) with the full
                                        24-dim raw proximity vector from
                                        env_observations[i][7:31], net +23 dims.
@@ -426,6 +428,11 @@ class Agent(Actor):
             self_dynamics: dict with keys 'vx', 'vy', 'force_mag', 'force_ang' —
                 each a list/array indexed by agent id. Required when
                 GSP_INPUT_INCLUDE_SELF_DYNAMICS is True; ignored otherwise.
+            cyl_bearing_delta: dict with key 'delta' — a list/array of the wrap-safe
+                one-step world-frame bearing delta (radians) indexed by agent id.
+                Computed in Main.py from world positions. Required when
+                GSP_INPUT_INCLUDE_CYL_BEARING_DELTA is True; when None the delta dim
+                is written as 0.0.
         """
         include_goal = getattr(self, '_gsp_input_include_goal', False)
         include_cyl_rel = getattr(self, '_gsp_input_include_cyl_rel', False)
@@ -434,7 +441,9 @@ class Agent(Actor):
         include_payload_state = getattr(self, '_gsp_input_include_payload_state', False)
         include_self_dynamics = getattr(self, '_gsp_input_include_self_dynamics', False)
         temporal_stack_k = getattr(self, '_gsp_input_temporal_stack_k', 1)
-        need_env_obs = include_goal or include_cyl_rel or include_cyl_bearing_delta or full_prox
+        # cyl_bearing_delta no longer needs env_observations — the value is
+        # pre-computed in Main.py from world positions and passed via the arg.
+        need_env_obs = include_goal or include_cyl_rel or full_prox
 
         # When K>1 we need to know the unflattened single-step size so we can
         # correctly index into the ring buffer. The ring buffer stores single-step
@@ -486,25 +495,21 @@ class Agent(Actor):
                 agent_state[idx + 1] = float(env_observations[agent][5])
                 idx += 2
 
-            # Optional enrichment: wrap-safe one-step change in bearing-to-cylinder.
-            # The GSP target (cylinder rotation) is ~0.89-predictable from this delta,
-            # but raw angle_to_cyl wraps at ±π so the head can't recover the small delta
-            # from raw angles. Compute the signed wrapped difference in radians:
-            #   d = a_now - a_prev; d = (d + π) mod 2π − π  ∈ (−π, π]
-            # First step for an agent (no prev) → delta = 0.0. Must stay in the SAME
-            # position (immediately after cyl_rel) with the SAME +1 size every step so
-            # the input-size accounting (_extra_per_slot) matches exactly.
-            if include_cyl_bearing_delta and need_env_obs and env_observations is not None:
-                a_now = float(env_observations[agent][5])
-                a_prev = self._prev_angle_to_cyl.get(agent, None)
-                if a_prev is None:
-                    d = 0.0
-                else:
-                    d = a_now - a_prev
-                    d = (d + math.pi) % (2 * math.pi) - math.pi
-                agent_state[idx] = float(d)
+            # Optional enrichment: wrap-safe one-step change in the robot's WORLD-FRAME
+            # bearing around the cylinder. The GSP target (cylinder rotation) is
+            # ~0.77-0.89 predictable from this delta (verified on run h5), whereas the
+            # delta of the body-frame angle_to_cyl correlates only ~0.003. The value is
+            # computed in Main.py from world positions (atan2(robot_y − cyl_y,
+            # robot_x − cyl_x), wrap-safe delta vs the previous step) and passed in via
+            # the cyl_bearing_delta arg. This keeps the self-slot layout position (right
+            # after cyl_rel) and the +1 size (_extra_per_slot) unchanged. When the arg
+            # is None (default) the dim is written as 0.0.
+            if include_cyl_bearing_delta:
+                agent_state[idx] = (
+                    float(cyl_bearing_delta['delta'][agent])
+                    if cyl_bearing_delta is not None else 0.0
+                )
                 idx += 1
-                self._prev_angle_to_cyl[agent] = a_now
 
             # Optional enrichment: payload kinematics + payload-to-goal offset.
             # 5 dims: payload_vx, payload_vy, payload_omega, payload_to_goal_dx,
