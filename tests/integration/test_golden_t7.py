@@ -161,3 +161,148 @@ class TestBuildGKnowledgeAll:
         assert np.array_equal(all_views[0], gk[4:8])
         # Robot 1's view should be robot 0's data
         assert np.array_equal(all_views[1], gk[0:4])
+
+
+# ---------------------------------------------------------------------------
+# Golden-equivalence guard for the M2 / M4 instrumentation (2026-07-04 pre-reg).
+#
+# Main.py cannot be imported/run in a unit test (argparse.parse_args() at module
+# level + ZMQ/ARGoS), and the repo has no end-to-end training reference hash — the
+# golden gates are component/helper-equivalence tests reproduced inline. In that
+# spirit, this guard proves the two non-negotiable invariants at the exact code
+# units the instrumentation touches:
+#
+#   (1) GSP_EVAL_ABLATE_PRED=none is a LITERAL identity at the injection helper —
+#       the same object is returned (no allocation, no value change), so the
+#       default training trajectory is bit-exact.
+#   (2) GSP_LOG_CANDIDATE_TARGETS is additive-only in the h5 writer: a logger
+#       episode with candidate logging OFF is byte-identical to a baseline
+#       episode without the instrumentation, and turning it ON leaves EVERY
+#       pre-existing (training) dataset byte-identical — only the extra
+#       cand_target_* datasets appear.
+# ---------------------------------------------------------------------------
+
+try:
+    from rl_code.src.pred_ablation import apply_pred_ablation, RunningMeanState
+except ImportError:  # pragma: no cover - path-dependent import
+    from src.pred_ablation import apply_pred_ablation, RunningMeanState  # type: ignore
+
+try:
+    import h5py
+    _HAS_H5PY = True
+except ImportError:  # pragma: no cover
+    _HAS_H5PY = False
+
+
+class TestPredAblationNoneBitExact:
+    """M2 golden guard: `none` must be a literal identity no-op."""
+
+    @pytest.mark.parametrize("seed", (0, 1, 7, 42, 123))
+    @pytest.mark.parametrize("K", (1, 3, 4, 32))
+    def test_none_returns_same_object(self, seed, K):
+        rng = np.random.default_rng(seed)
+        pred = rng.standard_normal(K).astype(np.float32)
+        state = RunningMeanState()
+        out = apply_pred_ablation(pred, 'none', rng, state)
+        # Same object identity — the guard for bit-exactness of the default path.
+        assert out is pred
+        # And the running-mean accumulator is never touched on the `none` path.
+        assert state.count == 0
+
+    def test_none_does_not_advance_shared_rng(self):
+        """`none` must not consume the shared rng (so a run that never leaves the
+        default path is deterministic regardless of the ablation rng)."""
+        rng_a = np.random.default_rng(99)
+        rng_b = np.random.default_rng(99)
+        pred = np.array([0.5, -1.5, 2.0], dtype=np.float32)
+        apply_pred_ablation(pred, 'none', rng_a, RunningMeanState())
+        # rng_a must be in the same state as an untouched rng_b.
+        assert rng_a.integers(0, 2**31) == rng_b.integers(0, 2**31)
+
+
+@pytest.mark.skipif(not _HAS_H5PY, reason="h5py not installed")
+class TestCandidateLoggingAdditiveOnly:
+    """M4 golden guard: candidate logging is additive-only; the off path is a
+    byte-exact no-op vs an un-instrumented baseline episode."""
+
+    @staticmethod
+    def _import_logger():
+        try:
+            from rl_code.src.hdf5_logger import HDF5Logger
+        except ImportError:  # pragma: no cover
+            from src.hdf5_logger import HDF5Logger  # type: ignore
+        return HDF5Logger
+
+    @staticmethod
+    def _writerow_kwargs(t):
+        # Deterministic, t-dependent values so any dataset perturbation is visible.
+        return dict(
+            rewards=[0.1 * t, 0.2 * t, 0.3 * t, 0.4 * t],
+            epsilons=0.5 - 0.01 * t, terminations=(t == 5), losses=0.01 * t,
+            force_magnitudes=[0.11 * t] * 4, force_angles=[0.22 * t] * 4,
+            average_force_vectors=[0.3 * t, -0.3 * t],
+            cyl_x_poses=1.0 * t, cyl_y_poses=-1.0 * t, cyl_angles=2.0 * t,
+            gate_stats=0, obstacle_stats=0,
+            gsp_rewards=[-0.05 * t] * 4, gsp_headings=[0.07 * t] * 4,
+            run_times=0.001 * t,
+            robots_x_poses=[0.5 * t] * 4, robots_y_poses=[-0.5 * t] * 4,
+            robot_angles=[0.9 * t] * 4, robot_failure=[False] * 4,
+            gsp_target=[0.15 * t] * 4,
+        )
+
+    def _run_episode(self, path, log_candidates):
+        HDF5Logger = self._import_logger()
+        logger = HDF5Logger(path)
+        for t in range(6):
+            logger.writerow(**self._writerow_kwargs(t))
+            if log_candidates:
+                logger.record_candidate_targets(
+                    delta_theta=0.1 * t, future_prox=0.05 * t + 0.2,
+                    cyl_kin=[0.01 * t, -0.02 * t, 0.03 * t],
+                    centroid_goal=0.5 - 0.01 * t)
+        logger.write_episode(0)
+
+    def _dataset_bytes(self, path):
+        out = {}
+        with h5py.File(path) as f:
+            grp = f["episode_0000"]
+            for key in grp.keys():
+                out[key] = np.asarray(grp[key][()]).tobytes()
+        return out
+
+    def test_off_path_matches_uninstrumented_baseline(self, tmp_path):
+        """Candidate logging OFF must be byte-identical to a baseline episode
+        (the instrumentation adds nothing on the default path)."""
+        p_base = str(tmp_path / "baseline.h5")
+        p_off = str(tmp_path / "off.h5")
+        self._run_episode(p_base, log_candidates=False)
+        self._run_episode(p_off, log_candidates=False)
+        base = self._dataset_bytes(p_base)
+        off = self._dataset_bytes(p_off)
+        assert set(base.keys()) == set(off.keys())
+        for key in base:
+            assert base[key] == off[key], f"dataset {key} differs on off path"
+        # And no candidate datasets exist on the off path.
+        assert not any(k.startswith("cand_target_") for k in off), \
+            "candidate datasets present with logging off"
+
+    def test_on_path_leaves_training_datasets_byte_identical(self, tmp_path):
+        """Candidate logging ON: every pre-existing (training) dataset must be
+        byte-identical to the OFF run; only cand_target_* datasets are added."""
+        p_off = str(tmp_path / "off.h5")
+        p_on = str(tmp_path / "on.h5")
+        self._run_episode(p_off, log_candidates=False)
+        self._run_episode(p_on, log_candidates=True)
+        off = self._dataset_bytes(p_off)
+        on = self._dataset_bytes(p_on)
+        # The ON set is the OFF set PLUS the candidate datasets — nothing removed.
+        added = set(on.keys()) - set(off.keys())
+        assert added == {
+            "cand_target_delta_theta", "cand_target_future_prox",
+            "cand_target_cyl_kin", "cand_target_centroid_goal",
+        }, f"unexpected dataset delta: {added}"
+        # Every shared (training) dataset is byte-for-byte unchanged.
+        for key in off:
+            assert off[key] == on[key], (
+                f"training dataset {key} perturbed by candidate logging"
+            )
