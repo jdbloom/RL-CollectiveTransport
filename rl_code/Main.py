@@ -4,6 +4,7 @@ import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
 from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
+from src.pred_ablation import apply_pred_ablation, RunningMeanState
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -236,6 +237,31 @@ log.info("GSP_REWARD_COEF = %s", _gsp_reward_coef)
 _gsp_reward_random_noise = bool(config.get('GSP_REWARD_RANDOM_NOISE', False))
 log.info("GSP_REWARD_RANDOM_NOISE = %s", _gsp_reward_random_noise)
 
+# M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
+# Read once at startup. The prediction transform is applied at the single
+# next_heading_gsp injection site via src.pred_ablation.apply_pred_ablation.
+# 'none' (default) is a literal identity no-op → training path stays bit-exact.
+# The 'shuffle' mode needs a seeded rng (deterministic per SEED); the
+# 'frozen_mean' mode needs a per-episode running-mean accumulator (reset at
+# episode start). Both are inert on the default 'none' path.
+# See docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M2).
+_gsp_eval_ablate_pred = str(config.get('GSP_EVAL_ABLATE_PRED', 'none'))
+log.info("GSP_EVAL_ABLATE_PRED = %s", _gsp_eval_ablate_pred)
+_pred_ablation_rng = np.random.default_rng(int(config.get('SEED', 0)))
+# Per-episode running-mean accumulator for the 'frozen_mean' mode. Reconstructed
+# at each episode boundary (see episode-init block) so the mean never bleeds
+# across episodes. Initialized here for module scope; reset per episode below.
+_pred_frozen_mean_state = RunningMeanState()
+
+# M4 — candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
+# When 1, all four candidate GSP targets (delta_theta, future_prox, cyl_kin Δx/Δy/Δθ,
+# centroid-to-goal) are computed EVERY step regardless of the active GSP_OUTPUT_KIND
+# and buffered for per-step h5 datasets. Default 0 → zero behavior change (the
+# candidate block is skipped and no datasets are written).
+# See docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M4).
+_gsp_log_candidate_targets = bool(int(config.get('GSP_LOG_CANDIDATE_TARGETS', 0)))
+log.info("GSP_LOG_CANDIDATE_TARGETS = %s", _gsp_log_candidate_targets)
+
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
 # Initialized to None; on the first step the velocity terms default to zero.
@@ -289,6 +315,9 @@ try:
             _prev_robot_x = None
             _prev_robot_y = None
             _prev_cyl_bearing = None
+            # M2: reset the frozen_mean running-mean accumulator at every episode
+            # boundary so the prediction mean never bleeds across episodes.
+            _pred_frozen_mean_state = RunningMeanState()
 
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
@@ -650,6 +679,13 @@ try:
                             for i in range(Utility.params['num_robots']):
                                 next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
                                 next_heading_gsp[i] = next_object_heading[i]
+                                # M2 eval-time prediction ablation (injection site).
+                                # 'none' (default) is a literal identity no-op.
+                                if _gsp_eval_ablate_pred != 'none':
+                                    next_heading_gsp[i] = apply_pred_ablation(
+                                        next_heading_gsp[i], _gsp_eval_ablate_pred,
+                                        _pred_ablation_rng, _pred_frozen_mean_state,
+                                    )
                         else:
                             if model.gsp_neighbors:
                                 # Pass env_observations when input enrichment flags are active.
@@ -700,6 +736,15 @@ try:
                                 if _pred_vec.size != _gsp_K:
                                     _pred_vec = np.resize(_pred_vec, _gsp_K)
                                 next_heading_gsp[i] = _pred_vec
+                                # M2 eval-time prediction ablation (injection site).
+                                # Applied immediately after next_heading_gsp[i] is set
+                                # and BEFORE make_agent_state consumes it. 'none'
+                                # (default) is a literal identity no-op → bit-exact.
+                                if _gsp_eval_ablate_pred != 'none':
+                                    next_heading_gsp[i] = apply_pred_ablation(
+                                        next_heading_gsp[i], _gsp_eval_ablate_pred,
+                                        _pred_ablation_rng, _pred_frozen_mean_state,
+                                    )
                         # print("-------------------------------------------------")
                         # print('[GSP]', next_heading_gsp)
 
