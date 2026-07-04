@@ -62,6 +62,8 @@
                   gate_update_frequency = "50"
                   gate_update_amount = "0.25"
                   gate_minimum = "$$gate_minimum$$"
+                  gate_success_threshold = "$$gate_success_threshold$$"
+                  gate_success_window = "$$gate_success_window$$"
                   use_base_model = "0"
                   use_prisms = "$$use_prisms$$"
                   random_objs = "$$random_objs$$"
