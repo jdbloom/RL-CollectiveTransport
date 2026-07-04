@@ -530,6 +530,41 @@ try:
                         # delta_theta_1d or future_prox_1d: scalar label unchanged
                         _multi_label = np.array([label], dtype=np.float32)
 
+                    # M4 candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
+                    # Compute ALL FOUR candidate targets EVERY step, independently of
+                    # the active GSP_OUTPUT_KIND above (so the offline M4 analysis can
+                    # rank task-relevance without re-running the sim per target). This
+                    # block is behind the flag → default off → strict no-op. It reads
+                    # prev_obj_stats (previous step) BEFORE it is overwritten below, and
+                    # computes centroid-to-goal from the live cyl_dist2goal without
+                    # touching the prev_cyl_dist2goal advance owned by the active-kind
+                    # branch above. future_prox candidate = mean current per-robot
+                    # proximity (raw summed prox over the prox window); the offline
+                    # analysis shifts it by the horizon K to form the future-prox target.
+                    if _gsp_log_candidate_targets:
+                        _cand_cyl_kin = [
+                            float(obj_stats[0]) - float(prev_obj_stats[0]),  # Δx
+                            float(obj_stats[1]) - float(prev_obj_stats[1]),  # Δy
+                            float(obj_stats[5]) - float(prev_obj_stats[5]),  # Δθ
+                        ]
+                        _cand_curr_cyl_dist2goal = (
+                            float(env_observations[0][6]) if len(env_observations) > 0 else 0.0
+                        )
+                        _cand_centroid_goal = prev_cyl_dist2goal - _cand_curr_cyl_dist2goal
+                        _cand_prox_sums = [
+                            float(np.sum(env_observations[i][7:]))
+                            for i in range(Utility.params['num_robots'])
+                        ]
+                        _cand_future_prox = (
+                            float(np.mean(_cand_prox_sums)) if _cand_prox_sums else 0.0
+                        )
+                        hdf5_writer.record_candidate_targets(
+                            delta_theta=float(label),
+                            future_prox=_cand_future_prox,
+                            cyl_kin=_cand_cyl_kin,
+                            centroid_goal=_cand_centroid_goal,
+                        )
+
                     # Update previous cylinder stats for next step's delta computation.
                     prev_obj_stats = obj_stats.copy()
 
