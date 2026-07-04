@@ -106,6 +106,17 @@ class Agent(Actor):
         # while leaving the self-slot + enrichment dims and input size untouched.
         # Default False is a strict bit-exact no-op vs current behavior.
         self._gsp_eval_ablate_neighbors = bool(config.get('GSP_EVAL_ABLATE_NEIGHBORS', False))
+        # M2 — eval-time GSP PREDICTION ablation. The flag is host-side: parsed on
+        # the Agent, consumed in Main.py at the single next_heading_gsp injection
+        # site via src.pred_ablation.apply_pred_ablation. Modes:
+        #   none        -> identity no-op (default; keeps training bit-exact)
+        #   zero        -> replace the prediction with zeros
+        #   shuffle     -> permute the prediction dims (same multiset)
+        #   frozen_mean -> replace with the per-episode running mean of predictions
+        # See docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M2).
+        # Mirrors the GSP_ZERO_OUT_SIGNAL host-side flag pattern; default 'none' is
+        # a strict bit-exact no-op vs current behavior.
+        self.gsp_eval_ablate_pred = str(config.get('GSP_EVAL_ABLATE_PRED', 'none'))
         _temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
         if _temporal_stack_k < 1:
             raise ValueError(

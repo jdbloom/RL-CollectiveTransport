@@ -179,6 +179,15 @@ class HDF5Logger:
         self.jepa_pred_mse: list = []
         self.jepa_latent_var: list = []
         self.jepa_latent_rank: list = []
+        # M4 candidate-target logging (GSP_LOG_CANDIDATE_TARGETS). Per-step buffers
+        # for all four candidate GSP targets, computed in Main.py every step
+        # regardless of the active GSP_OUTPUT_KIND when the flag is on. Empty →
+        # no datasets written (flag off → bit-identical behavior). See
+        # docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M4).
+        self.cand_target_delta_theta: list = []
+        self.cand_target_future_prox: list = []
+        self.cand_target_cyl_kin: list = []       # each entry is a length-3 vector
+        self.cand_target_centroid_goal: list = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -276,6 +285,26 @@ class HDF5Logger:
     def record_jepa_latent_rank(self, v: float) -> None:
         """Record one per-learn-step approximate effective rank of the online encoder z_t."""
         self.jepa_latent_rank.append(float(v))
+
+    def record_candidate_targets(
+        self, delta_theta, future_prox, cyl_kin, centroid_goal
+    ) -> None:
+        """Record one timestep's four candidate GSP targets (M4).
+
+        Called once per timestep from Main.py when GSP_LOG_CANDIDATE_TARGETS=1,
+        regardless of the active GSP_OUTPUT_KIND. All four candidates are computed
+        every step so the offline M4 analysis can rank which target is most
+        task-relevant without re-running the sim per target.
+
+        ``delta_theta``, ``future_prox``, ``centroid_goal`` are scalars;
+        ``cyl_kin`` is a length-3 (Δx, Δy, Δθ) vector.
+        """
+        self.cand_target_delta_theta.append(float(delta_theta))
+        self.cand_target_future_prox.append(float(future_prox))
+        self.cand_target_cyl_kin.append(
+            np.asarray(cyl_kin, dtype=np.float32).ravel().tolist()
+        )
+        self.cand_target_centroid_goal.append(float(centroid_goal))
 
     def record_stored_transition(self, label, input_vec) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
@@ -376,6 +405,20 @@ class HDF5Logger:
                 arr = np.array(self.gsp_obs, dtype=np.float32)
                 if arr.size > 0:
                     grp.create_dataset("gsp_obs", data=arr, compression="gzip", compression_opts=4)
+
+            # M4 candidate-target datasets (GSP_LOG_CANDIDATE_TARGETS). Only present
+            # when record_candidate_targets was called this episode (flag on).
+            # 1D (T,) for the three scalar candidates; 2D (T, 3) for cyl_kin.
+            for key, data in [
+                ("cand_target_delta_theta", self.cand_target_delta_theta),
+                ("cand_target_future_prox", self.cand_target_future_prox),
+                ("cand_target_centroid_goal", self.cand_target_centroid_goal),
+                ("cand_target_cyl_kin", self.cand_target_cyl_kin),
+            ]:
+                if data:
+                    arr = np.array(data, dtype=np.float32)
+                    grp.create_dataset(key, data=arr, compression="gzip",
+                                       compression_opts=4)
 
             # Store 1D arrays (timesteps)
             for key, data in [
