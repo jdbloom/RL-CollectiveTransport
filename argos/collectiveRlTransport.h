@@ -17,6 +17,7 @@
   #include <argos3/plugins/simulator/visualizations/qt-opengl/qtopengl_user_functions.h>
 #endif
 //#include <server/ModelServerClient.hpp>
+#include <deque>
 using namespace argos;
 
 class CCollectiveRLTransport : public CBuzzLoopFunctions {
@@ -261,6 +262,25 @@ private:
    /** Minimum gate separation */
    Real m_fGateMinimum;
 
+   /** Success rate (0..1) required within a full window to advance the gate
+    *  (performance-gated curriculum, gate_curriculum==2) */
+   Real m_fGateSuccessThreshold;
+
+   /** Number of most-recent episode outcomes used to compute the rolling
+    *  success rate for the performance-gated curriculum (gate_curriculum==2) */
+   UInt32 m_unGateSuccessWindow;
+
+   /** Runtime gate half-gap for the performance-gated curriculum.
+    *  Starts wide and narrows only when performance clears the threshold. */
+   Real m_fGateRuntimeOffset;
+
+   /** Rolling window of the last m_unGateSuccessWindow episode outcomes
+    *  (1 = goal reached, 0 = timeout) for the performance-gated curriculum. */
+   std::deque<UInt32> m_dequeGateOutcomes;
+
+   /** Episodes elapsed since the last gate advance (consolidation guard). */
+   UInt32 m_unGateEpisodesSinceAdvance;
+
    /** Use the composite prism as the object */
    UInt32 m_unUsePrisms;
 
@@ -304,6 +324,31 @@ private:
    void EnforceBoundaries(CVector3& pos, size_t episode, std::string state);
 
    void PlaceEntities(UInt32 un_episode);
+
+   /**
+    * Pure decision function for the performance-gated gate curriculum
+    * (gate_curriculum==2). Returns true iff the gate should narrow this
+    * episode. Extracted as a static free-function-like member so it can be
+    * unit-tested in isolation from the ARGoS simulation loop.
+    * @param un_window_size          gate_success_window (episodes per window)
+    * @param f_threshold             gate_success_threshold (0..1 success rate)
+    * @param un_outcomes_in_window   count of goal-reached outcomes currently in the window
+    * @param un_outcomes_observed    total outcomes recorded so far (window may not be full)
+    * @param un_episodes_since_advance episodes elapsed since the last advance
+    */
+   static bool ShouldAdvanceGate(UInt32 un_window_size,
+                                 Real   f_threshold,
+                                 UInt32 un_outcomes_in_window,
+                                 UInt32 un_outcomes_observed,
+                                 UInt32 un_episodes_since_advance);
+
+   /**
+    * Builds the two gate-wall positions/sizes for a single episode from a
+    * given half-gap offset and appends them (plus the offset) to
+    * m_vecGateWallPos / m_vecGateWallSize / m_vecOffset. Shared geometry used
+    * by the precomputed (mode 1) and runtime (mode 2) curricula.
+    */
+   void BuildGateGeometry(Real f_offset, size_t un_episode);
 
    std::vector<SInt32> GenerateRobotFailure();
 
