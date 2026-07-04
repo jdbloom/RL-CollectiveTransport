@@ -229,6 +229,7 @@ class TestGspOutputKindDictSync:
             'cyl_kinematics_3d': 3,
             'cyl_kinematics_goal_4d': 4,
             'time_to_goal_1d': 1,
+            'neighbor_force_1d': 1,
         }
         # Verify by constructing an agent for each kind and checking gsp_network_output
         for kind, expected_k in local_sizes.items():
@@ -245,7 +246,7 @@ class TestGspOutputKindDictSync:
         canonical_kinds = [
             'delta_theta_1d', 'future_prox_1d',
             'cyl_kinematics_3d', 'cyl_kinematics_goal_4d',
-            'time_to_goal_1d',
+            'time_to_goal_1d', 'neighbor_force_1d',
         ]
         for kind in canonical_kinds:
             # Should not raise

@@ -51,6 +51,7 @@ class Agent(Actor):
             'cyl_kinematics_3d': 3,
             'cyl_kinematics_goal_4d': 4,
             'time_to_goal_1d': 1,
+            'neighbor_force_1d': 1,
         }
         _gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
         if _gsp_output_kind not in _GSP_OUTPUT_KIND_SIZES:
@@ -240,12 +241,16 @@ class Agent(Actor):
         if self._neighbors:
             self.build_neighbors()
 
-        # Candidate A — future-prox delayed-label buffer. Active only when
-        # GSP_PREDICTION_TARGET == 'future_prox'. Stores (state_per_robot,
-        # gsp_obs_per_robot) snapshots so that K steps later we can pair the
-        # snapshot with the robot's own current proximity reading as the label.
-        # FIFO of length up to K+1 — once full, push followed by pop yields
-        # the K-step-ago entry. K=GSP_PREDICTION_HORIZON.
+        # Candidate A — delayed-label FIFO. Active for any DELAYED-LABEL target:
+        # GSP_PREDICTION_TARGET in {'future_prox', 'neighbor_force'}. Stores
+        # (state_per_robot, gsp_obs_per_robot) snapshots so that K steps later we
+        # can pair the t-snapshot with a label observed at t+K.
+        #   - future_prox:   label_i = robot i's own current proximity at t+K.
+        #   - neighbor_force: label_i = mean applied force-magnitude of the OTHER
+        #                     robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
+        # Both reuse the SAME FIFO; only the VALUE the caller passes to
+        # pop_matured_gsp_label differs. FIFO of length up to K+1 — once full,
+        # push followed by pop yields the K-step-ago entry. K=GSP_PREDICTION_HORIZON.
         self._gsp_label_buffer: deque = deque()
 
     @property
@@ -265,21 +270,34 @@ class Agent(Actor):
         for i in self._agent_hidden_states:
             self._agent_hidden_states[i] = None
 
+    # Targets whose GSP label is only observable K steps after the state is seen.
+    # They all share the same push/pop FIFO; only the label VALUE the caller
+    # supplies to pop_matured_gsp_label differs (see the buffer comment above).
+    _DELAYED_LABEL_TARGETS = ('future_prox', 'neighbor_force')
+
+    def _is_delayed_label_target(self):
+        return getattr(self, 'gsp_prediction_target', 'delta_theta') in self._DELAYED_LABEL_TARGETS
+
     def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot):
-        """Future-prox mode: snapshot per-robot (state, gsp_obs) for label maturation
-        K steps later. No-op when target != 'future_prox'."""
-        if getattr(self, 'gsp_prediction_target', 'delta_theta') != 'future_prox':
+        """Delayed-label mode: snapshot per-robot (state, gsp_obs) for label
+        maturation K steps later. No-op when the target is not a delayed-label
+        target ('future_prox' or 'neighbor_force')."""
+        if not self._is_delayed_label_target():
             return
         self._gsp_label_buffer.append({
             'state_per_robot': [np.asarray(s).copy() for s in state_per_robot],
             'gsp_obs_per_robot': [np.asarray(g).copy() for g in gsp_obs_per_robot],
         })
 
-    def pop_matured_gsp_label(self, current_prox_per_robot):
-        """Future-prox mode: if buffer has K+1 entries, pop the oldest snapshot and
-        return it paired with current per-robot prox as the label. Returns None when
-        buffer is too small or target != 'future_prox'."""
-        if getattr(self, 'gsp_prediction_target', 'delta_theta') != 'future_prox':
+    def pop_matured_gsp_label(self, current_label_per_robot):
+        """Delayed-label mode: if the buffer holds K+1 entries, pop the oldest
+        (t-K) snapshot and pair it with the per-robot label observed at the CURRENT
+        step. The caller owns the label VALUE:
+          - future_prox   → current per-robot proximity;
+          - neighbor_force → current per-robot neighbor-mean force-magnitude.
+        Returns None when the buffer is too small or the target is not a
+        delayed-label target."""
+        if not self._is_delayed_label_target():
             return None
         K = getattr(self, 'gsp_prediction_horizon', 5)
         if len(self._gsp_label_buffer) < K + 1:
@@ -288,7 +306,7 @@ class Agent(Actor):
         return {
             'state_per_robot': oldest['state_per_robot'],
             'gsp_obs_per_robot': oldest['gsp_obs_per_robot'],
-            'label_per_robot': np.asarray(current_prox_per_robot, dtype=np.float32).copy(),
+            'label_per_robot': np.asarray(current_label_per_robot, dtype=np.float32).copy(),
         }
 
     def reset_gsp_label_buffer(self):
