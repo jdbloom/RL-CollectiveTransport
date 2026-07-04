@@ -811,15 +811,35 @@ try:
                                 for i in range(Utility.params['num_robots']):
                                     e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
 
-                            # Candidate A: future-prox target — store transitions with per-robot
-                            # prox K steps ahead as the label, instead of the shared Δθ scalar.
-                            # Buffer accumulates (state_t) snapshots; only when matured at t+K
-                            # do we have (state_{t-K}, prox_t) pairs to store.
-                            if getattr(model, 'gsp_prediction_target', 'delta_theta') == 'future_prox':
+                            # Candidate A: delayed-label targets — store transitions whose label
+                            # is only observable K steps after the state is seen. Buffer accumulates
+                            # (state_t) snapshots; only when matured at t+K do we have
+                            # (state_{t-K}, label_t) pairs to store. Two delayed-label targets share
+                            # this FIFO — only the label VALUE differs:
+                            #   future_prox   → label_i = robot i's own current proximity at t+K.
+                            #   neighbor_force→ label_i = mean applied force-magnitude of the OTHER
+                            #                   robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
+                            #                   force_magnitude[j] is stats[j][0] at the current step.
+                            _gsp_pred_target = getattr(model, 'gsp_prediction_target', 'delta_theta')
+                            if _gsp_pred_target in ('future_prox', 'neighbor_force'):
                                 model.push_pending_gsp_obs(states, states)
-                                matured = model.pop_matured_gsp_label(
-                                    np.asarray(agent_prox_flags, dtype=np.float32)
-                                )
+                                if _gsp_pred_target == 'neighbor_force':
+                                    _n_r = Utility.params['num_robots']
+                                    _force_mags_now = np.asarray(
+                                        [float(stats[j][0]) for j in range(_n_r)],
+                                        dtype=np.float32,
+                                    )
+                                    # Per-robot mean force of the OTHER robots at the current step.
+                                    _force_sum = float(_force_mags_now.sum())
+                                    if _n_r > 1:
+                                        _current_label = (
+                                            (_force_sum - _force_mags_now) / (_n_r - 1)
+                                        ).astype(np.float32)
+                                    else:
+                                        _current_label = np.zeros(_n_r, dtype=np.float32)
+                                else:
+                                    _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
+                                matured = model.pop_matured_gsp_label(_current_label)
                                 if matured is not None:
                                     for i in range(Utility.params['num_robots']):
                                         s_to_store = matured['state_per_robot'][i]
