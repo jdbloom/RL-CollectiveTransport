@@ -1,7 +1,7 @@
 from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
-from src.env import calculate_gsp_reward, ZMQ_Utility
+from src.env import calculate_gsp_reward, ZMQ_Utility, angle_normalize_signed_deg
 from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
@@ -814,16 +814,34 @@ try:
                             # Candidate A: delayed-label targets — store transitions whose label
                             # is only observable K steps after the state is seen. Buffer accumulates
                             # (state_t) snapshots; only when matured at t+K do we have
-                            # (state_{t-K}, label_t) pairs to store. Two delayed-label targets share
+                            # (state_{t-K}, label_t) pairs to store. The delayed-label targets share
                             # this FIFO — only the label VALUE differs:
                             #   future_prox   → label_i = robot i's own current proximity at t+K.
                             #   neighbor_force→ label_i = mean applied force-magnitude of the OTHER
                             #                   robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
                             #                   force_magnitude[j] is stats[j][0] at the current step.
+                            #   delta_theta_traj → label = size-K payload-rotation TRAJECTORY
+                            #                   over the next K steps, the vector
+                            #                   [Δθ(t→t+1), …, Δθ(t+K-1→t+K)], the SAME K-vector
+                            #                   for every robot. Every step's payload angle
+                            #                   (obj_stats[5], degrees) is pushed into the FIFO; at
+                            #                   maturity the pop returns the ordered K+1-angle window
+                            #                   [angle(t), …, angle(t+K)] and we difference consecutive
+                            #                   entries. angle_normalize_signed_deg wraps each per-step
+                            #                   difference into [-180,180) so a boundary crossing
+                            #                   (e.g. 179 → -179) is a small per-step delta, not ~358.
                             _gsp_pred_target = getattr(model, 'gsp_prediction_target', 'delta_theta')
-                            if _gsp_pred_target in ('future_prox', 'neighbor_force'):
-                                model.push_pending_gsp_obs(states, states)
-                                if _gsp_pred_target == 'neighbor_force':
+                            if _gsp_pred_target in ('future_prox', 'neighbor_force', 'delta_theta_traj'):
+                                if _gsp_pred_target == 'delta_theta_traj':
+                                    # Carry the CURRENT payload angle (degrees) so the full window
+                                    # of angles is available to build the per-step trajectory.
+                                    model.push_pending_gsp_obs(
+                                        states, states, payload_angle_deg=float(obj_stats[5])
+                                    )
+                                    # Label is built from the returned angle window → pass None.
+                                    _current_label = None
+                                elif _gsp_pred_target == 'neighbor_force':
+                                    model.push_pending_gsp_obs(states, states)
                                     _n_r = Utility.params['num_robots']
                                     _force_mags_now = np.asarray(
                                         [float(stats[j][0]) for j in range(_n_r)],
@@ -837,13 +855,32 @@ try:
                                         ).astype(np.float32)
                                     else:
                                         _current_label = np.zeros(_n_r, dtype=np.float32)
-                                else:
+                                else:  # future_prox
+                                    model.push_pending_gsp_obs(states, states)
                                     _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
                                 matured = model.pop_matured_gsp_label(_current_label)
                                 if matured is not None:
+                                    if _gsp_pred_target == 'delta_theta_traj':
+                                        # Build the size-K per-step wrapped rotation trajectory from
+                                        # the ordered angle window (oldest→newest), shared by all robots.
+                                        _ang_win = matured['payload_angle_window']
+                                        _traj = np.array([
+                                            angle_normalize_signed_deg(
+                                                float(_ang_win[k + 1]) - float(_ang_win[k])
+                                            )
+                                            for k in range(len(_ang_win) - 1)
+                                        ], dtype=np.float32)
+                                        _matured_labels = [
+                                            _traj for _ in range(Utility.params['num_robots'])
+                                        ]
+                                    else:
+                                        _matured_labels = [
+                                            float(matured['label_per_robot'][i])
+                                            for i in range(Utility.params['num_robots'])
+                                        ]
                                     for i in range(Utility.params['num_robots']):
                                         s_to_store = matured['state_per_robot'][i]
-                                        label_to_store = float(matured['label_per_robot'][i])
+                                        label_to_store = _matured_labels[i]
                                         model.store_gsp_transition(s_to_store, label_to_store, 0, s_to_store, 0)
                                         hdf5_writer.record_stored_transition(label_to_store, s_to_store)
                             else:

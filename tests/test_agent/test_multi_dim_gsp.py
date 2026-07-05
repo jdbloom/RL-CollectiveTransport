@@ -32,9 +32,11 @@ def _base_config(**overrides):
     return cfg
 
 
-def _make_neighbors_agent(gsp_output_kind='delta_theta_1d', n_hop_neighbors=1):
+def _make_neighbors_agent(gsp_output_kind='delta_theta_1d', n_hop_neighbors=1,
+                          **config_overrides):
     """Construct a GSP-N agent with the given GSP_OUTPUT_KIND."""
     config = _base_config(GSP_OUTPUT_KIND=gsp_output_kind)
+    config.update(config_overrides)
     return Agent(
         config=config,
         network='DDQN',
@@ -240,6 +242,21 @@ class TestGspOutputKindDictSync:
                 "The GSP-RL dict and agent.py local dict are out of sync!"
             )
 
+    def test_horizon_coupled_kind_size_matches_across_dicts(self):
+        """delta_theta_traj has a HORIZON-COUPLED size (dict value None). Both
+        agent.py and GSP-RL must resolve it to K == GSP_PREDICTION_HORIZON, so the
+        head output width (GSP-RL) and the actor/neighbor input width (agent.py)
+        stay in sync."""
+        for K in (1, 2, 3, 5):
+            agent = _make_neighbors_agent(
+                'delta_theta_traj', GSP_PREDICTION_HORIZON=K
+            )
+            assert agent.gsp_network_output == K, (
+                f"delta_theta_traj @ K={K}: gsp_network_output (from GSP-RL) "
+                f"should be {K}, got {agent.gsp_network_output}"
+            )
+            assert agent.gsp_output_size_effective == K
+
     def test_all_canonical_kinds_known_to_agent(self):
         """Every kind that GSP-RL knows about can be constructed in agent.py."""
         # The canonical kinds from GSP-RL actor.py
@@ -247,6 +264,7 @@ class TestGspOutputKindDictSync:
             'delta_theta_1d', 'future_prox_1d',
             'cyl_kinematics_3d', 'cyl_kinematics_goal_4d',
             'time_to_goal_1d', 'neighbor_force_1d',
+            'delta_theta_traj',
         ]
         for kind in canonical_kinds:
             # Should not raise
