@@ -45,6 +45,10 @@ class Agent(Actor):
         # Source of truth for the size dict is GSP-RL learning_aids.py:287.
         # This local copy is kept in sync via test_multi_dim_gsp_input_size (sync
         # test in tests/test_agent/test_multi_dim_gsp.py). Update both together.
+        # A value of None marks a HORIZON-COUPLED kind whose output dim is not a
+        # fixed constant but equals GSP_PREDICTION_HORIZON (resolved below). Both
+        # this local copy and GSP-RL's copy resolve it from the SAME config key so
+        # the head output width and the actor/neighbor input width always agree.
         _GSP_OUTPUT_KIND_SIZES = {
             'delta_theta_1d': 1,
             'future_prox_1d': 1,
@@ -52,6 +56,9 @@ class Agent(Actor):
             'cyl_kinematics_goal_4d': 4,
             'time_to_goal_1d': 1,
             'neighbor_force_1d': 1,
+            # delta_theta_traj: size == K == GSP_PREDICTION_HORIZON. The label is the
+            # per-step payload-rotation trajectory [Δθ(t→t+1), …, Δθ(t+K-1→t+K)].
+            'delta_theta_traj': None,
         }
         _gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
         if _gsp_output_kind not in _GSP_OUTPUT_KIND_SIZES:
@@ -61,7 +68,15 @@ class Agent(Actor):
             )
         # K = effective output dims for the GSP head.  Used to compute gsp_input_size
         # so the head's recurrent prev_gsp slot accommodates the full prediction vector.
+        # For horizon-coupled kinds (dict value None) the size is GSP_PREDICTION_HORIZON.
         _K = _GSP_OUTPUT_KIND_SIZES[_gsp_output_kind]
+        if _K is None:
+            _K = int(config.get('GSP_PREDICTION_HORIZON', 5))
+            if _K < 1:
+                raise ValueError(
+                    f"GSP_OUTPUT_KIND='{_gsp_output_kind}' requires "
+                    f"GSP_PREDICTION_HORIZON >= 1, got {_K}"
+                )
 
         if neighbors:
             # (1 + K) inputs from ownship (avg_prox × 1, prev_gsp × K)
@@ -242,13 +257,22 @@ class Agent(Actor):
             self.build_neighbors()
 
         # Candidate A — delayed-label FIFO. Active for any DELAYED-LABEL target:
-        # GSP_PREDICTION_TARGET in {'future_prox', 'neighbor_force'}. Stores
-        # (state_per_robot, gsp_obs_per_robot) snapshots so that K steps later we
-        # can pair the t-snapshot with a label observed at t+K.
-        #   - future_prox:   label_i = robot i's own current proximity at t+K.
-        #   - neighbor_force: label_i = mean applied force-magnitude of the OTHER
-        #                     robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
-        # Both reuse the SAME FIFO; only the VALUE the caller passes to
+        # GSP_PREDICTION_TARGET in {'future_prox', 'neighbor_force',
+        # 'delta_theta_horizon'}. Stores (state_per_robot, gsp_obs_per_robot,
+        # payload_angle_deg) snapshots so that K steps later we can pair the
+        # t-snapshot with a label observed at t+K.
+        #   - future_prox:        label_i = robot i's own current proximity at t+K.
+        #   - neighbor_force:      label_i = mean applied force-magnitude of the OTHER
+        #                          robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
+        #   - delta_theta_horizon: label   = wrap-safe payload rotation over the window,
+        #                          cyl_angle(t+K) - cyl_angle(t) in degrees, SHARED by
+        #                          every robot. This one needs the t (pushed-step)
+        #                          payload angle to form the delta, so the FIFO entry
+        #                          also carries payload_angle_deg; the driver reads it
+        #                          back from the matured pop and subtracts it from the
+        #                          current angle (see Main.py). For future_prox /
+        #                          neighbor_force payload_angle_deg is simply None.
+        # All reuse the SAME FIFO; only the VALUE(s) the caller passes to
         # pop_matured_gsp_label differs. FIFO of length up to K+1 — once full,
         # push followed by pop yields the K-step-ago entry. K=GSP_PREDICTION_HORIZON.
         self._gsp_label_buffer: deque = deque()
@@ -273,28 +297,56 @@ class Agent(Actor):
     # Targets whose GSP label is only observable K steps after the state is seen.
     # They all share the same push/pop FIFO; only the label VALUE the caller
     # supplies to pop_matured_gsp_label differs (see the buffer comment above).
-    _DELAYED_LABEL_TARGETS = ('future_prox', 'neighbor_force')
+    # 'delta_theta_traj' additionally uses the pushed-step payload angle carried
+    # in EVERY FIFO entry (payload_angle_deg) to reconstruct the K-step angle
+    # window and form the size-K per-step rotation trajectory.
+    _DELAYED_LABEL_TARGETS = ('future_prox', 'neighbor_force', 'delta_theta_traj')
 
     def _is_delayed_label_target(self):
         return getattr(self, 'gsp_prediction_target', 'delta_theta') in self._DELAYED_LABEL_TARGETS
 
-    def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot):
+    def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot,
+                             payload_angle_deg=None):
         """Delayed-label mode: snapshot per-robot (state, gsp_obs) for label
         maturation K steps later. No-op when the target is not a delayed-label
-        target ('future_prox' or 'neighbor_force')."""
+        target ('future_prox', 'neighbor_force', 'delta_theta_traj').
+
+        payload_angle_deg (optional): the payload's absolute rotation angle
+        (degrees) at the pushed step. Needed by 'delta_theta_traj', whose label is
+        the SEQUENCE of per-step rotations over the K-step window
+        [Δθ(t→t+1), …, Δθ(t+K-1→t+K)]; every step's angle is carried here so the
+        matured pop can hand back the full ordered angle window and the driver can
+        difference consecutive entries. Left None for future_prox / neighbor_force
+        (whose labels are fully computed at maturity from the current step)."""
         if not self._is_delayed_label_target():
             return
         self._gsp_label_buffer.append({
             'state_per_robot': [np.asarray(s).copy() for s in state_per_robot],
             'gsp_obs_per_robot': [np.asarray(g).copy() for g in gsp_obs_per_robot],
+            'payload_angle_deg': (
+                float(payload_angle_deg) if payload_angle_deg is not None else None
+            ),
         })
 
     def pop_matured_gsp_label(self, current_label_per_robot):
         """Delayed-label mode: if the buffer holds K+1 entries, pop the oldest
         (t-K) snapshot and pair it with the per-robot label observed at the CURRENT
         step. The caller owns the label VALUE:
-          - future_prox   → current per-robot proximity;
-          - neighbor_force → current per-robot neighbor-mean force-magnitude.
+          - future_prox        → current per-robot proximity;
+          - neighbor_force      → current per-robot neighbor-mean force-magnitude;
+          - delta_theta_traj    → the driver instead reads back the ordered
+                                   'payload_angle_window' (the K+1 payload angles
+                                   spanning t-K … t) and differences consecutive
+                                   entries into the size-K wrapped rotation
+                                   trajectory itself; it may pass None here.
+        The returned dict always includes:
+          - 'payload_angle_deg'    : the pushed-step (t-K) payload angle, or None;
+          - 'payload_angle_window' : an ordered list of the K+1 payload angles held
+                                     in the buffer at pop time (oldest→newest, i.e.
+                                     [angle(t-K), …, angle(t)]). Entries are None
+                                     where no angle was supplied at push time.
+        When current_label_per_robot is None, 'label_per_robot' is None (the driver
+        fills the label from payload_angle_window).
         Returns None when the buffer is too small or the target is not a
         delayed-label target."""
         if not self._is_delayed_label_target():
@@ -302,11 +354,20 @@ class Agent(Actor):
         K = getattr(self, 'gsp_prediction_horizon', 5)
         if len(self._gsp_label_buffer) < K + 1:
             return None
+        # Snapshot the full ordered angle window (oldest→newest) BEFORE popping so
+        # the trajectory driver can difference consecutive angles.
+        angle_window = [e.get('payload_angle_deg') for e in self._gsp_label_buffer]
         oldest = self._gsp_label_buffer.popleft()
+        label = (
+            None if current_label_per_robot is None
+            else np.asarray(current_label_per_robot, dtype=np.float32).copy()
+        )
         return {
             'state_per_robot': oldest['state_per_robot'],
             'gsp_obs_per_robot': oldest['gsp_obs_per_robot'],
-            'label_per_robot': np.asarray(current_label_per_robot, dtype=np.float32).copy(),
+            'payload_angle_deg': oldest.get('payload_angle_deg'),
+            'payload_angle_window': angle_window,
+            'label_per_robot': label,
         }
 
     def reset_gsp_label_buffer(self):
