@@ -17,12 +17,36 @@ Usage:
 """
 
 import os
+import time
 from typing import Optional
 
 import h5py
 import numpy as np
 
 # Notification handled by ingestion worker (optional, external)
+
+_SWMR_RETRY_COUNT = 3
+_SWMR_RETRY_DELAY = 0.5  # seconds
+
+
+def _open_h5_writer(path: str, mode: str = "a"):
+    """Open an HDF5 file for writing with SWMR-compatible settings.
+
+    Uses libver='latest' (required for SWMR) and retries up to
+    _SWMR_RETRY_COUNT times on BlockingIOError (errno 35) which occurs on
+    macOS APFS when an external reader briefly holds the file lock.
+
+    Returns an open h5py.File handle; caller is responsible for closing it.
+    """
+    last_exc: Optional[Exception] = None
+    for attempt in range(_SWMR_RETRY_COUNT):
+        try:
+            return h5py.File(path, mode, libver="latest")
+        except BlockingIOError as exc:
+            last_exc = exc
+            if attempt < _SWMR_RETRY_COUNT - 1:
+                time.sleep(_SWMR_RETRY_DELAY)
+    raise last_exc  # type: ignore[misc]
 
 
 class HDF5Logger:
@@ -60,7 +84,9 @@ class HDF5Logger:
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
         # Write provenance attrs once, at file creation. Subsequent episodes
         # append without touching root attrs.
-        with h5py.File(self.hdf5_path, "a") as h5f:
+        # libver='latest' is required for SWMR; swmr_mode=True is set here so
+        # external probes can open with swmr=True immediately after __init__.
+        with _open_h5_writer(self.hdf5_path) as h5f:
             if stelaris_sha:
                 h5f.attrs["stelaris_sha"] = str(stelaris_sha)
             if rl_ct_sha:
@@ -73,6 +99,7 @@ class HDF5Logger:
                 h5f.attrs["rl_ct_branch"] = str(rl_ct_branch)
             if gsp_rl_branch:
                 h5f.attrs["gsp_rl_branch"] = str(gsp_rl_branch)
+            h5f.swmr_mode = True
         self._reset()
 
     def _reset(self):
@@ -137,6 +164,30 @@ class HDF5Logger:
         # Aggregated into attrs on write_episode; not stored as full datasets.
         self.stored_gsp_labels: list = []
         self.stored_gsp_inputs: list = []
+        # Phase 4 loss-step correlation diagnostic. One float per GSP learn step:
+        # the Pearson correlation between the fresh forward-pass predictions used
+        # in the MSE loss and the replay-buffer labels for that same batch.
+        # Populated by record_gsp_loss_step_corr(); aggregated into
+        # gsp_loss_step_corr_{mean,std,min,max} attrs on write_episode().
+        # Empty list → no attrs written (non-GSP runs unaffected).
+        self.gsp_loss_step_corr_samples: list = []
+        # JEPA latent-space diagnostic scalars. Populated when GSP_JEPA_ENABLED=True.
+        # jepa_pred_mse:    per-learn-step MSE between predictor output and target latent.
+        # jepa_latent_var:  mean per-dim variance of the online encoder output z_t.
+        # jepa_latent_rank: approximate effective rank of z_t (SVD-based threshold count).
+        # Empty lists → no attrs written (non-JEPA runs unaffected).
+        self.jepa_pred_mse: list = []
+        self.jepa_latent_var: list = []
+        self.jepa_latent_rank: list = []
+        # M4 candidate-target logging (GSP_LOG_CANDIDATE_TARGETS). Per-step buffers
+        # for all four candidate GSP targets, computed in Main.py every step
+        # regardless of the active GSP_OUTPUT_KIND when the flag is on. Empty →
+        # no datasets written (flag off → bit-identical behavior). See
+        # docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M4).
+        self.cand_target_delta_theta: list = []
+        self.cand_target_future_prox: list = []
+        self.cand_target_cyl_kin: list = []       # each entry is a length-3 vector
+        self.cand_target_centroid_goal: list = []
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -204,6 +255,57 @@ class HDF5Logger:
         """
         self.gsp_loss.append(float(loss_value))
 
+    def record_gsp_loss_step_corr(self, corr_value: float) -> None:
+        """Record one per-batch Pearson correlation from the GSP MSE loss step.
+
+        ``corr_value`` is the Pearson r between the fresh forward-pass predictions
+        used to compute the MSE loss and the replay-buffer labels for that same
+        batch.  Called once per GSP learn step (same cadence as record_gsp_loss).
+        NaN values are silently dropped — they represent batches where one of the
+        inputs had zero variance (undefined correlation); aggregation over finite
+        samples is still meaningful.
+
+        This is intentionally separate from the episode-level gsp_pred_target_corr
+        attr (which measures the actor-input-path predictions over a full episode
+        — a different code path with a 1-timestep lag).  Comparing the two metrics
+        reveals whether the head IS learning but the actor-input measurement is
+        broken, or whether the head genuinely fails to learn.
+        """
+        if not np.isnan(corr_value):
+            self.gsp_loss_step_corr_samples.append(float(corr_value))
+
+    def record_jepa_pred_mse(self, v: float) -> None:
+        """Record one per-learn-step JEPA prediction MSE (z_pred vs z_target)."""
+        self.jepa_pred_mse.append(float(v))
+
+    def record_jepa_latent_var(self, v: float) -> None:
+        """Record one per-learn-step mean per-dim variance of the online encoder z_t."""
+        self.jepa_latent_var.append(float(v))
+
+    def record_jepa_latent_rank(self, v: float) -> None:
+        """Record one per-learn-step approximate effective rank of the online encoder z_t."""
+        self.jepa_latent_rank.append(float(v))
+
+    def record_candidate_targets(
+        self, delta_theta, future_prox, cyl_kin, centroid_goal
+    ) -> None:
+        """Record one timestep's four candidate GSP targets (M4).
+
+        Called once per timestep from Main.py when GSP_LOG_CANDIDATE_TARGETS=1,
+        regardless of the active GSP_OUTPUT_KIND. All four candidates are computed
+        every step so the offline M4 analysis can rank which target is most
+        task-relevant without re-running the sim per target.
+
+        ``delta_theta``, ``future_prox``, ``centroid_goal`` are scalars;
+        ``cyl_kin`` is a length-3 (Δx, Δy, Δθ) vector.
+        """
+        self.cand_target_delta_theta.append(float(delta_theta))
+        self.cand_target_future_prox.append(float(future_prox))
+        self.cand_target_cyl_kin.append(
+            np.asarray(cyl_kin, dtype=np.float32).ravel().tolist()
+        )
+        self.cand_target_centroid_goal.append(float(centroid_goal))
+
     def record_stored_transition(self, label, input_vec) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
         replay buffer. Per Phase 1 sample-quality spec — gives us label/input
@@ -263,7 +365,8 @@ class HDF5Logger:
         """
         group_name = f"episode_{episode_num:04d}"
 
-        with h5py.File(self.hdf5_path, "a") as h5f:
+        with _open_h5_writer(self.hdf5_path) as h5f:
+            h5f.swmr_mode = True
             if group_name in h5f:
                 del h5f[group_name]
             grp = h5f.create_group(group_name)
@@ -286,6 +389,13 @@ class HDF5Logger:
                 twod_specs.append(("gsp_squared_error", self.gsp_squared_error))
             for key, data in twod_specs:
                 arr = np.array(data, dtype=np.float32)
+                # Multi-dim GSP output: gsp_heading may be (T, R, K) when K>1.
+                # Per plan §4 (out-of-scope for this PR): store only the FIRST dim to
+                # keep the h5 dataset shape as (T, R) for backward compatibility.
+                # The last-dim extraction for the Pearson metric happens above in
+                # write_episode before this block (via _heading_last_dim).
+                if key == "gsp_heading" and arr.ndim == 3:
+                    arr = arr[:, :, 0]  # keep first dim only: (T, R)
                 if arr.size > 0:
                     grp.create_dataset(key, data=arr, compression="gzip", compression_opts=4)
 
@@ -295,6 +405,20 @@ class HDF5Logger:
                 arr = np.array(self.gsp_obs, dtype=np.float32)
                 if arr.size > 0:
                     grp.create_dataset("gsp_obs", data=arr, compression="gzip", compression_opts=4)
+
+            # M4 candidate-target datasets (GSP_LOG_CANDIDATE_TARGETS). Only present
+            # when record_candidate_targets was called this episode (flag on).
+            # 1D (T,) for the three scalar candidates; 2D (T, 3) for cyl_kin.
+            for key, data in [
+                ("cand_target_delta_theta", self.cand_target_delta_theta),
+                ("cand_target_future_prox", self.cand_target_future_prox),
+                ("cand_target_centroid_goal", self.cand_target_centroid_goal),
+                ("cand_target_cyl_kin", self.cand_target_cyl_kin),
+            ]:
+                if data:
+                    arr = np.array(data, dtype=np.float32)
+                    grp.create_dataset(key, data=arr, compression="gzip",
+                                       compression_opts=4)
 
             # Store 1D arrays (timesteps)
             for key, data in [
@@ -351,6 +475,22 @@ class HDF5Logger:
             term_arr = np.array(self.termination, dtype=bool)
             if term_arr.size > 0:
                 grp.create_dataset("termination", data=term_arr)
+
+            # Episode-level static layout: obstacle and gate positions are set
+            # once at episode init and don't change within the episode. The
+            # accumulator stores them per-step but we only need the first row.
+            # Restored 2026-05-05 (task #110) — regression from the pkl format.
+            # Skip when the stat is a sentinel int 0 (no obstacles / no gate).
+            for fld_name, fld in [("obstacle_stats", self.obstacle_stats),
+                                  ("gate_stats", self.gate_stats)]:
+                if not fld:
+                    continue
+                first = fld[0]
+                if first is None or not hasattr(first, "__len__"):
+                    continue  # int sentinel like 0 — env had no obstacles/gate
+                arr = np.asarray(first, dtype=np.float32)
+                if arr.size > 0:
+                    grp.create_dataset(fld_name, data=arr)
 
             # Compute and store summary attributes
             rewards = np.array(self.reward, dtype=np.float32)
@@ -443,7 +583,32 @@ class HDF5Logger:
                         "be passed on every writerow call within an episode once it's been "
                         "passed on any call."
                     )
-                pred_arr = np.array(self.gsp_heading, dtype=np.float64).ravel()
+                # Multi-dim GSP output: extract the LAST dim of gsp_heading for the
+                # Δθ correlation metric. Convention: for cyl_kinematics_3d/goal_4d
+                # the last dim is the cylinder Δθ component (matching env.py's convention).
+                # For legacy 1d shapes (T,) or (T,R) with K=1, [-1] on the inner axis
+                # is identical to the sole element — so 1d behavior is preserved exactly.
+                # gsp_heading is a list of per-timestep values; each entry may be:
+                #   - a scalar (legacy 1d flat)
+                #   - a list/array of per-robot scalars (legacy, shape R)
+                #   - a list/array of per-robot K-dim vectors (multi-dim, shape R×K)
+                # We build a flat array of the last-dim of each robot's prediction across
+                # all timesteps, then correlate against the ravelled target.
+                _heading_last_dim = []
+                for _step_entry in self.gsp_heading:
+                    _entry_arr = np.asarray(_step_entry, dtype=np.float64)
+                    if _entry_arr.ndim == 0:
+                        # Scalar — single value
+                        _heading_last_dim.append(float(_entry_arr))
+                    elif _entry_arr.ndim == 1:
+                        # Either (R,) scalars or (K,) dims for 1 robot
+                        # Treat as per-robot scalars; take each element as-is
+                        # (for K>1 single-robot case this picks [-1] per step, correct)
+                        _heading_last_dim.extend(_entry_arr.ravel().tolist())
+                    else:
+                        # (R, K) — take last dim per robot
+                        _heading_last_dim.extend(_entry_arr[:, -1].ravel().tolist())
+                pred_arr = np.array(_heading_last_dim, dtype=np.float64)
                 target_arr = np.array(self.gsp_target, dtype=np.float64).ravel()
                 if pred_arr.size > 0:
                     pred_std = float(np.nanstd(pred_arr))
@@ -462,7 +627,42 @@ class HDF5Logger:
                             corr = float("nan")
                     else:
                         corr = float("nan")
-                    grp.attrs["gsp_pred_target_corr"] = corr
+                    # Phase 5 metric cleanup (2026-04-29): the existing name
+                    # `gsp_pred_target_corr` is misleading because pred=future_prox
+                    # (head's training target at horizon=5) but target=delta_theta
+                    # (cylinder's per-step heading change from calculate_gsp_reward).
+                    # These are different physical quantities, so the correlation
+                    # was apples-vs-oranges. The new name `production_pred_vs_deltatheta_corr`
+                    # describes what's actually computed. Both names are written
+                    # during a one-batch migration window; the deprecated alias
+                    # will be removed in a follow-up PR after H-phase5-1 lands.
+                    # See docs/superpowers/plans/2026-04-29-metric-cleanup.md.
+                    grp.attrs["production_pred_vs_deltatheta_corr"] = corr
+                    grp.attrs["gsp_pred_target_corr"] = corr  # DEPRECATED — see above
+
+            # Phase 4 loss-step correlation diagnostic attrs.
+            # gsp_loss_step_corr_mean: mean Pearson r between fresh forward-pass preds
+            #   and replay-buffer labels, averaged over all GSP learn steps this episode.
+            # gsp_loss_step_corr_std / _min / _max: spread and range across batches.
+            # Written only when at least one valid (non-NaN) batch correlation was
+            # recorded.  Non-GSP runs, test runs, and warm-up episodes where the replay
+            # buffer is not yet full produce no attrs, preserving backward compatibility.
+            if self.gsp_loss_step_corr_samples:
+                _corr_arr = np.array(self.gsp_loss_step_corr_samples, dtype=np.float64)
+                grp.attrs["gsp_loss_step_corr_mean"] = float(np.nanmean(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_std"] = float(np.nanstd(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_min"] = float(np.nanmin(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_max"] = float(np.nanmax(_corr_arr))
+                grp.attrs["gsp_loss_step_corr_n_batches"] = int(len(_corr_arr))
+
+            # JEPA latent-space diagnostic attrs.
+            # Written as episode-group attrs when at least one learn step fired.
+            if self.jepa_pred_mse:
+                grp.attrs["jepa_pred_mse_mean"] = float(np.mean(self.jepa_pred_mse))
+            if self.jepa_latent_var:
+                grp.attrs["jepa_latent_var_mean"] = float(np.mean(self.jepa_latent_var))
+            if self.jepa_latent_rank:
+                grp.attrs["jepa_latent_rank_mean"] = float(np.mean(self.jepa_latent_rank))
 
         # Reset for next episode
         summary = {

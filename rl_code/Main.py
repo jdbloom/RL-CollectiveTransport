@@ -2,7 +2,9 @@ from urllib.parse import uses_relative
 #import python_code.Agent as Agent
 import src.agent as Agent
 from src.env import calculate_gsp_reward, ZMQ_Utility
+from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
+from src.pred_ablation import apply_pred_ablation, RunningMeanState
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -209,10 +211,56 @@ _gsp_input_include_cyl_rel = bool(config.get('GSP_INPUT_INCLUDE_CYL_REL', False)
 _gsp_input_full_prox = bool(config.get('GSP_INPUT_FULL_PROX', False))
 _gsp_input_needs_env_obs = _gsp_input_include_goal or _gsp_input_include_cyl_rel or _gsp_input_full_prox
 
+# Wrap-safe one-step delta of the robot's WORLD-FRAME bearing around the cylinder.
+# Computed here from world positions (atan2(robot_y - cyl_y, robot_x - cyl_x)) and
+# passed to make_gsp_states via the cyl_bearing_delta arg. The body-frame angle_to_cyl
+# delta correlates only ~0.003 with the GSP target; the world-frame bearing delta
+# correlates ~0.77-0.89 (verified on run h5).
+_gsp_input_include_cyl_bearing_delta = bool(config.get('GSP_INPUT_INCLUDE_CYL_BEARING_DELTA', False))
+
 # Change 3 enrichment flags (GSP-N self-slot additions).
 _gsp_input_include_payload_state = bool(config.get('GSP_INPUT_INCLUDE_PAYLOAD_STATE', False))
 _gsp_input_include_self_dynamics = bool(config.get('GSP_INPUT_INCLUDE_SELF_DYNAMICS', False))
 _gsp_input_temporal_stack_k = int(config.get('GSP_INPUT_TEMPORAL_STACK_K', 1))
+
+# H-phase5-2 reward shaping. When > 0, gsp_reward (negative penalty for prediction
+# error from env.calculate_gsp_reward, range [-2, 0]) is added to the actor's
+# training reward stream at coef * gsp_reward[i] per robot per timestep. Default
+# 0.0 preserves bit-identical reward stream for all pre-Phase-5.2 batches.
+# See docs/predictions/2026-04-30-h-phase5-2-prereg.md.
+_gsp_reward_coef = float(config.get('GSP_REWARD_COEF', 0.0))
+log.info("GSP_REWARD_COEF = %s", _gsp_reward_coef)
+# H-phase5-4 random-noise control. When True, the per-step augmentation at
+# Main.py:772 uses a random Gaussian-squared penalty in [-2, 0] of matched
+# magnitude instead of gsp_reward. Disambiguates "prediction signal helps"
+# from "any aux reward of right scale helps." Default False is unchanged.
+_gsp_reward_random_noise = bool(config.get('GSP_REWARD_RANDOM_NOISE', False))
+log.info("GSP_REWARD_RANDOM_NOISE = %s", _gsp_reward_random_noise)
+
+# M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
+# Read once at startup. The prediction transform is applied at the single
+# next_heading_gsp injection site via src.pred_ablation.apply_pred_ablation.
+# 'none' (default) is a literal identity no-op → training path stays bit-exact.
+# The 'shuffle' mode needs a seeded rng (deterministic per SEED); the
+# 'frozen_mean' mode needs a per-episode running-mean accumulator (reset at
+# episode start). Both are inert on the default 'none' path.
+# See docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M2).
+_gsp_eval_ablate_pred = str(config.get('GSP_EVAL_ABLATE_PRED', 'none'))
+log.info("GSP_EVAL_ABLATE_PRED = %s", _gsp_eval_ablate_pred)
+_pred_ablation_rng = np.random.default_rng(int(config.get('SEED', 0)))
+# Per-episode running-mean accumulator for the 'frozen_mean' mode. Reconstructed
+# at each episode boundary (see episode-init block) so the mean never bleeds
+# across episodes. Initialized here for module scope; reset per episode below.
+_pred_frozen_mean_state = RunningMeanState()
+
+# M4 — candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
+# When 1, all four candidate GSP targets (delta_theta, future_prox, cyl_kin Δx/Δy/Δθ,
+# centroid-to-goal) are computed EVERY step regardless of the active GSP_OUTPUT_KIND
+# and buffered for per-step h5 datasets. Default 0 → zero behavior change (the
+# candidate block is skipped and no datasets are written).
+# See docs/research/2026-07-04-gsp-actor-usage-instrumentation-prereg.md (M4).
+_gsp_log_candidate_targets = bool(int(config.get('GSP_LOG_CANDIDATE_TARGETS', 0)))
+log.info("GSP_LOG_CANDIDATE_TARGETS = %s", _gsp_log_candidate_targets)
 
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
@@ -225,6 +273,11 @@ _prev_payload_cyl_angle: float = None
 # Initialized to None; on the first step velocity defaults to zero.
 _prev_robot_x: list = None
 _prev_robot_y: list = None
+
+# Ring buffer for previous-step per-robot WORLD-FRAME bearing around the cylinder
+# (radians), needed for the wrap-safe cyl-bearing delta. None until the first step;
+# first step yields delta = 0.0.
+_prev_cyl_bearing: list = None
 
 try:
     while not exp_done:
@@ -240,8 +293,18 @@ try:
             agent_prox_flags = []
             last_object_heading = None
 
-            next_heading_gsp = np.zeros(Utility.params['num_robots'])
-            old_heading_gsp = np.zeros(Utility.params['num_robots'])
+            # Multi-dim GSP output (Change 1 — GSP_OUTPUT_KIND):
+            # Always 2D (num_robots, K) so all downstream code gets a consistent array.
+            # For K=1 (legacy delta_theta_1d) next_heading_gsp[i] is a 1-element array
+            # instead of a scalar — make_agent_state handles both via the ndim/size check.
+            _model_for_gsp_k = model if not args.independent_learning else models[0]
+            if config.get('GSP_JEPA_ENABLED', False):
+                # JEPA path: actor input slot for GSP signal is the encoder latent (default 32).
+                _gsp_K = int(config.get('GSP_ENCODER_DIM', 32)) if config.get('GSP') else 1
+            else:
+                _gsp_K = getattr(_model_for_gsp_k, 'gsp_network_output', 1) if config.get('GSP') else 1
+            next_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
+            old_heading_gsp = np.zeros((Utility.params['num_robots'], _gsp_K))
             episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
 
             # Reset Change-3 prev-step ring buffers at episode boundaries so
@@ -251,6 +314,10 @@ try:
             _prev_payload_cyl_angle = None
             _prev_robot_x = None
             _prev_robot_y = None
+            _prev_cyl_bearing = None
+            # M2: reset the frozen_mean running-mean accumulator at every episode
+            # boundary so the prediction mean never bleeds across episodes.
+            _pred_frozen_mean_state = RunningMeanState()
 
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
@@ -297,23 +364,12 @@ try:
                     agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
         
             #Define Global Knowledge: [positions, velocities]
-            global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-            for i in range(Utility.params['num_robots']):
-                global_knowledge[i*4] = robot_stats[i][0]           #x position
-                global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                global_knowledge[i*4+3] = stats[i][3]               #velocity Y
+            # T7: vectorized via src.knowledge (inert, golden-verified).
+            global_knowledge = build_global_knowledge(robot_stats, stats)
+            g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
             for i in range(Utility.params['num_robots']):
-                g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                counter = 0
-                for j in range(Utility.params['num_robots']):
-                    if i != j:
-                        g_knowledge[counter*4] = global_knowledge[j*4]
-                        g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                        g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                        g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                        counter+=1
+                g_knowledge = g_knowledge_all[i]
                 if args.independent_learning:
                     running_reward.append(0)
                     if config['GSP']:
@@ -474,6 +530,41 @@ try:
                         # delta_theta_1d or future_prox_1d: scalar label unchanged
                         _multi_label = np.array([label], dtype=np.float32)
 
+                    # M4 candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
+                    # Compute ALL FOUR candidate targets EVERY step, independently of
+                    # the active GSP_OUTPUT_KIND above (so the offline M4 analysis can
+                    # rank task-relevance without re-running the sim per target). This
+                    # block is behind the flag → default off → strict no-op. It reads
+                    # prev_obj_stats (previous step) BEFORE it is overwritten below, and
+                    # computes centroid-to-goal from the live cyl_dist2goal without
+                    # touching the prev_cyl_dist2goal advance owned by the active-kind
+                    # branch above. future_prox candidate = mean current per-robot
+                    # proximity (raw summed prox over the prox window); the offline
+                    # analysis shifts it by the horizon K to form the future-prox target.
+                    if _gsp_log_candidate_targets:
+                        _cand_cyl_kin = [
+                            float(obj_stats[0]) - float(prev_obj_stats[0]),  # Δx
+                            float(obj_stats[1]) - float(prev_obj_stats[1]),  # Δy
+                            float(obj_stats[5]) - float(prev_obj_stats[5]),  # Δθ
+                        ]
+                        _cand_curr_cyl_dist2goal = (
+                            float(env_observations[0][6]) if len(env_observations) > 0 else 0.0
+                        )
+                        _cand_centroid_goal = prev_cyl_dist2goal - _cand_curr_cyl_dist2goal
+                        _cand_prox_sums = [
+                            float(np.sum(env_observations[i][7:]))
+                            for i in range(Utility.params['num_robots'])
+                        ]
+                        _cand_future_prox = (
+                            float(np.mean(_cand_prox_sums)) if _cand_prox_sums else 0.0
+                        )
+                        hdf5_writer.record_candidate_targets(
+                            delta_theta=float(label),
+                            future_prox=_cand_future_prox,
+                            cyl_kin=_cand_cyl_kin,
+                            centroid_goal=_cand_centroid_goal,
+                        )
+
                     # Update previous cylinder stats for next step's delta computation.
                     prev_obj_stats = obj_stats.copy()
 
@@ -586,12 +677,50 @@ try:
                         _prev_robot_x = [float(robot_stats[_ri][0]) for _ri in range(_n_r)]
                         _prev_robot_y = [float(robot_stats[_ri][1]) for _ri in range(_n_r)]
 
+                    # Wrap-safe world-frame cyl-bearing delta. Computed once per
+                    # timestep from world positions and passed to BOTH make_gsp_states
+                    # calls. The prev-bearing buffer advances exactly once per step here.
+                    _cyl_bearing_delta_arg = None
+                    if _gsp_input_include_cyl_bearing_delta:
+                        _n_r = Utility.params['num_robots']
+                        _bearings_now = []
+                        _deltas = []
+                        # Reference point is the CYLINDER position (obj_stats[0]/[1],
+                        # logged as cyl_x_pos/cyl_y_pos), NOT the payload COM
+                        # (obj_stats[7]/[8]). The bearing-around-cylinder delta vs the
+                        # cylinder centre correlates ~0.77 with the target; vs the COM it
+                        # correlates ~0 (verified on run h5).
+                        _cyl_x = float(obj_stats[0])
+                        _cyl_y = float(obj_stats[1])
+                        for _ri in range(_n_r):
+                            _bearing = math.atan2(
+                                float(robot_stats[_ri][1]) - _cyl_y,
+                                float(robot_stats[_ri][0]) - _cyl_x,
+                            )
+                            if _prev_cyl_bearing is None:
+                                _d = 0.0
+                            else:
+                                _d = _bearing - float(_prev_cyl_bearing[_ri])
+                                _d = (_d + math.pi) % (2 * math.pi) - math.pi
+                            _bearings_now.append(_bearing)
+                            _deltas.append(_d)
+                        _cyl_bearing_delta_arg = {'delta': _deltas}
+                        # Advance prev-bearing buffer exactly once per timestep.
+                        _prev_cyl_bearing = _bearings_now
+
                     if config['GSP']:
                         # GSP Predict
                         if args.independent_learning:
                             for i in range(Utility.params['num_robots']):
                                 next_object_heading[i] = models[i].choose_agent_gsp(agent_prox_flags, test_mode)
                                 next_heading_gsp[i] = next_object_heading[i]
+                                # M2 eval-time prediction ablation (injection site).
+                                # 'none' (default) is a literal identity no-op.
+                                if _gsp_eval_ablate_pred != 'none':
+                                    next_heading_gsp[i] = apply_pred_ablation(
+                                        next_heading_gsp[i], _gsp_eval_ablate_pred,
+                                        _pred_ablation_rng, _pred_frozen_mean_state,
+                                    )
                         else:
                             if model.gsp_neighbors:
                                 # Pass env_observations when input enrichment flags are active.
@@ -601,6 +730,7 @@ try:
                                     env_observations=_env_obs_arg,
                                     payload_state=_payload_state_arg,
                                     self_dynamics=_self_dynamics_arg,
+                                    cyl_bearing_delta=_cyl_bearing_delta_arg,
                                 )
                                 ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
                                 gsp_obs_per_robot = agent_gsp_states
@@ -628,10 +758,28 @@ try:
                                 # the pool-populating loop yields one sample per step.
                                 diag_gsp_head_input = np.asarray(agent_prox_flags, dtype=np.float32).reshape(1, -1)
                             for i in range(Utility.params['num_robots']):
-                                if len(ctde_gsp) > 1:
-                                    next_heading_gsp[i] = ctde_gsp[i][-1].item()
-                                else:
-                                    next_heading_gsp[i] = ctde_gsp[-1].item()
+                                # Multi-dim GSP output: store the full K-dim prediction vector
+                                # for each robot. Per-agent predictions come back as either a
+                                # numpy array (DDPG / continuous head) or a torch tensor
+                                # (depending on choose_action's return path). Handle both.
+                                # NOTE: do NOT use `[-1]` here — that would truncate the K-dim
+                                # vector to its last element. Take the whole per-agent prediction.
+                                _pred_raw = ctde_gsp[i] if len(ctde_gsp) > 1 else ctde_gsp
+                                if hasattr(_pred_raw, 'detach'):
+                                    _pred_raw = _pred_raw.detach().cpu().numpy()
+                                _pred_vec = np.asarray(_pred_raw, dtype=np.float32).ravel()
+                                if _pred_vec.size != _gsp_K:
+                                    _pred_vec = np.resize(_pred_vec, _gsp_K)
+                                next_heading_gsp[i] = _pred_vec
+                                # M2 eval-time prediction ablation (injection site).
+                                # Applied immediately after next_heading_gsp[i] is set
+                                # and BEFORE make_agent_state consumes it. 'none'
+                                # (default) is a literal identity no-op → bit-exact.
+                                if _gsp_eval_ablate_pred != 'none':
+                                    next_heading_gsp[i] = apply_pred_ablation(
+                                        next_heading_gsp[i], _gsp_eval_ablate_pred,
+                                        _pred_ablation_rng, _pred_frozen_mean_state,
+                                    )
                         # print("-------------------------------------------------")
                         # print('[GSP]', next_heading_gsp)
 
@@ -650,26 +798,48 @@ try:
                                 env_observations=_env_obs_arg,
                                 payload_state=_payload_state_arg,
                                 self_dynamics=_self_dynamics_arg,
+                                cyl_bearing_delta=_cyl_bearing_delta_arg,
                             )
                             new_states = model.make_gsp_states(
                                 agent_prox_flags, old_heading_gsp,
                                 env_observations=_env_obs_arg,
                                 payload_state=_payload_state_arg,
                                 self_dynamics=_self_dynamics_arg,
+                                cyl_bearing_delta=_cyl_bearing_delta_arg,
                             )
                             if config.get('GSP_E2E_ENABLED'):
                                 for i in range(Utility.params['num_robots']):
                                     e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
 
-                            # Candidate A: future-prox target — store transitions with per-robot
-                            # prox K steps ahead as the label, instead of the shared Δθ scalar.
-                            # Buffer accumulates (state_t) snapshots; only when matured at t+K
-                            # do we have (state_{t-K}, prox_t) pairs to store.
-                            if getattr(model, 'gsp_prediction_target', 'delta_theta') == 'future_prox':
+                            # Candidate A: delayed-label targets — store transitions whose label
+                            # is only observable K steps after the state is seen. Buffer accumulates
+                            # (state_t) snapshots; only when matured at t+K do we have
+                            # (state_{t-K}, label_t) pairs to store. Two delayed-label targets share
+                            # this FIFO — only the label VALUE differs:
+                            #   future_prox   → label_i = robot i's own current proximity at t+K.
+                            #   neighbor_force→ label_i = mean applied force-magnitude of the OTHER
+                            #                   robots at t+K (mean_{j != i} force_magnitude[t+K, j]).
+                            #                   force_magnitude[j] is stats[j][0] at the current step.
+                            _gsp_pred_target = getattr(model, 'gsp_prediction_target', 'delta_theta')
+                            if _gsp_pred_target in ('future_prox', 'neighbor_force'):
                                 model.push_pending_gsp_obs(states, states)
-                                matured = model.pop_matured_gsp_label(
-                                    np.asarray(agent_prox_flags, dtype=np.float32)
-                                )
+                                if _gsp_pred_target == 'neighbor_force':
+                                    _n_r = Utility.params['num_robots']
+                                    _force_mags_now = np.asarray(
+                                        [float(stats[j][0]) for j in range(_n_r)],
+                                        dtype=np.float32,
+                                    )
+                                    # Per-robot mean force of the OTHER robots at the current step.
+                                    _force_sum = float(_force_mags_now.sum())
+                                    if _n_r > 1:
+                                        _current_label = (
+                                            (_force_sum - _force_mags_now) / (_n_r - 1)
+                                        ).astype(np.float32)
+                                    else:
+                                        _current_label = np.zeros(_n_r, dtype=np.float32)
+                                else:
+                                    _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
+                                matured = model.pop_matured_gsp_label(_current_label)
                                 if matured is not None:
                                     for i in range(Utility.params['num_robots']):
                                         s_to_store = matured['state_per_robot'][i]
@@ -719,27 +889,31 @@ try:
 
 
                     #Define Global Knowledge: [positions, velocities]
-                    global_knowledge=np.zeros((Utility.params['num_robots'])*4)
-                    for i in range(Utility.params['num_robots']):
-                        global_knowledge[i*4] = robot_stats[i][0]           #x position
-                        global_knowledge[i*4+1] = robot_stats[i][1]         #y position
-                        global_knowledge[i*4+2] = stats[i][2]               #velocity X
-                        global_knowledge[i*4+3] = stats[i][3]               #velocity Y
-
+                    # T7: vectorized via src.knowledge (inert, golden-verified).
+                    global_knowledge = build_global_knowledge(robot_stats, stats)
+                    g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
                     for i in range(Utility.params['num_robots']):
-                        g_knowledge = np.zeros((Utility.params['num_robots']-1)*4)
-                        counter = 0
-                        for j in range(Utility.params['num_robots']):
-                            if i != j:
-                                g_knowledge[counter*4] = global_knowledge[j*4]
-                                g_knowledge[counter*4+1] = global_knowledge[j*4+1]
-                                g_knowledge[counter*4+2] = global_knowledge[j*4+2]
-                                g_knowledge[counter*4+3] = global_knowledge[j*4+3]
-                                counter+=1
+                        g_knowledge = g_knowledge_all[i]
                         prox_values = env_observations[i][7:]
                         prox_value = np.sum(prox_values)
                         rewards[i] += (-1)*prox_value
+                        # H-phase5-2 reward shaping: when GSP_REWARD_COEF > 0, add
+                        # gsp_reward[i] (signed prediction-error penalty in [-2, 0])
+                        # scaled by coef to the actor's training reward. Default 0.0
+                        # is bit-identical (the if branch is skipped). gsp_reward was
+                        # computed at line 429 by env.calculate_gsp_reward and is in
+                        # scope here as a per-robot list.
+                        if _gsp_reward_coef > 0.0:
+                            if _gsp_reward_random_noise:
+                                # Replace gsp_reward with a Gaussian-squared
+                                # penalty of matched magnitude. Same clip range
+                                # [-2, 0] so the additive perturbation is
+                                # statistically comparable to gsp_reward.
+                                _noise = float(np.clip(-(np.random.normal(0.0, 1.0))**2, -2.0, 0.0))
+                                rewards[i] += _gsp_reward_coef * _noise
+                            else:
+                                rewards[i] += _gsp_reward_coef * float(gsp_reward[i])
                         force_mags.append(stats[i][0])
                         force_angs.append(stats[i][1])
 
@@ -816,6 +990,14 @@ try:
                                 ]
                                 if gsp_losses:
                                     hdf5_writer.record_gsp_loss(float(np.mean(gsp_losses)))
+                                if config.get('GSP_JEPA_ENABLED'):
+                                    for _m in models:
+                                        _js = getattr(_m, 'last_gsp_jepa_stats', None)
+                                        if _js is not None:
+                                            hdf5_writer.record_jepa_pred_mse(_js.get('pred_mse', 0.0))
+                                            hdf5_writer.record_jepa_latent_var(_js.get('var', 0.0))
+                                            hdf5_writer.record_jepa_latent_rank(_js.get('rank', 0.0))
+                                            break  # one learn step per tick; first non-None wins
                                 if config.get('GSP_E2E_ENABLED'):
                                     e2e_diag = getattr(models[0], 'last_e2e_diagnostics', None)
                                     if e2e_diag is not None:
@@ -827,6 +1009,12 @@ try:
                                 gsp_step_loss = getattr(model, "last_gsp_loss", None)
                                 if gsp_step_loss is not None:
                                     hdf5_writer.record_gsp_loss(gsp_step_loss)
+                                if config.get('GSP_JEPA_ENABLED'):
+                                    _js = getattr(model, 'last_gsp_jepa_stats', None)
+                                    if _js is not None:
+                                        hdf5_writer.record_jepa_pred_mse(_js.get('pred_mse', 0.0))
+                                        hdf5_writer.record_jepa_latent_var(_js.get('var', 0.0))
+                                        hdf5_writer.record_jepa_latent_rank(_js.get('rank', 0.0))
                                 if config.get('GSP_E2E_ENABLED'):
                                     e2e_diag = getattr(model, 'last_e2e_diagnostics', None)
                                     if e2e_diag is not None:
@@ -1029,6 +1217,25 @@ try:
                                 'diag_raw_diff_rad_n_steps': float(len(_arr)),
                             }
                             hdf5_writer.record_episode_diagnostics(_diag)
+
+                        # Phase 4 loss-step correlation — flush per-episode batch corr samples.
+                        # The actor accumulates one float per GSP learn step in
+                        # last_gsp_loss_step_corr_samples; we consume them here at episode
+                        # boundary and clear the list so they don't leak into the next episode.
+                        # Independent-learning mode: aggregate across per-robot models.
+                        if args.independent_learning:
+                            _all_corr_samples = []
+                            for _m in models:
+                                _samples = getattr(_m, 'last_gsp_loss_step_corr_samples', [])
+                                _all_corr_samples.extend(_samples)
+                                _m.last_gsp_loss_step_corr_samples = []
+                            for _c in _all_corr_samples:
+                                hdf5_writer.record_gsp_loss_step_corr(_c)
+                        else:
+                            _samples = getattr(model, 'last_gsp_loss_step_corr_samples', [])
+                            for _c in _samples:
+                                hdf5_writer.record_gsp_loss_step_corr(_c)
+                            model.last_gsp_loss_step_corr_samples = []
 
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
                         # gate was always-true dead code. Removed during the same cleanup

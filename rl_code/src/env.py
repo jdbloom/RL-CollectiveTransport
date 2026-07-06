@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from collections import namedtuple
-from struct import pack, unpack, Struct
+from struct import pack, unpack, Struct, calcsize
 
 def angle_normalize_unsigned_deg(a):
   if not np.isfinite(a):
@@ -44,11 +44,14 @@ def calculate_gsp_reward(GSP, old_cyl_ang, cyl_ang, next_heading_gsp, num_robots
         # Max rotation is 0.09 rad/step so we can multiply by 10 to get within range of -1, 1
         diff = np.clip(diff*100, -1, 1)
         label=diff
-        for i in range(num_robots):
-            reward = diff - next_heading_gsp[i]
-            abs_reward = abs(reward)**2
-            squared_errors.append(float(abs_reward))
-            gsp_reward.append(np.clip(-1*abs_reward, -2, 0))
+        # Vectorised per-robot computation — fp-identical to the loop above.
+        # Extract the last element of each robot's (possibly multi-dim) prediction.
+        preds = np.array(
+            [float(np.asarray(next_heading_gsp[i]).ravel()[-1]) for i in range(num_robots)]
+        )
+        abs_reward_arr = (diff - preds) ** 2          # shape (num_robots,)
+        squared_errors = [float(v) for v in abs_reward_arr]
+        gsp_reward = list(np.clip(-abs_reward_arr, -2, 0))
     else:
         gsp_reward = [0 for i in range(num_robots)]
         squared_errors = [0 for i in range(num_robots)]
@@ -102,6 +105,10 @@ class ZMQ_Utility:
         # Byte size of int in C++
         self.INT_SIZE = 4
         self._namedtuple_cache = {}
+
+        # T5: precomputed Struct for serialize_actions (cached at __init__, re-created
+        # only if ACTIONS_FMT changes — which it never does at runtime).
+        self._actions_packer: Struct = Struct(self.ACTIONS_FMT)
 
 
     def get_params(self, msg):
@@ -182,67 +189,54 @@ class ZMQ_Utility:
     # Returns a list of numpy arrays, one per robot
     #
     def parse_obs(self, msg):
-        obs = []
-        # For each robot
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.params['num_obs'] * self.FLOAT_SIZE:(r+1) * self.params['num_obs'] * self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'obs', self.OBS_FIELDS, self.OBS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count=len(data))
-            # Append it to the observations
-            obs.append(nparr)
-        return obs
+        R = self.params['num_robots']
+        n = self.params['num_obs']
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_obs: expected {expected} bytes (R={R}, num_obs={n}), got {len(msg)}"
+            )
+        # T5: single frombuffer + reshape replaces R per-robot unpack+fromiter loops.
+        # Safe because ARGoS observation messages are contiguous LE float32 (T0.3).
+        matrix = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [matrix[r].copy() for r in range(R)]
 
     def parse_failures(self, msg):
-        failures = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.INT_SIZE:(r+1)*self.INT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'failure', self.FAILURE_FIELDS, self.FAILURE_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.intc, count = len(data))
-            # Append it to the rewards
-            failures.append(nparr)
-        return failures
+        R = self.params['num_robots']
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        # FAILURE_FMT is '1I' (unsigned int) — np.intc matches the legacy dtype.
+        raw = np.frombuffer(msg, dtype='<u4').reshape(R, 1)
+        return [raw[r].astype(np.intc) for r in range(R)]
 
     def parse_rewards(self, msg):
-        rewards = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.FLOAT_SIZE:(r+1)*self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'reward', self.REWARDS_FIELDS, self.REWARDS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-            # Append it to the rewards
-            rewards.append(nparr)
-        return rewards
+        R = self.params['num_robots']
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, 1)
+        return [raw[r].copy() for r in range(R)]
 
     def parse_stats(self, msg):
-        stats = []
-        for r in range(0, self.params['num_robots']):
-            # Get message bytes for this robot
-            m = msg[r * self.params['num_stats'] * self.FLOAT_SIZE:(r+1) * self.params['num_stats'] * self.FLOAT_SIZE]
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'stats', self.STATS_FIELDS, self.STATS_FMT)
-            # Make a numpy array
-            nparr = np.fromiter(data.values(), dtype=np.float32, count = len(data))
-            # Append it to the stats array
-            stats.append(nparr)
-        return stats
+        R = self.params['num_robots']
+        n = self.params['num_stats']
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_stats: expected {expected} bytes (R={R}, num_stats={n}), got {len(msg)}"
+            )
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [raw[r].copy() for r in range(R)]
     
     def parse_robot_stats(self, msg):
-        robot_stats = []
-        for r in range(0, self.params['num_robots']):
-            m = msg[r *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE:(r+1) *len(self.ROBOT_STATS_FIELDS)* self.FLOAT_SIZE] 
-            # Parse the bytes into a dictionary
-            data = self.parse_msg(m, 'robot_stats', self.ROBOT_STATS_FIELDS, self.ROBOT_STATS_FMT)
-            # Make a numpy array
-            robot_stats.append(np.fromiter(data.values(), dtype=np.float32, count = len(data)))
-        return robot_stats
+        R = self.params['num_robots']
+        n = len(self.ROBOT_STATS_FIELDS)   # always 6
+        expected = R * n * self.FLOAT_SIZE
+        if len(msg) != expected:
+            raise ValueError(
+                f"parse_robot_stats: expected {expected} bytes (R={R}, n={n}), got {len(msg)}"
+            )
+        # T5: single frombuffer replaces R per-robot unpack+fromiter loops.
+        raw = np.frombuffer(msg, dtype='<f4').reshape(R, n)
+        return [raw[r].copy() for r in range(R)]
 
     def parse_obj_stats(self, msg):
         # Parse the bytes into a dictionary
@@ -267,7 +261,8 @@ class ZMQ_Utility:
 
 
     def serialize_actions(self, actions):
-        packer = Struct(self.ACTIONS_FMT)
+        # T5: use the Struct cached at __init__ rather than creating a new one per call.
+        packer = self._actions_packer
         msg = bytearray(self.FLOAT_SIZE * self.params['num_actions'] * self.params['num_robots'])
         # For each robot
         for r in range(0, self.params['num_robots']):

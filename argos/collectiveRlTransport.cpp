@@ -11,11 +11,11 @@ using namespace argos;
 
 static const std::string FB_CONTROLLER = "fgc";
 static const Real WALL_THICKNESS            = 0.2;  // m
-static const Real CYLINDER_RADIUS           = 0.5;  // m
+// m_fCylinderRadius now read from XML — see m_fCylinderRadius
 static const Real CYLINDER_HEIGHT           = 0.25; // m
 static const Real CYLINDER_MASS             = 100;  // kg
-static const Real OBSTACLE_RADIUS           = 0.5;  // m
-static const Real OBSTACLE_HEIGHT           = 0.5;  // m
+// m_fObstacleRadius now read from XML — see m_fObstacleRadius
+// m_fObstacleHeight now read from XML — see m_fObstacleHeight
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
@@ -86,10 +86,18 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "gate_update_frequency", m_unGateUpdateFrequency);
       GetNodeAttribute(t_tree, "gate_update_amount", m_fGateUpdate);
       GetNodeAttribute(t_tree, "gate_minimum", m_fGateMinimum);
+      /* Performance-gated curriculum (gate_curriculum==2) parameters.
+       * Read with defaults so configs that predate mode 2 (or never enable it)
+       * remain valid without editing every generated .argos. */
+      GetNodeAttributeOrDefault(t_tree, "gate_success_threshold", m_fGateSuccessThreshold, Real(0.8));
+      GetNodeAttributeOrDefault(t_tree, "gate_success_window", m_unGateSuccessWindow, UInt32(20));
       GetNodeAttribute(t_tree, "use_prisms", m_unUsePrisms);
       GetNodeAttribute(t_tree, "test_prism", m_unUseTestPrism);
       GetNodeAttribute(t_tree, "random_objs", m_unRandomizeObjects);
       GetNodeAttribute(t_tree, "use_base_model", m_unBaseModel);
+      GetNodeAttribute(t_tree, "cylinder_radius", m_fCylinderRadius);
+      GetNodeAttribute(t_tree, "obstacle_radius", m_fObstacleRadius);
+      GetNodeAttribute(t_tree, "obstacle_height", m_fObstacleHeight);
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -129,6 +137,11 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_bReachedGoal = false;
       m_unEpisodeCounter = 0;
       m_unEpisodeTicksLeft = m_unEpisodeTime;
+      /* Performance-gated curriculum runtime state (gate_curriculum==2).
+       * Start at the same wide half-gap as mode 1's initial offset. */
+      m_fGateRuntimeOffset = GetSpace().GetArenaLimits().GetMax().GetY();
+      m_unGateEpisodesSinceAdvance = 0;
+      m_dequeGateOutcomes.clear();
       /* Create structures for observations, reward, and actions */
       m_vecObs.resize(m_unNumObs * m_unNumRobots, 0.0);
       m_vecFailures.resize(m_unNumRobots, 0);
@@ -184,11 +197,11 @@ void CCollectiveRLTransport::CreateEntities() {
          CVector3(),
          CQuaternion(),
          true,
-         CYLINDER_RADIUS,
+         m_fCylinderRadius,
          CYLINDER_HEIGHT,
          CYLINDER_MASS);
       AddEntity(*m_pcCylinder);
-      max_length = CYLINDER_RADIUS;
+      max_length = m_fCylinderRadius;
       m_cObjCOMOffsetPos = CVector2::ZERO;
    }
    else if(m_unObjectChoice == 1) {
@@ -294,8 +307,8 @@ void CCollectiveRLTransport::CreateEntities() {
         CVector3(),
         CQuaternion(),
         false,
-        OBSTACLE_RADIUS,
-        OBSTACLE_HEIGHT,
+        m_fObstacleRadius,
+        m_fObstacleHeight,
         OBSTACLE_MASS);
      m_vecObstacles.push_back(pcC);
      AddEntity(*pcC);
@@ -378,8 +391,8 @@ void CCollectiveRLTransport::CreateEntities() {
    LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
    CRange<Real> cYObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + OBSTACLE_RADIUS,
-      GetSpace().GetArenaLimits().GetMax().GetY() - OBSTACLE_RADIUS
+      GetSpace().GetArenaLimits().GetMin().GetY() + m_fObstacleRadius,
+      GetSpace().GetArenaLimits().GetMax().GetY() - m_fObstacleRadius
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       m_vecObstaclePos.push_back(std::vector<CVector3>());
@@ -425,63 +438,108 @@ void CCollectiveRLTransport::CreateEntities() {
        m_vecGateWalls.push_back(pcB);
        AddEntity(*pcB);
      }
-     Real offset ;
-     if(m_unGateCurriculum == 1){
-       offset = GetSpace().GetArenaLimits().GetMax().GetY();
+     if(m_unGateCurriculum == 2){
+       /* Performance-gated curriculum (mode 2): geometry is NOT precomputed
+        * here because the offset schedule depends on runtime episode outcomes.
+        * The runtime offset (m_fGateRuntimeOffset) starts at the same wide
+        * value as mode 1's initial offset and narrows only when performance
+        * clears the threshold. Per-episode geometry is built lazily in
+        * Reset() via BuildGateGeometry(). Modes 0/1 keep the precomputed path
+        * below unchanged (bit-identical). */
+       m_fGateRuntimeOffset = GetSpace().GetArenaLimits().GetMax().GetY();
+       m_unGateEpisodesSinceAdvance = 0;
+       m_dequeGateOutcomes.clear();
+       /* Build the episode-0 geometry so the very first Reset() has data to
+        * place before any outcome has been observed. */
+       BuildGateGeometry(m_fGateRuntimeOffset, 0);
      }
      else{
-       offset = (m_fGateMinimum/2.0);
-     }
-     UInt32 update_offset_flag = 1;
-     CRange<Real> cXWallRange(
-        GetSpace().GetArenaLimits().GetMin().GetX()/2,
-        0
-        );
-     for(size_t i = 0; i < m_unNumEpisodes; ++i){
-       if(update_offset_flag == 1){
-         /** Dont update on episode 0*/
-         if((i+1)%m_unGateUpdateFrequency == 0){
-           offset = offset - m_fGateUpdate;
-           std::cout<<"Updating gap distance to "<<offset*2<<" at episode "<<i<<std::endl;
-           if(offset <= (m_fGateMinimum/2.0)){
-             offset = (m_fGateMinimum/2.0);
-             std::cout<<"Reached final gap distance of "<<offset*2<<" at episode "<<i<<std::endl;
-             update_offset_flag = 0;
+       Real offset ;
+       if(m_unGateCurriculum == 1){
+         offset = GetSpace().GetArenaLimits().GetMax().GetY();
+       }
+       else{
+         offset = (m_fGateMinimum/2.0);
+       }
+       UInt32 update_offset_flag = 1;
+       for(size_t i = 0; i < m_unNumEpisodes; ++i){
+         if(update_offset_flag == 1){
+           /** Dont update on episode 0*/
+           if((i+1)%m_unGateUpdateFrequency == 0){
+             offset = offset - m_fGateUpdate;
+             std::cout<<"Updating gap distance to "<<offset*2<<" at episode "<<i<<std::endl;
+             if(offset <= (m_fGateMinimum/2.0)){
+               offset = (m_fGateMinimum/2.0);
+               std::cout<<"Reached final gap distance of "<<offset*2<<" at episode "<<i<<std::endl;
+               update_offset_flag = 0;
+               }
              }
            }
+           BuildGateGeometry(offset, i);
          }
-         m_vecOffset.push_back(offset);
-         CRange<Real> cYRange(
-            GetSpace().GetArenaLimits().GetMin().GetY() + offset,
-            GetSpace().GetArenaLimits().GetMax().GetY() - offset
-            );
-         m_vecGateWallPos.push_back(std::vector<CVector3>());
-         m_vecGateWallSize.push_back(std::vector<CVector3>());
-         /** Generate positions and sizes for the box entitites */
-         Real YPos = m_pcRNG->Uniform(cYRange);
-         Real XPos = m_pcRNG->Uniform(cXWallRange);
-         /** set position*/
-         cPos.Set(XPos,
-                  GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)))/2,
-                  0.0);
-         EnforceBoundaries(cPos, i, "Gate Lower");
-         m_vecGateWallPos.back().push_back(cPos);
-         cPos.Set(XPos,
-                  GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)))/2,
-                  0.0);
-         EnforceBoundaries(cPos, i, "Gate Upper");
-         m_vecGateWallPos.back().push_back(cPos);
-         /** Set Size */
-         cPos.Set(0.5,
-                  abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - offset)),
-                  0.5);
-         m_vecGateWallSize.back().push_back(cPos);
-         cPos.Set(0.5,
-                  abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + offset)),
-                  0.5);
-         m_vecGateWallSize.back().push_back(cPos);
-       }
+     }
    }
+}
+
+/****************************************/
+/****************************************/
+
+bool CCollectiveRLTransport::ShouldAdvanceGate(UInt32 un_window_size,
+                                               Real   f_threshold,
+                                               UInt32 un_outcomes_in_window,
+                                               UInt32 un_outcomes_observed,
+                                               UInt32 un_episodes_since_advance){
+   /* A window must be full before it can trigger an advance. */
+   if(un_window_size == 0) return false;
+   if(un_outcomes_observed < un_window_size) return false;
+   /* Consolidation guard: require at least a full window of episodes since the
+    * last advance so the policy has time to adapt to the narrower gap. */
+   if(un_episodes_since_advance < un_window_size) return false;
+   /* Rolling success rate over the full window must clear the threshold. */
+   Real fSuccessRate = static_cast<Real>(un_outcomes_in_window) /
+                       static_cast<Real>(un_window_size);
+   return fSuccessRate >= f_threshold;
+}
+
+/****************************************/
+/****************************************/
+
+void CCollectiveRLTransport::BuildGateGeometry(Real f_offset, size_t un_episode){
+   CVector3 cPos;
+   CRange<Real> cXWallRange(
+      GetSpace().GetArenaLimits().GetMin().GetX()/2,
+      0
+      );
+   m_vecOffset.push_back(f_offset);
+   CRange<Real> cYRange(
+      GetSpace().GetArenaLimits().GetMin().GetY() + f_offset,
+      GetSpace().GetArenaLimits().GetMax().GetY() - f_offset
+      );
+   m_vecGateWallPos.push_back(std::vector<CVector3>());
+   m_vecGateWallSize.push_back(std::vector<CVector3>());
+   /** Generate positions and sizes for the box entitites */
+   Real YPos = m_pcRNG->Uniform(cYRange);
+   Real XPos = m_pcRNG->Uniform(cXWallRange);
+   /** set position*/
+   cPos.Set(XPos,
+            GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - f_offset)))/2,
+            0.0);
+   EnforceBoundaries(cPos, un_episode, "Gate Lower");
+   m_vecGateWallPos.back().push_back(cPos);
+   cPos.Set(XPos,
+            GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + f_offset)))/2,
+            0.0);
+   EnforceBoundaries(cPos, un_episode, "Gate Upper");
+   m_vecGateWallPos.back().push_back(cPos);
+   /** Set Size */
+   cPos.Set(0.5,
+            abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - f_offset)),
+            0.5);
+   m_vecGateWallSize.back().push_back(cPos);
+   cPos.Set(0.5,
+            abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + f_offset)),
+            0.5);
+   m_vecGateWallSize.back().push_back(cPos);
 }
 
 void CCollectiveRLTransport::EnforceBoundaries(CVector3& pos, size_t episode, std::string state){
@@ -1049,10 +1107,45 @@ void CCollectiveRLTransport::PostStep() {
         ZMQSendObjectStatsFinal();
       }
       ZMQGetAck();
+      /* Performance-gated curriculum (gate_curriculum==2): record this
+       * episode's outcome, decide whether to narrow the gate, then build the
+       * geometry for the NEXT episode from the (possibly updated) runtime
+       * offset so the upcoming Reset() has data to place. */
+      if(m_unUseGate == 1 && m_unGateCurriculum == 2) {
+        /* Push the just-finished episode's outcome into the rolling window. */
+        m_dequeGateOutcomes.push_back(m_bReachedGoal ? 1u : 0u);
+        if(m_dequeGateOutcomes.size() > m_unGateSuccessWindow) {
+          m_dequeGateOutcomes.pop_front();
+        }
+        ++m_unGateEpisodesSinceAdvance;
+        UInt32 unOutcomesInWindow = 0;
+        for(UInt32 unOutcome : m_dequeGateOutcomes) unOutcomesInWindow += unOutcome;
+        if(ShouldAdvanceGate(m_unGateSuccessWindow,
+                             m_fGateSuccessThreshold,
+                             unOutcomesInWindow,
+                             static_cast<UInt32>(m_dequeGateOutcomes.size()),
+                             m_unGateEpisodesSinceAdvance)) {
+          m_fGateRuntimeOffset = m_fGateRuntimeOffset - m_fGateUpdate;
+          if(m_fGateRuntimeOffset <= (m_fGateMinimum/2.0)) {
+            m_fGateRuntimeOffset = (m_fGateMinimum/2.0);
+          }
+          std::cout<<"Updating gap distance to "<<m_fGateRuntimeOffset*2
+                   <<" at episode "<<m_unEpisodeCounter
+                   <<" (success rate "<<(static_cast<Real>(unOutcomesInWindow)/static_cast<Real>(m_unGateSuccessWindow))
+                   <<" >= "<<m_fGateSuccessThreshold<<")"<<std::endl;
+          m_unGateEpisodesSinceAdvance = 0;
+        }
+      }
       /* Restart episode */
       ++m_unEpisodeCounter;
       if(m_unEpisodeCounter < m_unNumEpisodes) {
          m_unEpisodeTicksLeft = m_unEpisodeTime;
+         if(m_unUseGate == 1 && m_unGateCurriculum == 2) {
+           /* Lazily build geometry for the episode we are about to run so the
+            * precomputed-vector indexing (by m_unEpisodeCounter) keeps working
+            * unchanged downstream (PlaceEntities / GetObservations). */
+           BuildGateGeometry(m_fGateRuntimeOffset, m_unEpisodeCounter);
+         }
          GetSimulator().Reset();
       }
    }
