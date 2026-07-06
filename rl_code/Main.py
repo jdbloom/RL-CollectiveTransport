@@ -991,6 +991,25 @@ try:
                                         new_agent_state = env_observations[i]
 
                         new_agent_states.append(new_agent_state)
+                        # Successor-Features cumulant phi (GSP_SF_ENABLED). The GSP-RL
+                        # SF head trains psi to predict the discounted sum of this
+                        # per-step, reward-relevant, low-dim vector; Q = psi . w. The
+                        # reward comes from the C++ sim as a single scalar (it is NOT
+                        # decomposed on the wire), so we source phi from the
+                        # already-available post-step observation + force stats — the
+                        # same quantities the shaped reward is built from
+                        # (direction-to-goal, gate/payload progress, force). d_phi=5.
+                        # None when SF is off -> byte-identical store (no phi column).
+                        sf_phi = None
+                        if config.get('GSP_SF_ENABLED'):
+                            _obs = env_observations[i]
+                            sf_phi = np.array([
+                                float(_obs[0]),                 # robot_dist2goal
+                                float(_obs[6]),                 # cyl_dist2goal (payload/gate progress)
+                                float(np.cos(_obs[5])),         # cyl bearing alignment (direction-to-goal)
+                                float(stats[i][0]),             # applied force magnitude
+                                float(rewards[i][0]),           # scalar reward (anchors w.phi ~= r)
+                            ], dtype=np.float32)
                         if time_steps > 2:
                             if train_mode:
                                 if learning_scheme != 'None':
@@ -1003,7 +1022,8 @@ try:
                                                                     new_agent_states[i],
                                                                     episode_done,
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
-                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
+                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
+                                                                    phi=sf_phi)
                                             else:
                                                 model.store_agent_transition(agent_states[i],
                                                                     (actions[i], actions_to_take[i]),
@@ -1011,7 +1031,8 @@ try:
                                                                     new_agent_states[i],
                                                                     episode_done,
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
-                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
+                                                                    gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
+                                                                    phi=sf_phi)
                                                 
                         r.append(rewards[i][0])
 
