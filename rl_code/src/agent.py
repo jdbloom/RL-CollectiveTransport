@@ -357,10 +357,17 @@ class Agent(Actor):
                 else:
                     # Vector path — physical units from label computation, no rescaling.
                     gsp_slot = heading_gsp_arr.ravel()
+            # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
+            # so the actor's input is [latent | global] (or [latent]) — the actor is
+            # forced to route through the encoder latent. Must stay in lockstep with
+            # the GSP-RL fork's network_input_size (=enc_dim, not input_size+enc_dim)
+            # and the coupled-splice slot (gsp_idx=0); otherwise the runtime obs width
+            # mismatches the Q-net and loading crashes with a state_dict size error.
+            _lp_base = () if getattr(self, 'gsp_actor_latent_primary', False) else (env_obs,)
             if global_knowledge is not None:
-                env_obs = np.concatenate((env_obs, gsp_slot, global_knowledge))
+                env_obs = np.concatenate((*_lp_base, gsp_slot, global_knowledge))
             else:
-                env_obs = np.concatenate((env_obs, gsp_slot))
+                env_obs = np.concatenate((*_lp_base, gsp_slot))
         elif global_knowledge is not None:
             env_obs = np.concatenate((env_obs, global_knowledge))
         return env_obs
