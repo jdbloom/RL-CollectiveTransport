@@ -601,6 +601,15 @@ try:
                             agent_prox_flags.append(prox_value/float(len(filtered_indeces)))
 
                     e2e_gsp_obs = [None] * Utility.params['num_robots']
+                    # The main replay must carry the raw GSP-input vector (gsp_obs)
+                    # whenever the actor learn step re-encodes it WITH gradient. Two
+                    # paths need it: the legacy scalar e2e coupling (GSP_E2E_ENABLED)
+                    # and the coupled-JEPA fix (GSP_JEPA_COUPLE_VALUE), which flows the
+                    # DDQN value gradient into the JEPA online encoder. Unified here so
+                    # both the population site and the store call sites share one gate.
+                    _needs_gsp_obs = bool(config.get('GSP_E2E_ENABLED')) or bool(
+                        config.get('GSP_JEPA_COUPLE_VALUE')
+                    )
                     # H-14 / first-principles diagnostic: capture the GSP head's per-robot
                     # input vector at this timestep so it can be logged alongside gsp_target.
                     # Set in the GSP branch below; remains None for non-GSP runs.
@@ -807,7 +816,7 @@ try:
                                 self_dynamics=_self_dynamics_arg,
                                 cyl_bearing_delta=_cyl_bearing_delta_arg,
                             )
-                            if config.get('GSP_E2E_ENABLED'):
+                            if _needs_gsp_obs:
                                 for i in range(Utility.params['num_robots']):
                                     e2e_gsp_obs[i] = np.array(states[i], dtype=np.float32)
 
@@ -993,7 +1002,7 @@ try:
                                                                     rewards[i],
                                                                     new_agent_states[i],
                                                                     episode_done,
-                                                                    gsp_obs=e2e_gsp_obs[i] if config.get('GSP_E2E_ENABLED') else None,
+                                                                    gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
                                             else:
                                                 model.store_agent_transition(agent_states[i],
@@ -1001,7 +1010,7 @@ try:
                                                                     rewards[i],
                                                                     new_agent_states[i],
                                                                     episode_done,
-                                                                    gsp_obs=e2e_gsp_obs[i] if config.get('GSP_E2E_ENABLED') else None,
+                                                                    gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None)
                                                 
                         r.append(rewards[i][0])
