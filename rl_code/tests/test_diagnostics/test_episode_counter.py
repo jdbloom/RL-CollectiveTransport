@@ -35,3 +35,40 @@ def test_write_episode_records_to_ledger(tmp_path, monkeypatch):
         ec.record_episode(h5, ep, db)
     assert ec.node_total(db) == 3
     assert ec.run_count(db) == 1
+
+
+def test_db_path_derived_from_h5(tmp_path, monkeypatch):
+    # With no explicit db_path and no env override, the DB path is derived from
+    # the h5 path: everything before /code/phd_code/ is the stelaris repo root,
+    # and the DB lands at <root>/data/episode_counter.db.
+    monkeypatch.delenv("STELARIS_EPISODE_COUNTER_DB", raising=False)
+    h5 = str(tmp_path / "code/phd_code/RL-CollectiveTransport/rl_code/Data/run_x/run_x.h5")
+    ec.record_episode(h5, 0)  # episode 0 -> hwm 1
+    derived = str(tmp_path / "data" / "episode_counter.db")
+    assert os.path.exists(derived)
+    assert ec.node_total(derived) == 1
+
+
+def test_env_var_overrides_h5_derivation(tmp_path, monkeypatch):
+    # The env var takes priority over the h5-derived path.
+    env_db = str(tmp_path / "env.db")
+    monkeypatch.setenv("STELARIS_EPISODE_COUNTER_DB", env_db)
+    h5 = str(tmp_path / "code/phd_code/RL-CollectiveTransport/rl_code/Data/run_y/run_y.h5")
+    ec.record_episode(h5, 0)
+    derived = str(tmp_path / "data" / "episode_counter.db")
+    assert os.path.exists(env_db)
+    assert not os.path.exists(derived)
+    assert ec.node_total(env_db) == 1
+
+
+def test_explicit_db_path_still_wins(tmp_path, monkeypatch):
+    # Explicit db_path is highest priority, beating both env and h5 derivation.
+    monkeypatch.setenv("STELARIS_EPISODE_COUNTER_DB", str(tmp_path / "env.db"))
+    explicit = str(tmp_path / "explicit.db")
+    h5 = str(tmp_path / "code/phd_code/RL-CollectiveTransport/rl_code/Data/run_z/run_z.h5")
+    ec.record_episode(h5, 0, explicit)
+    derived = str(tmp_path / "data" / "episode_counter.db")
+    assert os.path.exists(explicit)
+    assert not os.path.exists(derived)
+    assert not os.path.exists(str(tmp_path / "env.db"))
+    assert ec.node_total(explicit) == 1

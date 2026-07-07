@@ -194,3 +194,59 @@ def test_both_corr_attrs_coexist():
             assert "gsp_loss_step_corr_mean" in grp.attrs, (
                 "gsp_loss_step_corr_mean must be present (loss-step path)"
             )
+
+
+# ---------------------------------------------------------------------------
+# Test 6: count_episodes flag gates the durable episode-counter ledger hook
+# ---------------------------------------------------------------------------
+
+def test_count_episodes_default_true():
+    """Default constructor preserves backward compat: _count_episodes is True."""
+    with tempfile.TemporaryDirectory() as tmp:
+        logger, _ = _make_logger(tmp)
+        assert logger._count_episodes is True
+
+
+def test_count_episodes_false_stored():
+    """count_episodes=False (test/eval runs) is stored as _count_episodes == False."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test_run.h5")
+        logger = HDF5Logger(path, count_episodes=False)
+        assert logger._count_episodes is False
+
+
+def test_count_episodes_false_skips_ledger(monkeypatch):
+    """When count_episodes=False, write_episode must NOT call record_episode."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test_run.h5")
+        logger = HDF5Logger(path, count_episodes=False)
+
+        calls = []
+        import src.hdf5_logger as hl
+
+        class _FakeCounter:
+            @staticmethod
+            def record_episode(h5_path, episode_num, db_path=None):
+                calls.append((h5_path, episode_num))
+
+        monkeypatch.setattr(hl, "episode_counter", _FakeCounter)
+        _write_minimal_episode(logger, ep_num=1)
+        assert calls == [], "record_episode must not be called when count_episodes=False"
+
+
+def test_count_episodes_true_records_ledger(monkeypatch):
+    """When count_episodes=True (default), write_episode calls record_episode once."""
+    with tempfile.TemporaryDirectory() as tmp:
+        logger, path = _make_logger(tmp)  # default count_episodes=True
+
+        calls = []
+        import src.hdf5_logger as hl
+
+        class _FakeCounter:
+            @staticmethod
+            def record_episode(h5_path, episode_num, db_path=None):
+                calls.append((h5_path, episode_num))
+
+        monkeypatch.setattr(hl, "episode_counter", _FakeCounter)
+        _write_minimal_episode(logger, ep_num=1)
+        assert calls == [(path, 1)], "record_episode must be called once when count_episodes=True"
