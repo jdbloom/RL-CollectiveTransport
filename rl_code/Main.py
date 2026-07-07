@@ -106,6 +106,7 @@ hdf5_writer = HDF5Logger(
     stelaris_branch=config.get("STELARIS_BRANCH"),
     rl_ct_branch=config.get("RL_CT_BRANCH"),
     gsp_rl_branch=config.get("GSP_RL_BRANCH"),
+    count_episodes=train_mode,  # public counter reflects TRAINING episodes only
 )
 
 # Per-episode diagnostics (FAU / weight norms / effective rank / Q-gap / pred

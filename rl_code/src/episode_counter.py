@@ -15,9 +15,20 @@ from pathlib import Path
 _DEFAULT = "~/stelaris/data/episode_counter.db"
 
 
-def _db_path(db_path: str | None = None) -> str:
-    p = db_path or os.environ.get("STELARIS_EPISODE_COUNTER_DB") or _DEFAULT
-    return os.path.expanduser(p)
+def _db_path(db_path: str | None = None, h5_path: str | None = None) -> str:
+    # 1. explicit arg wins. 2. env override. 3. derive <repo>/data from the h5
+    # path so the writer lands where the website flusher reads (<repo>/data/…)
+    # regardless of checkout location. 4. hardcoded default.
+    if db_path:
+        return os.path.expanduser(db_path)
+    env = os.environ.get("STELARIS_EPISODE_COUNTER_DB")
+    if env:
+        return os.path.expanduser(env)
+    marker = "/code/phd_code/"
+    if h5_path and marker in h5_path:
+        root = h5_path.split(marker, 1)[0]
+        return os.path.join(root, "data", "episode_counter.db")
+    return os.path.expanduser(_DEFAULT)
 
 
 def _connect(path: str) -> sqlite3.Connection:
@@ -38,7 +49,7 @@ def record_episode(h5_path: str, episode_num: int, db_path: str | None = None) -
     try:
         key = os.path.basename(h5_path)
         hwm = int(episode_num) + 1
-        con = _connect(_db_path(db_path))
+        con = _connect(_db_path(db_path, h5_path=h5_path))
         try:
             con.execute(
                 "INSERT INTO episode_hwm (h5_key, episodes, updated) VALUES (?,?,?) "

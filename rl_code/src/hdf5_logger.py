@@ -69,6 +69,7 @@ class HDF5Logger:
         stelaris_branch: Optional[str] = None,
         rl_ct_branch: Optional[str] = None,
         gsp_rl_branch: Optional[str] = None,
+        count_episodes: bool = True,
     ):
         """
         Args:
@@ -87,8 +88,14 @@ class HDF5Logger:
                 ``rl_ct_branch`` root attr.
             gsp_rl_branch: Branch name for GSP-RL — written as
                 ``gsp_rl_branch`` root attr.
+            count_episodes: When True (default), each executed episode is
+                recorded in the durable per-node episode-counter ledger via
+                the write_episode() hook. Set False for test/eval rollouts so
+                the public counter reflects TRAINING episodes only. Default
+                True preserves backward compatibility for existing callers.
         """
         self.hdf5_path = hdf5_path
+        self._count_episodes = bool(count_episodes)
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
         # Write provenance attrs once, at file creation. Subsequent episodes
         # append without touching root attrs.
@@ -685,7 +692,7 @@ class HDF5Logger:
         # Live telemetry: record this executed episode in the node ledger.
         # Fail-safe by construction (record_episode never raises); guarded again
         # here so a missing module can never affect training.
-        if episode_counter is not None:
+        if episode_counter is not None and self._count_episodes:
             episode_counter.record_episode(self.hdf5_path, episode_num)
 
         return summary
