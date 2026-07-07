@@ -23,6 +23,14 @@ from typing import Optional
 import h5py
 import numpy as np
 
+try:
+    from src import episode_counter          # package import when run as a module
+except Exception:                            # pragma: no cover - path-robust fallback
+    try:
+        import episode_counter               # when src/ is on sys.path
+    except Exception:
+        episode_counter = None
+
 # Notification handled by ingestion worker (optional, external)
 
 _SWMR_RETRY_COUNT = 3
@@ -674,5 +682,10 @@ class HDF5Logger:
         }
         self._reset()
 
+        # Live telemetry: record this executed episode in the node ledger.
+        # Fail-safe by construction (record_episode never raises); guarded again
+        # here so a missing module can never affect training.
+        if episode_counter is not None:
+            episode_counter.record_episode(self.hdf5_path, episode_num)
 
         return summary

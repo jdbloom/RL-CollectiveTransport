@@ -24,3 +24,14 @@ def test_missing_db_is_zero(tmp_path):
 def test_record_never_raises(tmp_path):
     # unwritable path must be swallowed, not raised
     ec.record_episode("/data/x/foo.h5", 1, "/nonexistent-dir/c.db")  # no exception
+
+
+def test_write_episode_records_to_ledger(tmp_path, monkeypatch):
+    # Simulate the hdf5_logger call site: after a successful episode write,
+    # record_episode is invoked with (self.hdf5_path, episode_num).
+    db = str(tmp_path / "c.db")
+    h5 = str(tmp_path / "run_z" / "run_z.h5")
+    for ep in (0, 1, 2):
+        ec.record_episode(h5, ep, db)
+    assert ec.node_total(db) == 3
+    assert ec.run_count(db) == 1
