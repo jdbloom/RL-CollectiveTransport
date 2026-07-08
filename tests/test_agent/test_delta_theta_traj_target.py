@@ -424,3 +424,161 @@ def test_push_without_angle_still_works_for_neighbor_force():
     assert matured["payload_angle_deg"] is None
     assert all(a is None for a in matured["payload_angle_window"])
     np.testing.assert_array_equal(matured["label_per_robot"], label_now)
+
+
+# ---------------------------------------------------------------------------
+# (g) E2E-transition carry: the delayed FIFO co-indexes the E2E main-replay
+#     transition with the matured K-step trajectory label (Bug C Option 1)
+# ---------------------------------------------------------------------------
+
+def test_e2e_transition_travels_with_delayed_label():
+    """In E2E mode the head trains ONLY from the E2E MSE (learn_DDQN_e2e), so the
+    E2E main-replay label must be the FUTURE K-step trajectory — which only
+    matures K steps after the state is seen. The FIFO carries the per-step E2E
+    transition tuple so it pops out co-indexed with the trajectory built from the
+    same window. Default (no e2e_transition) is a strict no-op."""
+    K = 3
+    n = 4
+    agent = _make_agent(
+        gsp_output_kind="delta_theta_traj",
+        prediction_target="delta_theta_traj",
+        K=K,
+        n_agents=n,
+    )
+    angle_seq = [10.0, 25.0, 47.0, 80.0, 120.0, 175.0]
+    popped = {}
+    for t in range(len(angle_seq)):
+        states = [np.full(8, float(t), dtype=np.float32) for _ in range(n)]
+        # A distinguishable per-step E2E transition tuple (one entry per robot).
+        e2e_tx = {
+            "agent_state": [np.full(5, float(t) + 0.1 * i, dtype=np.float32)
+                            for i in range(n)],
+            "action": [(t, i) for i in range(n)],
+            "reward": [float(t) for _ in range(n)],
+            "new_agent_state": [np.full(5, float(t) + 100, dtype=np.float32)
+                                for _ in range(n)],
+            "done": [False for _ in range(n)],
+            "gsp_obs": [np.full(6, float(t), dtype=np.float32) for _ in range(n)],
+        }
+        agent.push_pending_gsp_obs(
+            states, states, payload_angle_deg=angle_seq[t], e2e_transition=e2e_tx
+        )
+        matured = agent.pop_matured_gsp_label(None)
+        if matured is not None:
+            src_t = int(round(float(matured["state_per_robot"][0][0])))
+            popped[src_t] = matured
+
+    # The state from t=0 matures at t=K, carrying its OWN (t=0) E2E transition.
+    assert 0 in popped, "state from t=0 should mature at t=K"
+    m = popped[0]
+    assert "e2e_transition" in m and m["e2e_transition"] is not None
+    tx = m["e2e_transition"]
+    # The carried transition is the one PUSHED at t=0 (not the maturity step).
+    for i in range(n):
+        np.testing.assert_allclose(tx["agent_state"][i],
+                                   np.full(5, 0.1 * i, dtype=np.float32), atol=1e-6)
+        assert tx["action"][i] == (0, i)
+        assert tx["reward"][i] == 0.0
+    # And the co-indexed label is the K-step trajectory over [t=0 .. t=K].
+    win = m["payload_angle_window"]
+    expected = _consecutive_wrapped(angle_seq[0:K + 1])
+    np.testing.assert_allclose(_consecutive_wrapped(win), expected, atol=1e-5)
+
+
+def test_e2e_transition_defaults_none_is_noop():
+    """Not passing e2e_transition leaves the matured dict's e2e_transition None —
+    byte-identical to the pre-existing delayed-label behavior."""
+    K = 2
+    n = 3
+    agent = _make_agent(
+        gsp_output_kind="delta_theta_traj",
+        prediction_target="delta_theta_traj",
+        K=K,
+        n_agents=n,
+    )
+    for t in range(K + 1):
+        states = [np.full(8, float(t), dtype=np.float32) for _ in range(n)]
+        agent.push_pending_gsp_obs(states, states, payload_angle_deg=float(t))
+    matured = agent.pop_matured_gsp_label(None)
+    assert matured is not None
+    assert matured.get("e2e_transition") is None
+
+
+# ---------------------------------------------------------------------------
+# (h) Main.py E2E dtraj wiring contract (static) + non-saturating label scale
+# ---------------------------------------------------------------------------
+
+import pathlib  # noqa: E402
+import math as _math  # noqa: E402
+
+_MAIN_PY = (
+    pathlib.Path(__file__).resolve().parent.parent.parent / "rl_code" / "Main.py"
+)
+
+
+def test_main_defers_immediate_e2e_store_for_dtraj():
+    """The immediate main-replay E2E store must be deferred for delta_theta_traj
+    (the delayed FIFO store owns that transition), so the transition is stored
+    exactly once, with the future K-step trajectory label."""
+    text = _MAIN_PY.read_text()
+    assert "_defer_immediate_e2e_store" in text
+    assert "time_steps > 2 and not _defer_immediate_e2e_store" in text
+
+
+def test_main_delayed_e2e_store_uses_trajectory_label_scale():
+    """The delayed E2E store must scale the trajectory with the documented
+    non-saturating factor, not the raw/immediate scalar path."""
+    text = _MAIN_PY.read_text()
+    assert "_delta_theta_traj_label_scale" in text
+    # The delayed store passes the scaled trajectory as gsp_label.
+    assert "_traj_label" in text
+    assert "gsp_label=_traj_label" in text
+
+
+def test_main_delayed_e2e_store_is_shared_model_only():
+    """The delayed E2E store references bare `model`, which is undefined under
+    --independent_learning; it must be gated to the shared-model branch so an
+    independent_learning + E2E dtraj run does not NameError (code-review #1)."""
+    text = _MAIN_PY.read_text()
+    # The delayed-store guard must include the not-independent_learning condition.
+    assert "not args.independent_learning" in text
+    marker = "delta_theta_traj E2E delayed main-replay store"
+    idx = text.index(marker)
+    # The independent-learning exclusion must appear before the push_pending_gsp_obs
+    # call in the delayed-store block (i.e. it gates entry to the block).
+    assert (text.index("not args.independent_learning", idx)
+            < text.index("push_pending_gsp_obs", idx))
+
+
+def test_main_delayed_e2e_store_requires_neighbors_head():
+    """A broadcast/plain-GSP dtraj-E2E run would store zeroed gsp_obs (gsp_obs is
+    only captured on the neighbors path). The delayed store must reject a
+    non-neighbors head loudly (code-review #2)."""
+    text = _MAIN_PY.read_text()
+    marker = "delta_theta_traj E2E delayed main-replay store"
+    idx = text.index(marker)
+    block = text[idx: idx + 2600]
+    assert "gsp_neighbors" in block
+    assert "raise ValueError" in block
+
+
+def test_label_scale_is_non_saturating():
+    """The delta_theta_traj label scale is radians × 10 (env.py's documented
+    intended, non-saturating scale) — NOT the ×100 that saturates the single-step
+    delta_theta label into near-binary. Max per-step rotation ~0.09 rad must stay
+    well inside [-1, 1] after scaling."""
+    text = _MAIN_PY.read_text()
+    # Default rad-scale is 10.0 (overridable via GSP_DELTA_THETA_TRAJ_LABEL_SCALE).
+    assert "GSP_DELTA_THETA_TRAJ_LABEL_SCALE', 10.0" in text
+    # The combined degree->scaled factor is (pi/180)*10; a 5.2 deg/step rotation
+    # (~0.09 rad, the physical max) maps to ~0.9, inside [-1, 1] and NOT clipped.
+    combined = (_math.pi / 180.0) * 10.0
+    max_deg_per_step = _math.degrees(0.09)  # ~5.16 deg
+    scaled_max = max_deg_per_step * combined
+    assert 0.5 < scaled_max < 1.0, (
+        f"physical-max per-step label {scaled_max:.3f} must be non-saturating "
+        "(inside [-1,1], not crushed to the boundary like the x100 single-step)"
+    )
+    # And it must NOT be the saturating x100-in-radians scale.
+    saturating = 0.09 * 100.0
+    assert saturating > 1.0, "sanity: x100 rad scale would saturate (context)"

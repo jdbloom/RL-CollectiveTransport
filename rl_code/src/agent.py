@@ -328,7 +328,7 @@ class Agent(Actor):
         return getattr(self, 'gsp_prediction_target', 'delta_theta') in self._DELAYED_LABEL_TARGETS
 
     def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot,
-                             payload_angle_deg=None):
+                             payload_angle_deg=None, e2e_transition=None):
         """Delayed-label mode: snapshot per-robot (state, gsp_obs) for label
         maturation K steps later. No-op when the target is not a delayed-label
         target ('future_prox', 'neighbor_force', 'delta_theta_traj').
@@ -339,7 +339,16 @@ class Agent(Actor):
         [Δθ(t→t+1), …, Δθ(t+K-1→t+K)]; every step's angle is carried here so the
         matured pop can hand back the full ordered angle window and the driver can
         difference consecutive entries. Left None for future_prox / neighbor_force
-        (whose labels are fully computed at maturity from the current step)."""
+        (whose labels are fully computed at maturity from the current step).
+
+        e2e_transition (optional): an opaque per-step payload (any object) carried
+        verbatim through the FIFO and returned by pop_matured_gsp_label. Used by the
+        E2E path (GSP_E2E_ENABLED) so the main-replay RL transition stored at step t
+        matures co-indexed with the SAME K-step trajectory label the head regresses
+        against — in E2E mode the head trains ONLY from learn_DDQN_e2e, so its label
+        MUST be the future trajectory, not the immediate scalar. Default None is a
+        strict no-op (matured['e2e_transition'] is None), byte-identical to the
+        prior delayed-label behavior."""
         if not self._is_delayed_label_target():
             return
         self._gsp_label_buffer.append({
@@ -348,6 +357,7 @@ class Agent(Actor):
             'payload_angle_deg': (
                 float(payload_angle_deg) if payload_angle_deg is not None else None
             ),
+            'e2e_transition': e2e_transition,
         })
 
     def pop_matured_gsp_label(self, current_label_per_robot):
@@ -390,6 +400,7 @@ class Agent(Actor):
             'payload_angle_deg': oldest.get('payload_angle_deg'),
             'payload_angle_window': angle_window,
             'label_per_robot': label,
+            'e2e_transition': oldest.get('e2e_transition'),
         }
 
     def reset_gsp_label_buffer(self):

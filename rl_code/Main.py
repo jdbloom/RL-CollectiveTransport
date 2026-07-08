@@ -205,6 +205,24 @@ ep_ticks = 0
 # Read once at startup; default preserves legacy behavior.
 _gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
 
+# delta_theta_traj E2E label scaling. The per-step trajectory _traj is built in
+# DEGREES (differences of obj_stats[5]). The single-step delta_theta label
+# (env.py calculate_gsp_reward) does `radians(diff) * 100` clipped to [-1,1] —
+# env.py itself flags that ×100 SATURATES (max rotation ~0.09 rad/step → 9.0 →
+# clipped to 1.0), degenerating the regression into near-binary classification.
+# For the trajectory label we use the NON-saturating scale env.py's own comment
+# says was intended — radians × 10 (0.09 rad × 10 = 0.9, comfortably inside
+# [-1,1], no clip) — so the per-step targets keep their magnitude and the head
+# learns a real regression, not a sign bit. Combined deg→scaled factor:
+#   label = radians(traj_deg) * 10  ==  traj_deg * (pi/180) * 10.
+# Overridable via GSP_DELTA_THETA_TRAJ_LABEL_SCALE (applied to the RADIAN value).
+_delta_theta_traj_label_rad_scale = float(
+    config.get('GSP_DELTA_THETA_TRAJ_LABEL_SCALE', 10.0)
+)
+_delta_theta_traj_label_scale = (
+    (math.pi / 180.0) * _delta_theta_traj_label_rad_scale
+)
+
 # Input enrichment flags — need to pass env_observations to make_gsp_states
 # when any flag is active. Read once so the hot loop avoids repeated dict lookup.
 _gsp_input_include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
@@ -845,9 +863,15 @@ try:
                                 if _gsp_pred_target == 'delta_theta_traj':
                                     # Carry the CURRENT payload angle (degrees) so the full window
                                     # of angles is available to build the per-step trajectory.
-                                    model.push_pending_gsp_obs(
-                                        states, states, payload_angle_deg=float(obj_stats[5])
-                                    )
+                                    # In E2E mode the head trains ONLY from learn_DDQN_e2e (the
+                                    # head's own replay is unused), so this head-store FIFO push
+                                    # is skipped there — the E2E delayed store runs its OWN single
+                                    # push+pop at the RL-transition store site (below), where the
+                                    # next-state + guards are available. Non-E2E keeps this push.
+                                    if not config.get('GSP_E2E_ENABLED'):
+                                        model.push_pending_gsp_obs(
+                                            states, states, payload_angle_deg=float(obj_stats[5])
+                                        )
                                     # Label is built from the returned angle window → pass None.
                                     _current_label = None
                                 elif _gsp_pred_target == 'neighbor_force':
@@ -868,7 +892,17 @@ try:
                                 else:  # future_prox
                                     model.push_pending_gsp_obs(states, states)
                                     _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
-                                matured = model.pop_matured_gsp_label(_current_label)
+                                # E2E delta_theta_traj owns the FIFO at the RL-store site
+                                # (single push+pop there); skip the head-store pop here so
+                                # the two paths never double-consume the same buffer.
+                                _skip_head_store_pop = bool(
+                                    config.get('GSP_E2E_ENABLED')
+                                    and _gsp_pred_target == 'delta_theta_traj'
+                                )
+                                matured = (
+                                    None if _skip_head_store_pop
+                                    else model.pop_matured_gsp_label(_current_label)
+                                )
                                 if matured is not None:
                                     if _gsp_pred_target == 'delta_theta_traj':
                                         # Build the size-K per-step wrapped rotation trajectory from
@@ -1011,7 +1045,17 @@ try:
                                 float(stats[i][0]),             # applied force magnitude
                                 float(rewards[i][0]),           # scalar reward (anchors w.phi ~= r)
                             ], dtype=np.float32)
-                        if time_steps > 2:
+                        # delta_theta_traj E2E: the RL transition AND its size-K
+                        # trajectory label are stored by the DELAYED FIFO path (they
+                        # only mature K steps later), so the immediate store here is
+                        # skipped for that config to avoid double-storing the
+                        # transition. All other configs store immediately as before.
+                        _defer_immediate_e2e_store = bool(
+                            config.get('GSP_E2E_ENABLED')
+                            and getattr(model, 'gsp_prediction_target', 'delta_theta')
+                            == 'delta_theta_traj'
+                        )
+                        if time_steps > 2 and not _defer_immediate_e2e_store:
                             if train_mode:
                                 if learning_scheme != 'None':
                                     if not old_failures[i] and not failures[i]:
@@ -1034,8 +1078,97 @@ try:
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
                                                                     phi=sf_phi)
-                                                
+
                         r.append(rewards[i][0])
+
+                    # --- delta_theta_traj E2E delayed main-replay store (Bug C Option 1) ---
+                    # In E2E mode the head trains ONLY from learn_DDQN_e2e's MSE, so the
+                    # main-replay gsp_label must be the FUTURE K-step rotation trajectory,
+                    # which only matures K steps after the state is seen. Push the full
+                    # per-step RL transition + store guards through the delayed FIFO (one
+                    # entry per step, here where next-state + guards are complete), and at
+                    # maturity store (state_{t-K}, traj_label) co-indexed. The immediate
+                    # store above is skipped for this config (_defer_immediate_e2e_store),
+                    # so the transition is stored exactly once, with the correct label.
+                    #
+                    # Shared-model only: `model` is undefined under --independent_learning
+                    # (each robot has its own models[i] with its own delayed-label FIFO,
+                    # reset per-model at episode end), so a single shared push/pop cannot
+                    # co-index correctly. This mirrors the head-store block above, which is
+                    # likewise gated under the shared-model branch. E2E dtraj is a
+                    # single-model coordination study; if independent_learning support is
+                    # ever needed, route the push/pop through each models[i] FIFO.
+                    if (not args.independent_learning
+                            and config.get('GSP_E2E_ENABLED')
+                            and getattr(model, 'gsp_prediction_target', 'delta_theta')
+                            == 'delta_theta_traj'):
+                        # gsp_obs is only captured for the neighbors (GSP-N) head
+                        # (populated inside `if model.gsp_neighbors`); a broadcast /
+                        # plain-GSP dtraj-E2E run would silently store zeroed gsp_obs
+                        # and train the head on all-zero inputs. Fail loudly instead.
+                        if not getattr(model, 'gsp_neighbors', False):
+                            raise ValueError(
+                                "GSP_E2E_ENABLED + GSP_PREDICTION_TARGET=delta_theta_traj "
+                                "is currently supported only for the GSP-N (neighbors) head "
+                                "— the E2E gsp_obs is captured only on that path."
+                            )
+                        _n_r = Utility.params['num_robots']
+                        _e2e_tx = {
+                            'agent_state': [np.asarray(agent_states[i], dtype=np.float32).copy() for i in range(_n_r)],
+                            'action': [(actions[i], actions_to_take[i]) for i in range(_n_r)],
+                            'reward': [rewards[i] for i in range(_n_r)],
+                            'new_agent_state': [np.asarray(new_agent_states[i], dtype=np.float32).copy() for i in range(_n_r)],
+                            'done': bool(episode_done),
+                            'gsp_obs': [np.asarray(e2e_gsp_obs[i], dtype=np.float32).copy() if e2e_gsp_obs[i] is not None else None for i in range(_n_r)],
+                            'phi': [None] * _n_r,
+                            # Store guards captured at push time (t-K); replayed at maturity.
+                            'guard_time_steps': int(time_steps),
+                            'guard_train_mode': bool(train_mode),
+                            'guard_learning_scheme': learning_scheme,
+                            'guard_old_failures': [bool(old_failures[i]) for i in range(_n_r)],
+                            'guard_failures': [bool(failures[i][0]) for i in range(_n_r)],
+                            'guard_episode_done': bool(episode_done),
+                        }
+                        model.push_pending_gsp_obs(
+                            agent_states, [e2e_gsp_obs[i] if e2e_gsp_obs[i] is not None
+                                           else np.zeros(1, dtype=np.float32)
+                                           for i in range(_n_r)],
+                            payload_angle_deg=float(obj_stats[5]),
+                            e2e_transition=_e2e_tx,
+                        )
+                        _matured_e2e = model.pop_matured_gsp_label(None)
+                        if _matured_e2e is not None and _matured_e2e.get('e2e_transition') is not None:
+                            _ang_win = _matured_e2e['payload_angle_window']
+                            _traj_e2e = np.array([
+                                angle_normalize_signed_deg(
+                                    float(_ang_win[k + 1]) - float(_ang_win[k])
+                                )
+                                for k in range(len(_ang_win) - 1)
+                            ], dtype=np.float32)
+                            _traj_label = (_traj_e2e * _delta_theta_traj_label_scale).astype(np.float32)
+                            _tx = _matured_e2e['e2e_transition']
+                            if (_tx['guard_time_steps'] > 2
+                                    and _tx['guard_train_mode']
+                                    and _tx['guard_learning_scheme'] != 'None'
+                                    and not _tx['guard_episode_done']):
+                                for i in range(_n_r):
+                                    if (not _tx['guard_old_failures'][i]
+                                            and not _tx['guard_failures'][i]):
+                                        # Shared-model only (guarded above): use `model`.
+                                        model.store_agent_transition(
+                                            _tx['agent_state'][i],
+                                            _tx['action'][i],
+                                            _tx['reward'][i],
+                                            _tx['new_agent_state'][i],
+                                            _tx['done'],
+                                            gsp_obs=_tx['gsp_obs'][i],
+                                            gsp_label=_traj_label,
+                                            phi=_tx['phi'][i],
+                                        )
+                            # Quick label-distribution telemetry (min/max/std over the
+                            # scaled per-step targets) so a crushed/near-binary label is
+                            # visible in the log without waiting for h5 analysis.
+                            hdf5_writer.record_stored_transition(_traj_label, _tx['gsp_obs'][0])
 
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
