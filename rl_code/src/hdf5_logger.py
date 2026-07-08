@@ -33,19 +33,33 @@ except Exception:                            # pragma: no cover - path-robust fa
 
 # Notification handled by ingestion worker (optional, external)
 
-_SWMR_RETRY_COUNT = 3
+_SWMR_RETRY_COUNT = 8
 _SWMR_RETRY_DELAY = 0.5  # seconds
 
 
 def _open_h5_writer(path: str, mode: str = "a"):
-    """Open an HDF5 file for writing with SWMR-compatible settings.
+    """Open an HDF5 file for writing, resilient to concurrent readers.
 
-    Uses libver='latest' (required for SWMR) and retries up to
-    _SWMR_RETRY_COUNT times on BlockingIOError (errno 35) which occurs on
-    macOS APFS when an external reader briefly holds the file lock.
+    Each run writes its OWN unique h5 — there is never a second writer to the
+    same file — so HDF5's file lock protects nothing here and only causes harm:
+    a passive reader (the daemon stale-check every tick, push_metrics every 3
+    min, an analysis script) holds a shared lock and the writer's exclusive-lock
+    acquisition fails with ``BlockingIOError: [Errno 11] unable to lock file``,
+    crashing the whole training run mid-episode. Observed 2026-07-08 killing the
+    ep~270 headline stop-grad cells (2410/2411) before they could reach ep500.
+
+    Fix: open with file locking DISABLED so the writer never contends for a lock,
+    regardless of any reader. libver='latest' keeps SWMR-read compatibility for
+    external readers. Older h5py (< 3.5, no ``locking`` kwarg) falls back to a
+    hardened retry-on-BlockingIOError loop (8 attempts × 0.5 s ≈ 4 s) so a run
+    that has trained for hours is never killed by a transient lock.
 
     Returns an open h5py.File handle; caller is responsible for closing it.
     """
+    try:
+        return h5py.File(path, mode, libver="latest", locking=False)
+    except TypeError:
+        pass  # h5py < 3.5: no `locking` kwarg — fall through to the retry loop
     last_exc: Optional[Exception] = None
     for attempt in range(_SWMR_RETRY_COUNT):
         try:
