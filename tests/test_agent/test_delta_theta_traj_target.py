@@ -535,6 +535,33 @@ def test_main_delayed_e2e_store_uses_trajectory_label_scale():
     assert "gsp_label=_traj_label" in text
 
 
+def test_main_delayed_e2e_store_is_shared_model_only():
+    """The delayed E2E store references bare `model`, which is undefined under
+    --independent_learning; it must be gated to the shared-model branch so an
+    independent_learning + E2E dtraj run does not NameError (code-review #1)."""
+    text = _MAIN_PY.read_text()
+    # The delayed-store guard must include the not-independent_learning condition.
+    assert "not args.independent_learning" in text
+    marker = "delta_theta_traj E2E delayed main-replay store"
+    idx = text.index(marker)
+    # The independent-learning exclusion must appear before the push_pending_gsp_obs
+    # call in the delayed-store block (i.e. it gates entry to the block).
+    assert (text.index("not args.independent_learning", idx)
+            < text.index("push_pending_gsp_obs", idx))
+
+
+def test_main_delayed_e2e_store_requires_neighbors_head():
+    """A broadcast/plain-GSP dtraj-E2E run would store zeroed gsp_obs (gsp_obs is
+    only captured on the neighbors path). The delayed store must reject a
+    non-neighbors head loudly (code-review #2)."""
+    text = _MAIN_PY.read_text()
+    marker = "delta_theta_traj E2E delayed main-replay store"
+    idx = text.index(marker)
+    block = text[idx: idx + 2600]
+    assert "gsp_neighbors" in block
+    assert "raise ValueError" in block
+
+
 def test_label_scale_is_non_saturating():
     """The delta_theta_traj label scale is radians × 10 (env.py's documented
     intended, non-saturating scale) — NOT the ×100 that saturates the single-step

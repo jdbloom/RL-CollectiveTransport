@@ -1090,9 +1090,28 @@ try:
                     # maturity store (state_{t-K}, traj_label) co-indexed. The immediate
                     # store above is skipped for this config (_defer_immediate_e2e_store),
                     # so the transition is stored exactly once, with the correct label.
-                    if (config.get('GSP_E2E_ENABLED')
+                    #
+                    # Shared-model only: `model` is undefined under --independent_learning
+                    # (each robot has its own models[i] with its own delayed-label FIFO,
+                    # reset per-model at episode end), so a single shared push/pop cannot
+                    # co-index correctly. This mirrors the head-store block above, which is
+                    # likewise gated under the shared-model branch. E2E dtraj is a
+                    # single-model coordination study; if independent_learning support is
+                    # ever needed, route the push/pop through each models[i] FIFO.
+                    if (not args.independent_learning
+                            and config.get('GSP_E2E_ENABLED')
                             and getattr(model, 'gsp_prediction_target', 'delta_theta')
                             == 'delta_theta_traj'):
+                        # gsp_obs is only captured for the neighbors (GSP-N) head
+                        # (populated inside `if model.gsp_neighbors`); a broadcast /
+                        # plain-GSP dtraj-E2E run would silently store zeroed gsp_obs
+                        # and train the head on all-zero inputs. Fail loudly instead.
+                        if not getattr(model, 'gsp_neighbors', False):
+                            raise ValueError(
+                                "GSP_E2E_ENABLED + GSP_PREDICTION_TARGET=delta_theta_traj "
+                                "is currently supported only for the GSP-N (neighbors) head "
+                                "— the E2E gsp_obs is captured only on that path."
+                            )
                         _n_r = Utility.params['num_robots']
                         _e2e_tx = {
                             'agent_state': [np.asarray(agent_states[i], dtype=np.float32).copy() for i in range(_n_r)],
@@ -1135,8 +1154,8 @@ try:
                                 for i in range(_n_r):
                                     if (not _tx['guard_old_failures'][i]
                                             and not _tx['guard_failures'][i]):
-                                        _m = models[i] if args.independent_learning else model
-                                        _m.store_agent_transition(
+                                        # Shared-model only (guarded above): use `model`.
+                                        model.store_agent_transition(
                                             _tx['agent_state'][i],
                                             _tx['action'][i],
                                             _tx['reward'][i],
