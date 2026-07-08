@@ -162,6 +162,73 @@ def test_actor_input_grows_by_K():
 
 
 # ---------------------------------------------------------------------------
+# (b2) IMPLICIT kind: GSP_PREDICTION_TARGET alone must size the head input too
+# ---------------------------------------------------------------------------
+
+def test_traj_target_autoderives_kind_when_output_kind_default():
+    """Regression for the 2026-07-08 actor-width crash (`mat1 and mat2 shapes
+    cannot be multiplied (64x40 and 36x64)`).
+
+    The floor YAML sets GSP_PREDICTION_TARGET=delta_theta_traj but leaves
+    GSP_OUTPUT_KIND at the scalar default. GSP-RL auto-derives the head OUTPUT
+    to width K, but RL-CT's Agent used to size the head INPUT / neighbor-share
+    slot from GSP_OUTPUT_KIND alone (K=1). The two submodules disagreed on K,
+    so the K-dim prev_gsp did not fit the width-1 self/neighbor slots and the
+    augmented actor state width diverged from the actor net's input width.
+
+    The fix mirrors GSP-RL: when the target is delta_theta_traj and the kind is
+    left at the scalar default, RL-CT auto-derives the kind (and therefore K).
+    """
+    for K in (1, 2, 3, 5):
+        agent = _make_agent(
+            gsp_output_kind="delta_theta_1d",           # explicit scalar default
+            prediction_target="delta_theta_traj",       # target implies size-K
+            K=K,
+            n_hop_neighbors=1,
+        )
+        # RL-CT-side head output/input width must equal K...
+        assert agent.gsp_network_output == K, f"K={K}: output width"
+        # ...and the neighbor-share input width must scale with K (self+2 neighbor
+        # slots, each (1 avg_prox + K prev_gsp)) = (1+K)*3.
+        assert agent.gsp_network_input == (1 + K) * 3, (
+            f"K={K}: input width {agent.gsp_network_input} != {(1 + K) * 3}"
+        )
+
+
+def test_traj_target_actor_state_width_matches_net_when_kind_implicit():
+    """The augmented actor state from make_agent_state (fed a size-K prediction)
+    MUST equal the actor Q-net's network_input_size. This is the exact invariant
+    the runtime crash violated (state width 40 vs fc1 in-features 36)."""
+    for K in (1, 3, 5):
+        agent = _make_agent(
+            gsp_output_kind="delta_theta_1d",
+            prediction_target="delta_theta_traj",
+            K=K,
+            n_hop_neighbors=1,
+        )
+        # The GSP head emits a size-K prediction; make_agent_state concatenates it.
+        pred = np.zeros(agent.gsp_network_output, dtype=np.float32)
+        env_obs = np.zeros(agent.input_size, dtype=np.float32)
+        state = agent.make_agent_state(env_obs, heading_gsp=pred)
+        assert state.shape[0] == agent.network_input_size, (
+            f"K={K}: actor state width {state.shape[0]} != net input "
+            f"{agent.network_input_size}"
+        )
+
+
+def test_traj_target_explicit_contradiction_rejected():
+    """An explicit non-traj GSP_OUTPUT_KIND with the traj target is a hard error
+    (mirrors GSP-RL), so a dimensionally-inconsistent config fails loudly at
+    construction instead of crashing mid-episode."""
+    with pytest.raises(ValueError, match="delta_theta_traj"):
+        _make_agent(
+            gsp_output_kind="future_prox_1d",
+            prediction_target="delta_theta_traj",
+            K=5,
+        )
+
+
+# ---------------------------------------------------------------------------
 # (c) matured label == size-K trajectory of consecutive wrapped rotations
 # ---------------------------------------------------------------------------
 
