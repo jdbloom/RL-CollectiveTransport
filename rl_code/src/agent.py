@@ -66,6 +66,28 @@ class Agent(Actor):
                 f"Unknown GSP_OUTPUT_KIND '{_gsp_output_kind}'. "
                 f"Valid values: {list(_GSP_OUTPUT_KIND_SIZES)}"
             )
+        # Keep GSP_OUTPUT_KIND consistent with GSP_PREDICTION_TARGET — mirror of
+        # GSP-RL learning_aids.py (#29). The GSP head OUTPUT width is fixed by the
+        # TARGET there; here on the host side the same K sizes the head INPUT and
+        # the neighbor-shared prev_gsp slots. When the target is the size-K
+        # trajectory but GSP_OUTPUT_KIND was left at the scalar default, the two
+        # submodules disagreed on K: GSP-RL built a width-K head while RL-CT sized
+        # the input/neighbor slots for K=1. The runtime symptom was the actor
+        # forward pass `mat1 and mat2 shapes cannot be multiplied (64x40 and
+        # 36x64)` — the augmented actor-state width diverged from the actor net's
+        # input width. Auto-derive the kind (and therefore K) from the target when
+        # left at the scalar default, and reject an explicit contradiction loudly.
+        # (Confirmed 2026-07-08; this must stay in lockstep with the GSP-RL copy.)
+        _prediction_target = str(config.get('GSP_PREDICTION_TARGET', 'delta_theta'))
+        if _prediction_target == 'delta_theta_traj':
+            if _gsp_output_kind == 'delta_theta_1d':
+                _gsp_output_kind = 'delta_theta_traj'
+            elif _gsp_output_kind != 'delta_theta_traj':
+                raise ValueError(
+                    "GSP_PREDICTION_TARGET='delta_theta_traj' requires "
+                    "GSP_OUTPUT_KIND='delta_theta_traj' (the size-K trajectory "
+                    f"output); got GSP_OUTPUT_KIND='{_gsp_output_kind}'."
+                )
         # K = effective output dims for the GSP head.  Used to compute gsp_input_size
         # so the head's recurrent prev_gsp slot accommodates the full prediction vector.
         # For horizon-coupled kinds (dict value None) the size is GSP_PREDICTION_HORIZON.
