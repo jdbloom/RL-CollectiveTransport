@@ -109,11 +109,16 @@ class TestMakeAgentStateJepa:
             f"JEPA slot value {gsp_slot[0]:.4f} does not match raw latent {jepa_value}"
         )
 
-    def test_legacy_scalar_still_scaled(self, jepa_agent):
-        """Scalar heading_gsp (size 1) must still apply degrees/10 even on JEPA agent.
+    def test_scalar_on_jepa_agent_is_raw_latent(self, jepa_agent):
+        """On a JEPA agent, EVERY heading_gsp is the encoder latent — including a
+        width-1 latent — and must be concatenated raw.
 
-        The size>5 check gates the JEPA path; a scalar should fall through to the
-        legacy normalization regardless of the agent's JEPA flag.
+        (2026-07-09) The JEPA path is now gated on the gsp_jepa_enabled FLAG, not
+        the former size>5 width heuristic. Under the heuristic a 1-d latent was
+        misrouted through the legacy degrees/10 scalar path (and any wide
+        non-JEPA slot, e.g. cyl_displacement_traj's 2K=10, was mislabeled as a
+        latent). choose_agent_gsp always emits the latent when JEPA is on, so a
+        scalar here IS a 1-d latent and must not be rescaled.
         """
         env_obs = np.zeros(N_OBS, dtype=np.float32)
         scalar_val = 0.5
@@ -121,10 +126,10 @@ class TestMakeAgentStateJepa:
         state = jepa_agent.make_agent_state(env_obs, heading_gsp=scalar_val)
         gsp_slot = state[N_OBS:]
 
-        expected = float(np.degrees(scalar_val / 10))
         assert len(gsp_slot) == 1
-        assert np.isclose(gsp_slot[0], expected, atol=1e-5), (
-            f"Legacy scalar path broken: expected {expected:.4f}, got {gsp_slot[0]:.4f}"
+        assert np.isclose(gsp_slot[0], scalar_val, atol=1e-5), (
+            f"JEPA 1-d latent must be raw: expected {scalar_val:.4f}, "
+            f"got {gsp_slot[0]:.4f}"
         )
 
     def test_env_obs_unchanged(self, jepa_agent):

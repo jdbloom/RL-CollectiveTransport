@@ -59,7 +59,28 @@ class Agent(Actor):
             # delta_theta_traj: size == K == GSP_PREDICTION_HORIZON. The label is the
             # per-step payload-rotation trajectory [Δθ(t→t+1), …, Δθ(t+K-1→t+K)].
             'delta_theta_traj': None,
+            # goal_progress_traj: size == K. The label is the per-step payload
+            # progress-to-goal trajectory [Δd(t→t+1), …] with Δd = prev_dist2goal
+            # − curr_dist2goal (positive = toward goal — the exact quantity from
+            # cyl_kinematics_goal_4d's 4th component). RAW meters, no scaling.
+            'goal_progress_traj': None,
+            # cyl_displacement_traj: size == 2K. The label is the per-step payload
+            # displacement trajectory flattened [Δx1,Δy1,…,ΔxK,ΔyK]. RAW meters.
+            'cyl_displacement_traj': None,
         }
+        # Horizon multiplier per horizon-coupled kind (dict value None above):
+        # effective size == mult * GSP_PREDICTION_HORIZON. Kept in lockstep with
+        # the GSP-RL copy (learning_aids.py) via the sync tests.
+        _GSP_TRAJ_KIND_HORIZON_MULTIPLIER = {
+            'delta_theta_traj': 1,
+            'goal_progress_traj': 1,
+            'cyl_displacement_traj': 2,
+        }
+        # Trajectory PREDICTION TARGETS whose names double as their required
+        # GSP_OUTPUT_KIND (auto-derived below; explicit contradiction rejected).
+        _GSP_TRAJ_TARGETS = (
+            'delta_theta_traj', 'goal_progress_traj', 'cyl_displacement_traj'
+        )
         _gsp_output_kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
         if _gsp_output_kind not in _GSP_OUTPUT_KIND_SIZES:
             raise ValueError(
@@ -79,26 +100,29 @@ class Agent(Actor):
         # left at the scalar default, and reject an explicit contradiction loudly.
         # (Confirmed 2026-07-08; this must stay in lockstep with the GSP-RL copy.)
         _prediction_target = str(config.get('GSP_PREDICTION_TARGET', 'delta_theta'))
-        if _prediction_target == 'delta_theta_traj':
+        if _prediction_target in _GSP_TRAJ_TARGETS:
             if _gsp_output_kind == 'delta_theta_1d':
-                _gsp_output_kind = 'delta_theta_traj'
-            elif _gsp_output_kind != 'delta_theta_traj':
+                _gsp_output_kind = _prediction_target
+            elif _gsp_output_kind != _prediction_target:
                 raise ValueError(
-                    "GSP_PREDICTION_TARGET='delta_theta_traj' requires "
-                    "GSP_OUTPUT_KIND='delta_theta_traj' (the size-K trajectory "
+                    f"GSP_PREDICTION_TARGET='{_prediction_target}' requires "
+                    f"GSP_OUTPUT_KIND='{_prediction_target}' (the size-K trajectory "
                     f"output); got GSP_OUTPUT_KIND='{_gsp_output_kind}'."
                 )
         # K = effective output dims for the GSP head.  Used to compute gsp_input_size
         # so the head's recurrent prev_gsp slot accommodates the full prediction vector.
-        # For horizon-coupled kinds (dict value None) the size is GSP_PREDICTION_HORIZON.
+        # For horizon-coupled kinds (dict value None) the size is
+        # multiplier * GSP_PREDICTION_HORIZON (mult 1 for delta_theta_traj /
+        # goal_progress_traj, 2 for cyl_displacement_traj's per-step Δx,Δy pairs).
         _K = _GSP_OUTPUT_KIND_SIZES[_gsp_output_kind]
         if _K is None:
-            _K = int(config.get('GSP_PREDICTION_HORIZON', 5))
-            if _K < 1:
+            _horizon = int(config.get('GSP_PREDICTION_HORIZON', 5))
+            if _horizon < 1:
                 raise ValueError(
                     f"GSP_OUTPUT_KIND='{_gsp_output_kind}' requires "
-                    f"GSP_PREDICTION_HORIZON >= 1, got {_K}"
+                    f"GSP_PREDICTION_HORIZON >= 1, got {_horizon}"
                 )
+            _K = _GSP_TRAJ_KIND_HORIZON_MULTIPLIER[_gsp_output_kind] * _horizon
 
         if neighbors:
             # (1 + K) inputs from ownship (avg_prox × 1, prev_gsp × K)
@@ -322,16 +346,25 @@ class Agent(Actor):
     # 'delta_theta_traj' additionally uses the pushed-step payload angle carried
     # in EVERY FIFO entry (payload_angle_deg) to reconstruct the K-step angle
     # window and form the size-K per-step rotation trajectory.
-    _DELAYED_LABEL_TARGETS = ('future_prox', 'neighbor_force', 'delta_theta_traj')
+    # 'goal_progress_traj' / 'cyl_displacement_traj' (the GLOBAL trajectory
+    # targets, 2026-07-09) likewise use the per-step payload_track dict
+    # ({'dist2goal','cyl_x','cyl_y'}) carried in every entry to reconstruct the
+    # K-step payload track window and form the size-K progress / size-2K
+    # displacement trajectory (raw meters, no scaling).
+    _DELAYED_LABEL_TARGETS = (
+        'future_prox', 'neighbor_force', 'delta_theta_traj',
+        'goal_progress_traj', 'cyl_displacement_traj',
+    )
 
     def _is_delayed_label_target(self):
         return getattr(self, 'gsp_prediction_target', 'delta_theta') in self._DELAYED_LABEL_TARGETS
 
     def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot,
-                             payload_angle_deg=None, e2e_transition=None):
+                             payload_angle_deg=None, e2e_transition=None,
+                             payload_track=None):
         """Delayed-label mode: snapshot per-robot (state, gsp_obs) for label
         maturation K steps later. No-op when the target is not a delayed-label
-        target ('future_prox', 'neighbor_force', 'delta_theta_traj').
+        target (see _DELAYED_LABEL_TARGETS).
 
         payload_angle_deg (optional): the payload's absolute rotation angle
         (degrees) at the pushed step. Needed by 'delta_theta_traj', whose label is
@@ -340,6 +373,16 @@ class Agent(Actor):
         matured pop can hand back the full ordered angle window and the driver can
         difference consecutive entries. Left None for future_prox / neighbor_force
         (whose labels are fully computed at maturity from the current step).
+
+        payload_track (optional): dict of per-step GLOBAL payload scalars
+        ({'dist2goal': cyl distance-to-goal (m), 'cyl_x': payload x (m),
+        'cyl_y': payload y (m)}) at the pushed step. Needed by the GLOBAL
+        trajectory targets ('goal_progress_traj', 'cyl_displacement_traj'),
+        whose labels are per-step differences over the K-step window; every
+        step's track is carried here (mirroring payload_angle_deg) so the
+        matured pop can hand back the full ordered payload_track_window and the
+        driver can difference consecutive entries. Left None for all other
+        targets — a strict no-op (the window is all-None).
 
         e2e_transition (optional): an opaque per-step payload (any object) carried
         verbatim through the FIFO and returned by pop_matured_gsp_label. Used by the
@@ -357,6 +400,10 @@ class Agent(Actor):
             'payload_angle_deg': (
                 float(payload_angle_deg) if payload_angle_deg is not None else None
             ),
+            'payload_track': (
+                {k: float(v) for k, v in payload_track.items()}
+                if payload_track is not None else None
+            ),
             'e2e_transition': e2e_transition,
         })
 
@@ -371,14 +418,25 @@ class Agent(Actor):
                                    spanning t-K … t) and differences consecutive
                                    entries into the size-K wrapped rotation
                                    trajectory itself; it may pass None here.
+          - goal_progress_traj / cyl_displacement_traj
+                                → the driver instead reads back the ordered
+                                   'payload_track_window' (the K+1 payload-track
+                                   dicts spanning t-K … t) and differences
+                                   consecutive entries into the size-K progress /
+                                   size-2K displacement trajectory itself; it may
+                                   pass None here.
         The returned dict always includes:
           - 'payload_angle_deg'    : the pushed-step (t-K) payload angle, or None;
           - 'payload_angle_window' : an ordered list of the K+1 payload angles held
                                      in the buffer at pop time (oldest→newest, i.e.
                                      [angle(t-K), …, angle(t)]). Entries are None
                                      where no angle was supplied at push time.
+          - 'payload_track_window' : an ordered list of the K+1 payload-track dicts
+                                     held in the buffer at pop time (oldest→newest).
+                                     Entries are None where no track was supplied at
+                                     push time (all existing targets).
         When current_label_per_robot is None, 'label_per_robot' is None (the driver
-        fills the label from payload_angle_window).
+        fills the label from payload_angle_window / payload_track_window).
         Returns None when the buffer is too small or the target is not a
         delayed-label target."""
         if not self._is_delayed_label_target():
@@ -386,9 +444,10 @@ class Agent(Actor):
         K = getattr(self, 'gsp_prediction_horizon', 5)
         if len(self._gsp_label_buffer) < K + 1:
             return None
-        # Snapshot the full ordered angle window (oldest→newest) BEFORE popping so
-        # the trajectory driver can difference consecutive angles.
+        # Snapshot the full ordered angle/track windows (oldest→newest) BEFORE
+        # popping so the trajectory driver can difference consecutive entries.
         angle_window = [e.get('payload_angle_deg') for e in self._gsp_label_buffer]
+        track_window = [e.get('payload_track') for e in self._gsp_label_buffer]
         oldest = self._gsp_label_buffer.popleft()
         label = (
             None if current_label_per_robot is None
@@ -399,6 +458,7 @@ class Agent(Actor):
             'gsp_obs_per_robot': oldest['gsp_obs_per_robot'],
             'payload_angle_deg': oldest.get('payload_angle_deg'),
             'payload_angle_window': angle_window,
+            'payload_track_window': track_window,
             'label_per_robot': label,
             'e2e_transition': oldest.get('e2e_transition'),
         }
@@ -434,14 +494,18 @@ class Agent(Actor):
                 # heading_gsp may be a scalar (legacy, O=1) or a numpy array (O>1).
                 # For the legacy scalar case, apply the historical degrees/10 scaling
                 # so that network weights trained on 'delta_theta_1d' are compatible.
-                # For vector cases (cyl_kinematics_3d/goal_4d/time_to_goal_1d) the
-                # values are already in physical units from the label computation in
-                # Main.py and are concatenated as-is (no extra scaling).
-                # JEPA path: heading_gsp is a 32-d encoder latent — concatenate raw,
-                # no scaling. Detected by: array dim > 0 and size > 5 (the existing
-                # multi-dim outputs top out at 4; 32 is unambiguous).
+                # For vector cases (cyl_kinematics_3d/goal_4d/*_traj) the values are
+                # already in physical units from the label computation in Main.py
+                # and are concatenated as-is (no extra scaling).
+                # JEPA path: heading_gsp is the encoder latent — concatenate raw,
+                # no scaling. Detected by the gsp_jepa_enabled FLAG (when JEPA is
+                # on, choose_agent_gsp always emits the latent). The former
+                # width heuristic (size>5 == latent) misfires for wide non-JEPA slots
+                # (cyl_displacement_traj: 2K=10 at the default horizon); the
+                # raveled result was coincidentally identical, but the
+                # discrimination is now explicit.
                 heading_gsp_arr = np.asarray(heading_gsp, dtype=np.float32)
-                if heading_gsp_arr.ndim > 0 and heading_gsp_arr.size > 5:
+                if getattr(self, 'gsp_jepa_enabled', False):
                     # JEPA latent vector — concatenate raw, skip degrees/10.
                     gsp_slot = heading_gsp_arr.ravel()
                 elif heading_gsp_arr.ndim == 0 or heading_gsp_arr.size == 1:
@@ -463,9 +527,9 @@ class Agent(Actor):
             #   * zero-out (H-14) severs the signal to a constant zero; leave it
             #     zeroed (do NOT standardize a deliberately-severed slot).
             #   * only standardize when the slot width matches the standardizer dim
-            #     (K). The JEPA-latent path (size > 5) and latent-primary are NOT the
-            #     scalar/K prediction this lever targets, so their width won't match
-            #     and they are skipped.
+            #     (K). The JEPA-latent path (gsp_jepa_enabled) and latent-primary are
+            #     NOT the scalar/K prediction this lever targets, so their width
+            #     won't match and they are skipped.
             # Composition with GSP_EVAL_ABLATE_PRED: that ablation transforms
             # heading_gsp UPSTREAM (in Main.py) before this method runs, so frozen_mean
             # arrives here as the per-episode running MEAN of predictions; standardizing

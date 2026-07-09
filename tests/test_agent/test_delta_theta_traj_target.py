@@ -542,7 +542,7 @@ def test_main_delayed_e2e_store_is_shared_model_only():
     text = _MAIN_PY.read_text()
     # The delayed-store guard must include the not-independent_learning condition.
     assert "not args.independent_learning" in text
-    marker = "delta_theta_traj E2E delayed main-replay store"
+    marker = "trajectory-target E2E delayed main-replay store"
     idx = text.index(marker)
     # The independent-learning exclusion must appear before the push_pending_gsp_obs
     # call in the delayed-store block (i.e. it gates entry to the block).
@@ -555,9 +555,9 @@ def test_main_delayed_e2e_store_requires_neighbors_head():
     only captured on the neighbors path). The delayed store must reject a
     non-neighbors head loudly (code-review #2)."""
     text = _MAIN_PY.read_text()
-    marker = "delta_theta_traj E2E delayed main-replay store"
+    marker = "trajectory-target E2E delayed main-replay store"
     idx = text.index(marker)
-    block = text[idx: idx + 2600]
+    block = text[idx: idx + 3200]
     assert "gsp_neighbors" in block
     assert "raise ValueError" in block
 
