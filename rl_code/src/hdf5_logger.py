@@ -187,6 +187,16 @@ class HDF5Logger:
         self.e2e_gsp_pred_std = []
         self.e2e_gsp_label_mean = []
         self.e2e_gsp_label_std = []
+        # Actor GSP-feature reliance diagnostic (causal-usage investigation): does
+        # the actor's first-layer weight lean on the spliced GSP prediction over
+        # training? actor_gsp_weight_ratio is the headline metric (~0 = ignored,
+        # growing = used). Plus the pre/post standardization feature std to confirm
+        # GSP_E2E_NORMALIZE_FEATURE actually rescales the spliced feature.
+        self.e2e_actor_gsp_feature_weight_norm = []
+        self.e2e_actor_obs_weight_norm_mean = []
+        self.e2e_actor_gsp_weight_ratio = []
+        self.e2e_gsp_feature_std_prenorm = []
+        self.e2e_gsp_feature_std_postnorm = []
         # Sample-quality diagnostics (schema v4+) — (label, input) pairs captured at
         # each store_gsp_transition call site. Needed because the replay buffer lives
         # in the external gsp_rl library and we have no hook to query its composition.
@@ -276,6 +286,21 @@ class HDF5Logger:
         self.e2e_gsp_pred_std.append(float(diag.get('gsp_pred_std', 0)))
         self.e2e_gsp_label_mean.append(float(diag.get('gsp_label_mean', 0)))
         self.e2e_gsp_label_std.append(float(diag.get('gsp_label_std', 0)))
+        self.e2e_actor_gsp_feature_weight_norm.append(
+            float(diag.get('actor_gsp_feature_weight_norm', 0))
+        )
+        self.e2e_actor_obs_weight_norm_mean.append(
+            float(diag.get('actor_obs_weight_norm_mean', 0))
+        )
+        self.e2e_actor_gsp_weight_ratio.append(
+            float(diag.get('actor_gsp_weight_ratio', 0))
+        )
+        self.e2e_gsp_feature_std_prenorm.append(
+            float(diag.get('gsp_feature_std_prenorm', 0))
+        )
+        self.e2e_gsp_feature_std_postnorm.append(
+            float(diag.get('gsp_feature_std_postnorm', 0))
+        )
 
     def record_gsp_loss(self, loss_value: float) -> None:
         """Record one GSP prediction network training loss sample.
@@ -491,6 +516,13 @@ class HDF5Logger:
                 ('e2e_gsp_pred_std', self.e2e_gsp_pred_std),
                 ('e2e_gsp_label_mean', self.e2e_gsp_label_mean),
                 ('e2e_gsp_label_std', self.e2e_gsp_label_std),
+                ('e2e_actor_gsp_feature_weight_norm',
+                 self.e2e_actor_gsp_feature_weight_norm),
+                ('e2e_actor_obs_weight_norm_mean',
+                 self.e2e_actor_obs_weight_norm_mean),
+                ('e2e_actor_gsp_weight_ratio', self.e2e_actor_gsp_weight_ratio),
+                ('e2e_gsp_feature_std_prenorm', self.e2e_gsp_feature_std_prenorm),
+                ('e2e_gsp_feature_std_postnorm', self.e2e_gsp_feature_std_postnorm),
             ]
             for key, data in e2e_fields:
                 if data:

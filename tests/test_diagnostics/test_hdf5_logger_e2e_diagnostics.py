@@ -58,11 +58,17 @@ def _sample_diag(step: int) -> dict:
         'gsp_pred_std': 0.5 + step * 0.02,
         'gsp_label_mean': 0.01 + step * 0.01,
         'gsp_label_std': 0.6 + step * 0.01,
+        # Actor GSP-feature reliance diagnostic (causal-usage investigation).
+        'actor_gsp_feature_weight_norm': 0.2 + step * 0.02,
+        'actor_obs_weight_norm_mean': 0.5 + step * 0.01,
+        'actor_gsp_weight_ratio': 0.4 + step * 0.03,
+        'gsp_feature_std_prenorm': 0.02 + step * 0.001,
+        'gsp_feature_std_postnorm': 0.9 + step * 0.01,
     }
 
 
 class TestRecordE2eDiagnostics:
-    def test_all_11_datasets_written(self, tmp_path):
+    def test_all_datasets_written(self, tmp_path):
         path = str(tmp_path / "ep.h5")
         logger = HDF5Logger(path)
         for t in range(3):
@@ -76,12 +82,33 @@ class TestRecordE2eDiagnostics:
             'e2e_gsp_grad_norm', 'e2e_gsp_grad_norm_pre_clip', 'e2e_ddqn_grad_norm',
             'e2e_gsp_input_grad', 'e2e_gsp_pred_mean', 'e2e_gsp_pred_std',
             'e2e_gsp_label_mean', 'e2e_gsp_label_std',
+            # Actor GSP-feature reliance diagnostic.
+            'e2e_actor_gsp_feature_weight_norm', 'e2e_actor_obs_weight_norm_mean',
+            'e2e_actor_gsp_weight_ratio', 'e2e_gsp_feature_std_prenorm',
+            'e2e_gsp_feature_std_postnorm',
         ]
         with h5py.File(path) as f:
             grp = f["episode_0000"]
             for key in expected_keys:
                 assert key in grp, f"Missing dataset: {key}"
                 assert grp[key].shape == (3,), f"Wrong shape for {key}: {grp[key].shape}"
+
+    def test_actor_gsp_weight_ratio_values_stored(self, tmp_path):
+        """The headline causal-usage metric round-trips to the h5 correctly."""
+        path = str(tmp_path / "ep.h5")
+        logger = HDF5Logger(path)
+        logger.writerow(**_base_writerow_kwargs())
+        logger.record_e2e_diagnostics(_sample_diag(0))  # step 0 => ratio 0.4
+        logger.write_episode(0)
+
+        with h5py.File(path) as f:
+            grp = f["episode_0000"]
+            np.testing.assert_allclose(
+                float(grp['e2e_actor_gsp_weight_ratio'][0]), 0.4, rtol=1e-5)
+            np.testing.assert_allclose(
+                float(grp['e2e_actor_gsp_feature_weight_norm'][0]), 0.2, rtol=1e-5)
+            np.testing.assert_allclose(
+                float(grp['e2e_gsp_feature_std_postnorm'][0]), 0.9, rtol=1e-5)
 
     def test_values_stored_correctly(self, tmp_path):
         path = str(tmp_path / "ep.h5")
