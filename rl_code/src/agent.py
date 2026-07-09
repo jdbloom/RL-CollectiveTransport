@@ -451,6 +451,33 @@ class Agent(Actor):
                 else:
                     # Vector path — physical units from label computation, no rescaling.
                     gsp_slot = heading_gsp_arr.ravel()
+            # GSP_E2E_NORMALIZE_FEATURE (opt-in): standardize the spliced GSP
+            # prediction to ~unit variance so it lands on the same scale as the
+            # O(1) egocentric obs (the raw slot std is ~0.024, so ACTOR_USE_LAYER_NORM
+            # — which normalizes the whole vector, not per-feature — cannot let the
+            # actor weight it). Uses self.gsp_feature_stats, the SAME shared
+            # RunningStandardizer the E2E learn splices (learn_DDQN_e2e /
+            # learn_TD3_e2e) update; acting READS frozen stats and never updates
+            # them, so train and eval standardize identically. Guards:
+            #   * flag off -> self.gsp_feature_stats is None -> byte-identical no-op.
+            #   * zero-out (H-14) severs the signal to a constant zero; leave it
+            #     zeroed (do NOT standardize a deliberately-severed slot).
+            #   * only standardize when the slot width matches the standardizer dim
+            #     (K). The JEPA-latent path (size > 5) and latent-primary are NOT the
+            #     scalar/K prediction this lever targets, so their width won't match
+            #     and they are skipped.
+            # Composition with GSP_EVAL_ABLATE_PRED: that ablation transforms
+            # heading_gsp UPSTREAM (in Main.py) before this method runs, so frozen_mean
+            # arrives here as the per-episode running MEAN of predictions; standardizing
+            # it with stats whose mean ~matches yields ~0 — the ablation still severs
+            # the signal, now on the normalized scale.
+            _stats = getattr(self, 'gsp_feature_stats', None)
+            if (
+                _stats is not None
+                and not getattr(self, 'gsp_zero_out_signal', False)
+                and gsp_slot.shape[0] == _stats.dim
+            ):
+                gsp_slot = _stats.standardize(gsp_slot)
             # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
             # so the actor's input is [latent | global] (or [latent]) — the actor is
             # forced to route through the encoder latent. Must stay in lockstep with
