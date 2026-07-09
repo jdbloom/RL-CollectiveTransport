@@ -223,6 +223,53 @@ _delta_theta_traj_label_scale = (
     (math.pi / 180.0) * _delta_theta_traj_label_rad_scale
 )
 
+# K-step trajectory targets — all share the delayed FIFO (push per step, pop at
+# maturity K steps later) and the auto-derived horizon-coupled GSP_OUTPUT_KIND.
+# Kept in lockstep with agent.py (_GSP_TRAJ_TARGETS) and GSP-RL learning_aids.py.
+#   delta_theta_traj      (size K)  per-step payload rotation, scaled (see above)
+#   goal_progress_traj    (size K)  per-step payload progress-to-goal delta
+#                                   (prev_cyl_dist2goal − curr, positive = toward
+#                                   goal — the exact quantity from the
+#                                   cyl_kinematics_goal_4d kind's 4th component).
+#                                   RAW meters — NO scaling; λ is set from the
+#                                   measured label std (F15 loss-balance lesson).
+#   cyl_displacement_traj (size 2K) per-step payload (Δx, Δy), flattened
+#                                   [Δx1,Δy1,…,ΔxK,ΔyK]. RAW meters — NO scaling.
+_GSP_TRAJ_TARGETS = (
+    'delta_theta_traj', 'goal_progress_traj', 'cyl_displacement_traj'
+)
+
+
+def _build_traj_label_from_windows(pred_target, ang_win, trk_win):
+    """Build the matured K-step trajectory label for `pred_target` from the
+    FIFO's ordered windows (oldest→newest, length K+1).
+
+    delta_theta_traj      → size-K wrapped per-step rotation (degrees; the
+                            caller applies _delta_theta_traj_label_scale on the
+                            E2E path, matching the pre-existing behavior).
+    goal_progress_traj    → size-K per-step progress-to-goal delta, RAW meters.
+    cyl_displacement_traj → size-2K flattened per-step (Δx, Δy), RAW meters.
+    """
+    if pred_target == 'delta_theta_traj':
+        return np.array([
+            angle_normalize_signed_deg(
+                float(ang_win[k + 1]) - float(ang_win[k])
+            )
+            for k in range(len(ang_win) - 1)
+        ], dtype=np.float32)
+    if pred_target == 'goal_progress_traj':
+        return np.array([
+            float(trk_win[k]['dist2goal']) - float(trk_win[k + 1]['dist2goal'])
+            for k in range(len(trk_win) - 1)
+        ], dtype=np.float32)
+    if pred_target == 'cyl_displacement_traj':
+        _disp = []
+        for k in range(len(trk_win) - 1):
+            _disp.append(float(trk_win[k + 1]['cyl_x']) - float(trk_win[k]['cyl_x']))
+            _disp.append(float(trk_win[k + 1]['cyl_y']) - float(trk_win[k]['cyl_y']))
+        return np.array(_disp, dtype=np.float32)
+    raise ValueError(f"not a trajectory target: {pred_target}")
+
 # Input enrichment flags — need to pass env_observations to make_gsp_states
 # when any flag is active. Read once so the hot loop avoids repeated dict lookup.
 _gsp_input_include_goal = bool(config.get('GSP_INPUT_INCLUDE_GOAL', False))
@@ -858,21 +905,49 @@ try:
                             #                   entries. angle_normalize_signed_deg wraps each per-step
                             #                   difference into [-180,180) so a boundary crossing
                             #                   (e.g. 179 → -179) is a small per-step delta, not ~358.
+                            #   goal_progress_traj → label = size-K GLOBAL payload progress-to-goal
+                            #                   TRAJECTORY over the next K steps: per-step
+                            #                   prev_cyl_dist2goal − curr_cyl_dist2goal (positive =
+                            #                   toward goal), the SAME K-vector for every robot.
+                            #                   Every step's payload track ({dist2goal, cyl_x, cyl_y})
+                            #                   is pushed into the FIFO; at maturity the pop returns
+                            #                   the ordered K+1-entry track window and we difference
+                            #                   consecutive dist2goal entries. RAW meters, no scaling.
+                            #   cyl_displacement_traj → label = size-2K GLOBAL payload displacement
+                            #                   TRAJECTORY over the next K steps, flattened
+                            #                   [Δx1,Δy1,…,ΔxK,ΔyK] from the same track window
+                            #                   (cyl_x/cyl_y = obj_stats[0]/[1]). RAW meters.
                             _gsp_pred_target = getattr(model, 'gsp_prediction_target', 'delta_theta')
-                            if _gsp_pred_target in ('future_prox', 'neighbor_force', 'delta_theta_traj'):
-                                if _gsp_pred_target == 'delta_theta_traj':
-                                    # Carry the CURRENT payload angle (degrees) so the full window
-                                    # of angles is available to build the per-step trajectory.
+                            if (_gsp_pred_target in ('future_prox', 'neighbor_force')
+                                    or _gsp_pred_target in _GSP_TRAJ_TARGETS):
+                                if _gsp_pred_target in _GSP_TRAJ_TARGETS:
+                                    # Carry the CURRENT payload angle (degrees) / payload track
+                                    # so the full window is available to build the per-step
+                                    # trajectory.
                                     # In E2E mode the head trains ONLY from learn_DDQN_e2e (the
                                     # head's own replay is unused), so this head-store FIFO push
                                     # is skipped there — the E2E delayed store runs its OWN single
                                     # push+pop at the RL-transition store site (below), where the
                                     # next-state + guards are available. Non-E2E keeps this push.
                                     if not config.get('GSP_E2E_ENABLED'):
-                                        model.push_pending_gsp_obs(
-                                            states, states, payload_angle_deg=float(obj_stats[5])
-                                        )
-                                    # Label is built from the returned angle window → pass None.
+                                        if _gsp_pred_target == 'delta_theta_traj':
+                                            model.push_pending_gsp_obs(
+                                                states, states, payload_angle_deg=float(obj_stats[5])
+                                            )
+                                        else:
+                                            # Global targets: carry the payload track (raw meters).
+                                            model.push_pending_gsp_obs(
+                                                states, states,
+                                                payload_track={
+                                                    'dist2goal': (
+                                                        float(env_observations[0][6])
+                                                        if len(env_observations) > 0 else 0.0
+                                                    ),
+                                                    'cyl_x': float(obj_stats[0]),
+                                                    'cyl_y': float(obj_stats[1]),
+                                                },
+                                            )
+                                    # Label is built from the returned window → pass None.
                                     _current_label = None
                                 elif _gsp_pred_target == 'neighbor_force':
                                     model.push_pending_gsp_obs(states, states)
@@ -892,28 +967,28 @@ try:
                                 else:  # future_prox
                                     model.push_pending_gsp_obs(states, states)
                                     _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
-                                # E2E delta_theta_traj owns the FIFO at the RL-store site
+                                # E2E trajectory targets own the FIFO at the RL-store site
                                 # (single push+pop there); skip the head-store pop here so
                                 # the two paths never double-consume the same buffer.
                                 _skip_head_store_pop = bool(
                                     config.get('GSP_E2E_ENABLED')
-                                    and _gsp_pred_target == 'delta_theta_traj'
+                                    and _gsp_pred_target in _GSP_TRAJ_TARGETS
                                 )
                                 matured = (
                                     None if _skip_head_store_pop
                                     else model.pop_matured_gsp_label(_current_label)
                                 )
                                 if matured is not None:
-                                    if _gsp_pred_target == 'delta_theta_traj':
-                                        # Build the size-K per-step wrapped rotation trajectory from
-                                        # the ordered angle window (oldest→newest), shared by all robots.
-                                        _ang_win = matured['payload_angle_window']
-                                        _traj = np.array([
-                                            angle_normalize_signed_deg(
-                                                float(_ang_win[k + 1]) - float(_ang_win[k])
-                                            )
-                                            for k in range(len(_ang_win) - 1)
-                                        ], dtype=np.float32)
+                                    if _gsp_pred_target in _GSP_TRAJ_TARGETS:
+                                        # Build the size-K (or 2K) per-step trajectory from the
+                                        # ordered FIFO window (oldest→newest), shared by all robots.
+                                        # delta_theta_traj: wrapped rotation (degrees); global
+                                        # targets: raw-meter progress / displacement deltas.
+                                        _traj = _build_traj_label_from_windows(
+                                            _gsp_pred_target,
+                                            matured['payload_angle_window'],
+                                            matured['payload_track_window'],
+                                        )
                                         _matured_labels = [
                                             _traj for _ in range(Utility.params['num_robots'])
                                         ]
@@ -1045,15 +1120,16 @@ try:
                                 float(stats[i][0]),             # applied force magnitude
                                 float(rewards[i][0]),           # scalar reward (anchors w.phi ~= r)
                             ], dtype=np.float32)
-                        # delta_theta_traj E2E: the RL transition AND its size-K
+                        # Trajectory-target E2E (delta_theta_traj / goal_progress_traj /
+                        # cyl_displacement_traj): the RL transition AND its size-K (2K)
                         # trajectory label are stored by the DELAYED FIFO path (they
                         # only mature K steps later), so the immediate store here is
-                        # skipped for that config to avoid double-storing the
+                        # skipped for those configs to avoid double-storing the
                         # transition. All other configs store immediately as before.
                         _defer_immediate_e2e_store = bool(
                             config.get('GSP_E2E_ENABLED')
                             and getattr(model, 'gsp_prediction_target', 'delta_theta')
-                            == 'delta_theta_traj'
+                            in _GSP_TRAJ_TARGETS
                         )
                         if time_steps > 2 and not _defer_immediate_e2e_store:
                             if train_mode:
@@ -1081,34 +1157,40 @@ try:
 
                         r.append(rewards[i][0])
 
-                    # --- delta_theta_traj E2E delayed main-replay store (Bug C Option 1) ---
+                    # --- trajectory-target E2E delayed main-replay store (Bug C Option 1) ---
                     # In E2E mode the head trains ONLY from learn_DDQN_e2e's MSE, so the
-                    # main-replay gsp_label must be the FUTURE K-step rotation trajectory,
-                    # which only matures K steps after the state is seen. Push the full
-                    # per-step RL transition + store guards through the delayed FIFO (one
-                    # entry per step, here where next-state + guards are complete), and at
-                    # maturity store (state_{t-K}, traj_label) co-indexed. The immediate
-                    # store above is skipped for this config (_defer_immediate_e2e_store),
-                    # so the transition is stored exactly once, with the correct label.
+                    # main-replay gsp_label must be the FUTURE K-step (or 2K for
+                    # cyl_displacement_traj) trajectory, which only matures K steps after
+                    # the state is seen. Push the full per-step RL transition + store
+                    # guards through the delayed FIFO (one entry per step, here where
+                    # next-state + guards are complete), and at maturity store
+                    # (state_{t-K}, traj_label) co-indexed. The immediate store above is
+                    # skipped for these configs (_defer_immediate_e2e_store), so the
+                    # transition is stored exactly once, with the correct label.
+                    # Labels: delta_theta_traj is scaled by _delta_theta_traj_label_scale
+                    # (pre-existing); goal_progress_traj / cyl_displacement_traj are RAW
+                    # meters — no scaling (λ is set from measured label std, F15 lesson).
                     #
                     # Shared-model only: `model` is undefined under --independent_learning
                     # (each robot has its own models[i] with its own delayed-label FIFO,
                     # reset per-model at episode end), so a single shared push/pop cannot
                     # co-index correctly. This mirrors the head-store block above, which is
-                    # likewise gated under the shared-model branch. E2E dtraj is a
-                    # single-model coordination study; if independent_learning support is
-                    # ever needed, route the push/pop through each models[i] FIFO.
+                    # likewise gated under the shared-model branch. E2E trajectory targets
+                    # are single-model coordination studies; if independent_learning support
+                    # is ever needed, route the push/pop through each models[i] FIFO.
+                    _gsp_pred_target_e2e = getattr(model, 'gsp_prediction_target', 'delta_theta') \
+                        if not args.independent_learning else 'delta_theta'
                     if (not args.independent_learning
                             and config.get('GSP_E2E_ENABLED')
-                            and getattr(model, 'gsp_prediction_target', 'delta_theta')
-                            == 'delta_theta_traj'):
+                            and _gsp_pred_target_e2e in _GSP_TRAJ_TARGETS):
                         # gsp_obs is only captured for the neighbors (GSP-N) head
                         # (populated inside `if model.gsp_neighbors`); a broadcast /
-                        # plain-GSP dtraj-E2E run would silently store zeroed gsp_obs
+                        # plain-GSP trajectory-E2E run would silently store zeroed gsp_obs
                         # and train the head on all-zero inputs. Fail loudly instead.
                         if not getattr(model, 'gsp_neighbors', False):
                             raise ValueError(
-                                "GSP_E2E_ENABLED + GSP_PREDICTION_TARGET=delta_theta_traj "
+                                "GSP_E2E_ENABLED + GSP_PREDICTION_TARGET="
+                                f"{_gsp_pred_target_e2e} "
                                 "is currently supported only for the GSP-N (neighbors) head "
                                 "— the E2E gsp_obs is captured only on that path."
                             )
@@ -1134,18 +1216,31 @@ try:
                                            else np.zeros(1, dtype=np.float32)
                                            for i in range(_n_r)],
                             payload_angle_deg=float(obj_stats[5]),
+                            payload_track={
+                                'dist2goal': (
+                                    float(env_observations[0][6])
+                                    if len(env_observations) > 0 else 0.0
+                                ),
+                                'cyl_x': float(obj_stats[0]),
+                                'cyl_y': float(obj_stats[1]),
+                            },
                             e2e_transition=_e2e_tx,
                         )
                         _matured_e2e = model.pop_matured_gsp_label(None)
                         if _matured_e2e is not None and _matured_e2e.get('e2e_transition') is not None:
-                            _ang_win = _matured_e2e['payload_angle_window']
-                            _traj_e2e = np.array([
-                                angle_normalize_signed_deg(
-                                    float(_ang_win[k + 1]) - float(_ang_win[k])
-                                )
-                                for k in range(len(_ang_win) - 1)
-                            ], dtype=np.float32)
-                            _traj_label = (_traj_e2e * _delta_theta_traj_label_scale).astype(np.float32)
+                            _traj_e2e = _build_traj_label_from_windows(
+                                _gsp_pred_target_e2e,
+                                _matured_e2e['payload_angle_window'],
+                                _matured_e2e['payload_track_window'],
+                            )
+                            if _gsp_pred_target_e2e == 'delta_theta_traj':
+                                # Pre-existing non-saturating rotation scale (deg → rad×10).
+                                _traj_label = (_traj_e2e * _delta_theta_traj_label_scale).astype(np.float32)
+                            else:
+                                # Global targets (goal_progress_traj / cyl_displacement_traj):
+                                # RAW meters — deliberately NO scaling. λ is tuned from the
+                                # measured label std (F15 loss-balance lesson).
+                                _traj_label = _traj_e2e.astype(np.float32)
                             _tx = _matured_e2e['e2e_transition']
                             if (_tx['guard_time_steps'] > 2
                                     and _tx['guard_train_mode']

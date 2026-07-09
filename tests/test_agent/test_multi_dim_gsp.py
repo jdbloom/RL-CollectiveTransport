@@ -264,7 +264,7 @@ class TestGspOutputKindDictSync:
             'delta_theta_1d', 'future_prox_1d',
             'cyl_kinematics_3d', 'cyl_kinematics_goal_4d',
             'time_to_goal_1d', 'neighbor_force_1d',
-            'delta_theta_traj',
+            'delta_theta_traj', 'goal_progress_traj', 'cyl_displacement_traj',
         ]
         for kind in canonical_kinds:
             # Should not raise
