@@ -134,6 +134,19 @@ else:
 # sequential for it. The Agent cannot see argparse; this key is its only view.
 config['INDEPENDENT_LEARNING'] = bool(args.independent_learning)
 
+# Same #53-B mirror for --global_knowledge (GSP-RL#42 review, finding 1):
+# under global knowledge, num_obs above INCLUDES the (R-1)*4 gk block while
+# make_agent_state places it AFTER the spliced GSP prediction, so the
+# advantage-only splice's (input_size, K) pred-column span would exclude the
+# gk TAIL instead of the pred — V would silently read the prediction.
+# Actor.build_networks (GSP-RL) reads this key and raises loudly when
+# GSP_SPLICE_ADVANTAGE_ONLY is set together with it — the same single
+# validation site as every other unsupported-scheme rejection, hit here at
+# Agent construction below, before any episode runs. Without the mirror the
+# Actor cannot see the CLI flag and the combination would build a
+# silently-mis-spanned dueling head.
+config['GLOBAL_KNOWLEDGE'] = bool(args.global_knowledge)
+
 agent_nn_args = {
     'config': config,
     'network': config['LEARNING_SCHEME'],
@@ -396,6 +409,26 @@ if _batched_actor_forward or _batched_gsp_engaged:
     )
 else:
     log.info("BATCHED_ACTOR_FORWARD: off (sequential)")
+
+# GSP_SPLICE_ADVANTAGE_ONLY (advantage-stream splice, GSP-RL#42) — fail-loud
+# engaged-path assertion, same contract as the BATCHED_ACTOR_FORWARD lines
+# above: exactly one of these two lines prints at every startup, keyed on the
+# Actor's OWN effective gate (Actor.build_networks validates the flag and sets
+# gsp_splice_advantage_engaged; unsupported schemes already raised at
+# construction), so the logged state can never drift from the built network.
+# The same two silent-drop traps apply: (a) a dispatcher daemon that imported
+# launcher.py before the passthrough merged drops the key from agent_config.yml
+# until the daemon is RESTARTED; (b) a cell pinned to a pre-GSP-RL#42 sha
+# ignores the key without error. Grep the first cell's log for
+# "GSP_SPLICE_ADVANTAGE_ONLY: ENGAGED" before trusting any advantage-splice arm.
+# Under --independent_learning every per-robot Agent shares one config, so
+# models[0] carries the same gate state as all of them.
+_adv_splice_model = models[0] if args.independent_learning else model
+if getattr(_adv_splice_model, 'gsp_splice_advantage_engaged', False):
+    log.info(
+        "GSP_SPLICE_ADVANTAGE_ONLY: ENGAGED (dueling, pred->advantage-only)")
+else:
+    log.info("GSP_SPLICE_ADVANTAGE_ONLY: off")
 
 # M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
 # Read once at startup. The prediction transform is applied at the single
