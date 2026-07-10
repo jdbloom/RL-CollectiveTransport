@@ -175,3 +175,40 @@ def test_warmup_flag_without_normalize_flag_is_inert():
     agent.gsp_eval_stats_warmup_active = True
     aug = agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
     assert abs(aug[-1] - np.degrees(0.5 / 10)) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# GSP_E2E_SPLICE_GAIN at the acting splice (GSP-RL#39 companion)
+# ---------------------------------------------------------------------------
+
+def test_splice_gain_default_is_noop():
+    agent = _agent_with_flag_on()
+    scale = np.degrees(1.0) / 10.0
+    aug = agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    # gain defaults to 1.0 (parsed in GSP-RL NetworkAids) -> plain scaled slot
+    # (stats cold -> standardize identity).
+    assert abs(aug[-1] - 0.5 * scale) < 1e-6
+
+
+def test_splice_gain_multiplies_slot_after_standardizer():
+    cfg = _load_base_config()
+    cfg["GSP_E2E_ENABLED"] = True
+    cfg["GSP_E2E_NORMALIZE_FEATURE"] = True
+    cfg["GSP_E2E_SPLICE_GAIN"] = 10.0
+    agent = Agent(**_base_agent_kwargs(cfg))
+    assert agent.gsp_e2e_splice_gain == 10.0
+    scale = np.degrees(1.0) / 10.0
+    # Stats cold -> standardize is identity -> slot = raw*scale*gain.
+    aug = agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    assert abs(aug[-1] - 0.5 * scale * 10.0) < 1e-5
+
+
+def test_splice_gain_zero_out_still_severs_to_zero():
+    cfg = _load_base_config()
+    cfg["GSP_E2E_ENABLED"] = True
+    cfg["GSP_E2E_NORMALIZE_FEATURE"] = True
+    cfg["GSP_E2E_SPLICE_GAIN"] = 10.0
+    cfg["GSP_ZERO_OUT_SIGNAL"] = True
+    agent = Agent(**_base_agent_kwargs(cfg))
+    aug = agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    assert aug[-1] == 0.0
