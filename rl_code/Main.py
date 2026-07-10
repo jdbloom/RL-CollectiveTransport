@@ -223,6 +223,39 @@ _delta_theta_traj_label_scale = (
     (math.pi / 180.0) * _delta_theta_traj_label_rad_scale
 )
 
+# GSP_TRAJ_LABEL_SCALE — fixed multiplier on the RAW-METER trajectory labels
+# (goal_progress_traj / cyl_displacement_traj), applied inside
+# _build_traj_label_from_windows so the head-store path, the E2E path, and the
+# h5 gsp_target logging all see ONE consistent target definition. Default 1.0
+# = byte-identical raw meters.
+#
+# Why (2026-07-10): raw meter labels (std ~2.5e-3/step) forced GSP_E2E_LAMBDA
+# to 40000 (F15 loss balance) and a post-hoc feature standardizer at the actor
+# splice — a route with three measured failure classes (Welford inflation, EMA
+# drift dominance, eval-restore gap; closed GSP-RL#36 + campaign correction).
+# Scaling the LABEL at the source (~400 → std ~1.0) makes the head emit O(1)
+# outputs directly: λ recalibrates to O(0.25-1), the splice needs no
+# standardizer (GSP_E2E_NORMALIZE_FEATURE off), the scale is baked into the
+# checkpointed head weights (nothing to persist or warm up at eval), and
+# train/eval standardize identically by construction. Mirrors the pre-existing
+# GSP_DELTA_THETA_TRAJ_LABEL_SCALE pattern: a fixed, STATELESS config scale —
+# deliberately not running label statistics. Pair scales that push |label|
+# past tanh range with GSP_E2E_LINEAR_OUTPUT=true.
+_gsp_traj_label_scale = float(config.get('GSP_TRAJ_LABEL_SCALE', 1.0))
+log.info("GSP_TRAJ_LABEL_SCALE = %s", _gsp_traj_label_scale)
+if _gsp_traj_label_scale != 1.0:
+    # The GSP head output is BOUNDED either way: tanh by default, and
+    # GSP_E2E_LINEAR_OUTPUT is a hard clamp at ±MIN_MAX_ACTION (ddpg.py), so
+    # labels pushed past that bound are unfittable (zero gradient at the
+    # clamp). Choose the scale so |label| stays inside the bound — measured
+    # cdt tails: per-step displacement absmax ~9.4e-3 m ⇒ scale 80 → 0.75.
+    log.warning(
+        "GSP_TRAJ_LABEL_SCALE=%s: head output is bounded (tanh or clamp at "
+        "±MIN_MAX_ACTION) — verify scaled |label| max stays inside the bound "
+        "(and note gsp_label_std/gsp_mse h5 metrics change units vs scale=1 runs)",
+        _gsp_traj_label_scale,
+    )
+
 # K-step trajectory targets — all share the delayed FIFO (push per step, pop at
 # maturity K steps later) and the auto-derived horizon-coupled GSP_OUTPUT_KIND.
 # Kept in lockstep with agent.py (_GSP_TRAJ_TARGETS) and GSP-RL learning_aids.py.
@@ -231,10 +264,11 @@ _delta_theta_traj_label_scale = (
 #                                   (prev_cyl_dist2goal − curr, positive = toward
 #                                   goal — the exact quantity from the
 #                                   cyl_kinematics_goal_4d kind's 4th component).
-#                                   RAW meters — NO scaling; λ is set from the
-#                                   measured label std (F15 loss-balance lesson).
+#                                   meters × GSP_TRAJ_LABEL_SCALE (default 1.0
+#                                   = raw; λ from measured label std, F15).
 #   cyl_displacement_traj (size 2K) per-step payload (Δx, Δy), flattened
-#                                   [Δx1,Δy1,…,ΔxK,ΔyK]. RAW meters — NO scaling.
+#                                   [Δx1,Δy1,…,ΔxK,ΔyK]. meters ×
+#                                   GSP_TRAJ_LABEL_SCALE (default 1.0 = raw).
 _GSP_TRAJ_TARGETS = (
     'delta_theta_traj', 'goal_progress_traj', 'cyl_displacement_traj'
 )
@@ -247,8 +281,10 @@ def _build_traj_label_from_windows(pred_target, ang_win, trk_win):
     delta_theta_traj      → size-K wrapped per-step rotation (degrees; the
                             caller applies _delta_theta_traj_label_scale on the
                             E2E path, matching the pre-existing behavior).
-    goal_progress_traj    → size-K per-step progress-to-goal delta, RAW meters.
-    cyl_displacement_traj → size-2K flattened per-step (Δx, Δy), RAW meters.
+    goal_progress_traj    → size-K per-step progress-to-goal delta, meters
+                            × _gsp_traj_label_scale.
+    cyl_displacement_traj → size-2K flattened per-step (Δx, Δy), meters
+                            × _gsp_traj_label_scale.
     """
     if pred_target == 'delta_theta_traj':
         return np.array([
@@ -259,7 +295,8 @@ def _build_traj_label_from_windows(pred_target, ang_win, trk_win):
         ], dtype=np.float32)
     if pred_target == 'goal_progress_traj':
         return np.array([
-            float(trk_win[k]['dist2goal']) - float(trk_win[k + 1]['dist2goal'])
+            (float(trk_win[k]['dist2goal']) - float(trk_win[k + 1]['dist2goal']))
+            * _gsp_traj_label_scale
             for k in range(len(trk_win) - 1)
         ], dtype=np.float32)
     if pred_target == 'cyl_displacement_traj':
@@ -267,7 +304,12 @@ def _build_traj_label_from_windows(pred_target, ang_win, trk_win):
         for k in range(len(trk_win) - 1):
             _disp.append(float(trk_win[k + 1]['cyl_x']) - float(trk_win[k]['cyl_x']))
             _disp.append(float(trk_win[k + 1]['cyl_y']) - float(trk_win[k]['cyl_y']))
-        return np.array(_disp, dtype=np.float32)
+        # Multiply in float64 BEFORE the float32 cast (single rounding, same
+        # convention as the goal_progress branch) so offline recomputation
+        # from raw h5 cyl positions reproduces the stored labels bit-exactly.
+        return (
+            np.asarray(_disp, dtype=np.float64) * _gsp_traj_label_scale
+        ).astype(np.float32)
     raise ValueError(f"not a trajectory target: {pred_target}")
 
 # Input enrichment flags — need to pass env_observations to make_gsp_states
@@ -1232,8 +1274,9 @@ try:
                     # skipped for these configs (_defer_immediate_e2e_store), so the
                     # transition is stored exactly once, with the correct label.
                     # Labels: delta_theta_traj is scaled by _delta_theta_traj_label_scale
-                    # (pre-existing); goal_progress_traj / cyl_displacement_traj are RAW
-                    # meters — no scaling (λ is set from measured label std, F15 lesson).
+                    # (pre-existing); goal_progress_traj / cyl_displacement_traj are
+                    # meters × GSP_TRAJ_LABEL_SCALE (applied inside the builder;
+                    # default 1.0 = raw, λ from measured label std, F15 lesson).
                     #
                     # Shared-model only: `model` is undefined under --independent_learning
                     # (each robot has its own models[i] with its own delayed-label FIFO,
@@ -1302,8 +1345,8 @@ try:
                                 _traj_label = (_traj_e2e * _delta_theta_traj_label_scale).astype(np.float32)
                             else:
                                 # Global targets (goal_progress_traj / cyl_displacement_traj):
-                                # RAW meters — deliberately NO scaling. λ is tuned from the
-                                # measured label std (F15 loss-balance lesson).
+                                # meters × GSP_TRAJ_LABEL_SCALE, applied inside the builder
+                                # (default 1.0 = raw; λ from measured label std, F15).
                                 _traj_label = _traj_e2e.astype(np.float32)
                             _tx = _matured_e2e['e2e_transition']
                             if (_tx['guard_time_steps'] > 2

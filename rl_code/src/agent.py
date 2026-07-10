@@ -513,7 +513,11 @@ class Agent(Actor):
                     scalar_val = float(heading_gsp_arr.ravel()[0])
                     gsp_slot = np.array([np.degrees(scalar_val / 10)], dtype=np.float32)
                 else:
-                    # Vector path — physical units from label computation, no rescaling.
+                    # Vector path — spliced as-is (no per-slot rescaling here).
+                    # Units are whatever the label pipeline trained the head
+                    # on: raw physical units by default, or meters ×
+                    # GSP_TRAJ_LABEL_SCALE for the metric trajectory kinds
+                    # (Main.py applies that scale inside the label builder).
                     gsp_slot = heading_gsp_arr.ravel()
             # GSP_E2E_NORMALIZE_FEATURE (opt-in): standardize the spliced GSP
             # prediction to ~unit variance so it lands on the same scale as the
