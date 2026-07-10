@@ -239,6 +239,15 @@ class Agent(Actor):
         # When True, the prediction is greedy even during training (test=False).
         # Default False keeps all existing experiments bit-identical.
         self._gsp_prediction_deterministic = bool(config.get('GSP_PREDICTION_DETERMINISTIC', False))
+        # #53 Sub-project B — batched-agent forward (opt-in, BASELINE-CHANGING).
+        # When True, the CTDE acting loop (Main.py) and the stateless GSP-head
+        # prediction loop (choose_agent_gsp) route the R per-robot forwards
+        # through ONE stacked choose_actions_batch call on the shared net.
+        # Changes float-reduction order and collapses the R epsilon-greedy
+        # gate draws to one — activation is gated on the pre-registered n-seed
+        # noise-floor re-baseline. Default False = byte-identical legacy
+        # sequential path (each robot forwards alone, exactly as before).
+        self.batched_actor_forward = bool(config.get('BATCHED_ACTOR_FORWARD', False))
 
         gsp_rl_args = {
             'config': config,
@@ -907,7 +916,33 @@ class Agent(Actor):
             action_num = None
 
         return actions, action_num
-    
+
+    def choose_agent_actions_batch(self, observations, test=False):
+        """#53-B batched CTDE acting: one stacked forward for ALL robots.
+
+        Mirrors the per-robot choose_agent_action loop for the DQN/DDQN
+        no-failure common case. The caller (Main.py) is responsible for the
+        gate: BATCHED_ACTOR_FORWARD on, shared CTDE model, DQN/DDQN scheme,
+        and NO failed robot this step — any failure falls back to the
+        sequential path so failure semantics stay legacy-exact.
+
+        Baseline-changing by contract (see batched_actor_forward in __init__):
+        batched matmul float order + ONE epsilon gate draw for the whole step.
+
+        Returns (actions_to_take, action_nums) — the same two lists the
+        legacy loop builds one robot at a time.
+        """
+        if self.networks['learning_scheme'] not in ('DQN', 'DDQN'):
+            raise NotImplementedError(
+                'choose_agent_actions_batch supports DQN/DDQN only; '
+                f"got {self.networks['learning_scheme']}. Use the sequential "
+                'choose_agent_action loop.'
+            )
+        self.failed = False
+        action_nums = self.choose_actions_batch(observations, self.networks, test)
+        actions = [self.parse_action(a) for a in action_nums]
+        return actions, action_nums
+
     def choose_agent_gsp(self, agent_gsp_states, test = False):
         # The GSP head is a supervised regressor; when configured deterministic,
         # its prediction is greedy (no exploration noise) even during training.
@@ -937,6 +972,22 @@ class Agent(Actor):
                     return latent
 
         if self._neighbors or self._broadcast:
+            # #53-B batched-agent forward: stack the R per-agent GSP inputs
+            # into one (R, gsp_input_size) forward through the shared
+            # stateless DDPG head instead of R sequential forwards. Opt-in and
+            # baseline-changing (batched matmul float order; exploration noise
+            # drawn as one (R, K) tensor). Recurrent (RDDPG) and attention
+            # heads keep the sequential path — they carry per-agent state, so
+            # batching would change semantics, not just float order (see
+            # kb/wiki/concepts/batched-inference.md).
+            if (self.batched_actor_forward
+                    and not self.recurrent_gsp
+                    and self.gsp_networks.get('learning_scheme') == 'DDPG'):
+                batched = self.choose_actions_batch(
+                    agent_gsp_states, self.gsp_networks, gsp_test)
+                # Same consumer contract as the sequential loop: a list with
+                # one (K,) prediction vector per agent.
+                return list(batched)
             # Per-agent predictions with self-centric inputs. GSP-N (neighbors)
             # and GSP-B (broadcast) share the same per-agent forward-pass shape;
             # only the input vector differs. Non-recurrent broadcast uses the
