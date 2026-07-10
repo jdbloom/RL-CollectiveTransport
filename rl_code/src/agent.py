@@ -586,7 +586,17 @@ class Agent(Actor):
             # to a zero-out-severed slot (0 × gain = 0 anyway, but skipping
             # keeps the guard structure symmetric with the standardizer block).
             _gain = float(getattr(self, 'gsp_e2e_splice_gain', 1.0))
-            if _gain != 1.0 and not getattr(self, 'gsp_zero_out_signal', False):
+            if (
+                _gain != 1.0
+                and not getattr(self, 'gsp_zero_out_signal', False)
+                # JEPA-latent / latent-primary slots are NOT the K-dim
+                # prediction this lever targets, and their learn-side splices
+                # do not apply the gain — skip them here too (mirrors the
+                # standardizer's self-exclusion above) or the Bellman input
+                # would mix scales.
+                and not getattr(self, 'gsp_jepa_enabled', False)
+                and not getattr(self, 'gsp_actor_latent_primary', False)
+            ):
                 gsp_slot = gsp_slot * _gain
             # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
             # so the actor's input is [latent | global] (or [latent]) — the actor is

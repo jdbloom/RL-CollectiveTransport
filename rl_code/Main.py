@@ -377,7 +377,9 @@ _pred_frozen_mean_state = RunningMeanState()
 # Caveat: warm-up estimates the FINAL head's output stats, while training
 # standardized with all-history stats; valid when the training run's
 # e2e_gsp_feature_std_postnorm held ~1.0 (stationary feature scale), as in the
-# lambda=100 dtraj campaign cells this exists to re-verdict.
+# lambda=100 dtraj campaign cells this exists to re-verdict. NOTE: since
+# GSP-RL#39 the postnorm channel reads AFTER the fixed splice gain — for a
+# gain-G run the healthy stationary value is ~G, not ~1.0.
 _gsp_eval_stats_warmup_eps = int(config.get('GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES', 0))
 log.info("GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES = %s", _gsp_eval_stats_warmup_eps)
 _in_stats_warmup = False
