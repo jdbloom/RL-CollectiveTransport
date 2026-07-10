@@ -19,8 +19,15 @@ Contract under test (flag-gated, default OFF = byte-identical):
     done=True and stores nothing afterwards (logical termination).
 (e) Penalty-only (TERMINATE=false, PENALTY<0) never terminates.
 (f) Startup log line: exactly one of ENGAGED/off, keyed on the effective gate.
-(g) h5 per-episode attrs (contact_terminated/contact_step/contact_count)
-    written when engaged, absent (byte-identical h5) when off.
+(g) h5 per-episode attrs (contact_terminated/contact_step/contact_count/
+    contact_store_dropped) written when engaged, absent (byte-identical h5)
+    when off.
+(h) contact_store_dropped edges (2026-07-10 review findings): a terminating
+    contact within K steps of the physical episode end leaves its done=True
+    E2E transition unmatured in the delayed FIFO (flagged by
+    Agent.unmatured_done_e2e_transitions before the buffer reset deletes it);
+    a terminating contact at time_steps<=2 is dropped by the legacy store
+    guard. Both are LOUD (INFO log + attr), neither changes store behavior.
 """
 
 import numpy as np
@@ -486,7 +493,7 @@ class TestH5ContactAttrs:
             logger.record_contact_state(**contact_state)
         logger.write_episode(0)
 
-    def test_engaged_episode_writes_the_three_attrs(self, tmp_path):
+    def test_engaged_episode_writes_the_four_attrs(self, tmp_path):
         p = str(tmp_path / "contact.h5")
         self._run_episode(p, dict(terminated=True, contact_step=42, contact_count=1))
         with h5py.File(p) as f:
@@ -494,6 +501,18 @@ class TestH5ContactAttrs:
             assert bool(attrs["contact_terminated"]) is True
             assert int(attrs["contact_step"]) == 42
             assert int(attrs["contact_count"]) == 1
+            # store_dropped defaults False and is ALWAYS written on engaged
+            # episodes (the denominator must be computable, not inferred).
+            assert bool(attrs["contact_store_dropped"]) is False
+
+    def test_store_dropped_attr_written_when_flagged(self, tmp_path):
+        p = str(tmp_path / "dropped.h5")
+        self._run_episode(p, dict(terminated=True, contact_step=3,
+                                  contact_count=1, store_dropped=True))
+        with h5py.File(p) as f:
+            attrs = f["episode_0000"].attrs
+            assert bool(attrs["contact_terminated"]) is True
+            assert bool(attrs["contact_store_dropped"]) is True
 
     def test_no_contact_episode_of_engaged_run_records_denominator(self, tmp_path):
         p = str(tmp_path / "nocontact.h5")
@@ -503,6 +522,7 @@ class TestH5ContactAttrs:
             assert bool(attrs["contact_terminated"]) is False
             assert int(attrs["contact_step"]) == -1
             assert int(attrs["contact_count"]) == 0
+            assert bool(attrs["contact_store_dropped"]) is False
 
     def test_off_path_h5_byte_identical_and_attr_free(self, tmp_path):
         """Rule off (record_contact_state never called): no contact attrs, and
@@ -516,6 +536,7 @@ class TestH5ContactAttrs:
             assert "contact_terminated" not in attrs
             assert "contact_step" not in attrs
             assert "contact_count" not in attrs
+            assert "contact_store_dropped" not in attrs
         # Dataset bytes identical (additive-only guard, M4 pattern).
         def dataset_bytes(path):
             out = {}
@@ -612,3 +633,184 @@ class TestMainSourceContract:
     def test_outcome_gate_counts_contact_termination_as_failure(self):
         text = self._main_text()
         assert "_ep_outcome_success = reached_goal and not _contact_logical_done" in text
+
+    # --- (h) contact_store_dropped wiring (2026-07-10 review findings) ----
+
+    def test_store_dropped_edges_are_loud_and_recorded(self):
+        """Both drop edges log the same greppable INFO prefix, and the flag
+        reaches the h5 attrs through record_contact_state."""
+        text = self._main_text()
+        # Two INFO sites: the time_steps<=2 legacy-guard edge and the
+        # unmatured-FIFO edge at episode end.
+        assert text.count("OBSTACLE_CONTACT store dropped:") == 2
+        assert "store_dropped=_contact_store_dropped," in text
+        assert "_contact_store_dropped = False" in text  # per-episode reset
+
+    def test_fifo_flush_check_runs_before_buffer_reset(self):
+        """The unmatured-done scan must run BEFORE reset_gsp_label_buffer
+        deletes the evidence."""
+        text = self._main_text()
+        scan = text.find("model.unmatured_done_e2e_transitions()")
+        reset = text.find("model.reset_gsp_label_buffer()")
+        assert -1 not in (scan, reset)
+        assert scan < reset
+
+    def test_timesteps_leq_2_edge_flagged_at_the_flip_site(self):
+        """The <=2 edge is detected where the logical termination flips (so
+        it covers BOTH the immediate-store guard and the E2E maturity
+        guard_time_steps>2 drop of the same transition)."""
+        text = self._main_text()
+        flip = text.find("_contact_logical_done = True")
+        edge = text.find("if time_steps <= 2:")
+        assert -1 not in (flip, edge)
+        assert edge < flip  # inside the same terminate block, before the flip
+
+
+# ---------------------------------------------------------------------------
+# (h) K-step FIFO edge — the real Agent FIFO, boundary-exact
+# ---------------------------------------------------------------------------
+
+def _make_traj_agent(K):
+    """Real Agent with a delayed-label trajectory target and horizon K
+    (the E2E FIFO configuration the contact rule threads done=True through)."""
+    import os
+    import sys
+    import yaml
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(__file__), "..", "..", "rl_code", "src"))
+    from agent import Agent  # noqa: E402
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "GSP-RL",
+        "tests", "test_actor", "config.yml",
+    )
+    with open(cfg_path, "r") as f:
+        config = yaml.safe_load(f)
+    config["GSP_PREDICTION_TARGET"] = "delta_theta_traj"
+    config["GSP_PREDICTION_HORIZON"] = K
+    return Agent(
+        config=config, network="DDQN", n_agents=4, n_obs=8, n_actions=2,
+        options_per_action=3, id=1, min_max_action=1.0, meta_param_size=2,
+        gsp=True, recurrent=False, attention=False, neighbors=True,
+        gsp_input_size=6, gsp_output_size=1, gsp_min_max_action=1.0,
+        gsp_look_back=2, gsp_sequence_length=5,
+    )
+
+
+def _push(agent, e2e_transition, angle=0.0):
+    """One Main.py-shaped FIFO push (state/gsp_obs content irrelevant here)."""
+    agent.push_pending_gsp_obs(
+        [np.zeros(8, dtype=np.float32)] * 4,
+        [np.zeros(6, dtype=np.float32)] * 4,
+        payload_angle_deg=angle,
+        payload_track={"dist2goal": 0.0, "cyl_x": 0.0, "cyl_y": 0.0},
+        e2e_transition=e2e_transition,
+    )
+
+
+def _contact_tx():
+    """Minimal Main.py _e2e_tx shape for a TERMINATING-contact step: the
+    contact-aware done=True with ARGoS still running (guard_episode_done
+    False) — exactly what distinguishes it from a legacy terminal push."""
+    return {"done": True, "guard_episode_done": False, "guard_time_steps": 50}
+
+
+class TestUnmaturedDoneFifoEdge:
+    def test_contact_within_k_of_physical_end_is_flagged(self):
+        """Contact at K-1 pushes before the physical end: the done=True entry
+        has NOT matured when the episode ends — the scan must surface it
+        (Main.py then logs + sets contact_store_dropped before the reset)."""
+        K = 5
+        agent = _make_traj_agent(K)
+        for _ in range(3):  # some pre-contact steps (mature + drain normally)
+            _push(agent, {"done": False, "guard_episode_done": False,
+                          "guard_time_steps": 10})
+            agent.pop_matured_gsp_label(None)
+        _push(agent, _contact_tx())  # the terminating contact step
+        agent.pop_matured_gsp_label(None)
+        for _ in range(K - 1):  # zombie pushes, one short of maturity
+            _push(agent, None)
+            agent.pop_matured_gsp_label(None)
+
+        unmatured = agent.unmatured_done_e2e_transitions()
+        assert len(unmatured) == 1
+        assert unmatured[0]["done"] is True
+        # ... and the reset (what Main.py calls right after) silently deletes
+        # it — the reason the scan exists.
+        agent.reset_gsp_label_buffer()
+        assert agent.unmatured_done_e2e_transitions() == []
+
+    def test_contact_k_or_more_before_end_matures_and_is_not_flagged(self):
+        """Contact ≥ K pushes before the end: the transition matures out of
+        the FIFO (stored by Main.py's maturity block) — nothing to flag."""
+        K = 5
+        agent = _make_traj_agent(K)
+        _push(agent, _contact_tx())
+        matured_done = []
+        for _ in range(K + 1):  # full maturation window of zombie pushes
+            _push(agent, None)
+            m = agent.pop_matured_gsp_label(None)
+            if m is not None and m.get("e2e_transition") is not None:
+                matured_done.append(m["e2e_transition"])
+        assert len(matured_done) == 1  # it matured (Main.py stores it here)
+        assert matured_done[0]["done"] is True
+        assert agent.unmatured_done_e2e_transitions() == []
+
+    def test_argos_terminal_push_is_not_counted(self):
+        """A legacy ARGoS-terminal push (done=True via _step_store_done but
+        guard_episode_done=True) is the never-stored legacy terminal, not a
+        contact drop — must not be flagged."""
+        agent = _make_traj_agent(5)
+        _push(agent, {"done": True, "guard_episode_done": True,
+                      "guard_time_steps": 4500})
+        assert agent.unmatured_done_e2e_transitions() == []
+
+    def test_no_op_for_non_delayed_targets(self):
+        """delta_theta (immediate-label) agents never populate the FIFO; the
+        scan is an empty no-op."""
+        import os
+        import sys
+        import yaml
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(__file__), "..", "..", "rl_code", "src"))
+        from agent import Agent  # noqa: E402
+        cfg_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "GSP-RL",
+            "tests", "test_actor", "config.yml",
+        )
+        with open(cfg_path, "r") as f:
+            config = yaml.safe_load(f)
+        agent = Agent(
+            config=config, network="DDQN", n_agents=4, n_obs=8, n_actions=2,
+            options_per_action=3, id=1, min_max_action=1.0, meta_param_size=2,
+            gsp=True, recurrent=False, attention=False, neighbors=True,
+            gsp_input_size=6, gsp_output_size=1, gsp_min_max_action=1.0,
+            gsp_look_back=2, gsp_sequence_length=5,
+        )
+        _push(agent, _contact_tx())  # no-op push (not a delayed-label target)
+        assert agent.unmatured_done_e2e_transitions() == []
+
+
+# ---------------------------------------------------------------------------
+# (h) time_steps<=2 edge — the legacy guard drops the terminal transition
+# ---------------------------------------------------------------------------
+
+class TestTimestepsLeq2Edge:
+    def test_contact_at_step_2_stores_nothing(self):
+        """Terminating contact at t=2: the episode logically terminates
+        (attrs count it) but the legacy t>2 store guard drops the
+        penalty-bearing done=True transition — no behavior change, the edge
+        is only made visible (INFO + contact_store_dropped, wiring pinned by
+        TestMainSourceContract.test_timesteps_leq_2_edge_flagged_at_the_flip_site)."""
+        rule = ContactRule(
+            {"OBSTACLE_CONTACT_TERMINATE": True, "OBSTACLE_CONTACT_PENALTY": -10.0},
+            num_obstacles=2,
+        )
+        traj = {1: _FAR, 2: _touching()}
+        stored, contact_state, _ = _run_fake_episode(
+            rule, traj, _OBSTACLES, episode_len=20)
+        # Logically terminated at step 2 ...
+        assert contact_state["contact_terminated"] is True
+        assert contact_state["contact_step"] == 2
+        # ... but NOTHING was stored: the contact step fails the t>2 guard
+        # and the zombie phase suppresses every later store.
+        assert stored == []

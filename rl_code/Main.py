@@ -588,9 +588,15 @@ try:
             # (agent or GSP-head) enters any replay buffer for the rest of
             # the physical episode. _contact_first_step / _contact_events
             # feed the per-episode h5 attrs (contact_step / contact_count).
+            # _contact_store_dropped: True when the penalty-bearing done=True
+            # contact transition was NOT stored (the time_steps<=2 legacy
+            # guard, or the E2E FIFO entry never maturing before the physical
+            # episode end) — h5 attr contact_store_dropped, so kill-criteria
+            # denominators can subtract these episodes.
             _contact_logical_done = False
             _contact_first_step = -1
             _contact_events = 0
+            _contact_store_dropped = False
 
             # Eval feature-stats warm-up phase for this episode (see the
             # GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES block above). The flag on
@@ -1589,6 +1595,26 @@ try:
                     # h5 per-step logging continues (analysis truncates at the
                     # contact_step attr).
                     if _contact_now and _contact_rule.terminate:
+                        # time_steps<=2 edge (2026-07-10 review finding): the
+                        # legacy `time_steps > 2` store guard (immediate path)
+                        # and the matching `guard_time_steps > 2` maturity
+                        # guard (E2E FIFO path) both drop this step's
+                        # transition — the episode logically terminates but
+                        # the penalty-bearing done=True transition never
+                        # reaches any replay buffer. No behavior change here
+                        # (the guard predates the rule); just make the edge
+                        # LOUD and countable (contact_store_dropped attr).
+                        if time_steps <= 2:
+                            _contact_store_dropped = True
+                            log.info(
+                                "OBSTACLE_CONTACT store dropped: terminating "
+                                "contact at step %d <= 2 (episode=%d) — the "
+                                "legacy time_steps>2 store guard drops the "
+                                "penalty-bearing done=True transition; "
+                                "kill-criteria denominators must subtract "
+                                "contact_store_dropped episodes",
+                                time_steps, ep_counter,
+                            )
                         _contact_logical_done = True
 
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
@@ -1715,6 +1741,40 @@ try:
                             )
 
                     if episode_done:
+                        # OBSTACLE-CONTACT K-step FIFO edge (2026-07-10 review
+                        # finding): a terminating contact within K steps of the
+                        # PHYSICAL episode end leaves its penalty-bearing
+                        # done=True E2E transition unmatured in the delayed
+                        # FIFO — reset_gsp_label_buffer below would delete it
+                        # silently while the attrs still count the termination.
+                        # It IS dropped (agent.unmatured_done_e2e_transitions
+                        # docstring records the no-mock-data option analysis:
+                        # no padding convention exists in
+                        # _build_traj_label_from_windows, and the replay store
+                        # has no absent-label mask — gsp_label=None stores
+                        # zeros straight into the head's batch MSE), but
+                        # LOUDLY: INFO log + the contact_store_dropped h5 attr
+                        # so kill-criteria denominators can subtract these
+                        # episodes. Shared-model only, like the E2E FIFO path
+                        # itself (independent_learning never populates
+                        # e2e_transition).
+                        if (not args.independent_learning
+                                and _contact_rule.enabled
+                                and hasattr(model, 'unmatured_done_e2e_transitions')):
+                            _unmatured_done = model.unmatured_done_e2e_transitions()
+                            if _unmatured_done:
+                                _contact_store_dropped = True
+                                log.info(
+                                    "OBSTACLE_CONTACT store dropped: episode=%d "
+                                    "ended %d step(s) after the terminating "
+                                    "contact (< K) — the penalty-bearing "
+                                    "done=True E2E transition never matured in "
+                                    "the delayed FIFO and is dropped with it; "
+                                    "kill-criteria denominators must subtract "
+                                    "contact_store_dropped episodes",
+                                    ep_counter,
+                                    time_steps - _contact_first_step,
+                                )
                         if args.independent_learning:
                             for m in models:
                                 if hasattr(m, 'reset_hidden_states'):
@@ -1871,6 +1931,7 @@ try:
                                 terminated=_contact_logical_done,
                                 contact_step=_contact_first_step,
                                 contact_count=_contact_events,
+                                store_dropped=_contact_store_dropped,
                             )
 
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5

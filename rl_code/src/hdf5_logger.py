@@ -366,7 +366,8 @@ class HDF5Logger:
         )
         self.cand_target_centroid_goal.append(float(centroid_goal))
 
-    def record_contact_state(self, terminated, contact_step, contact_count) -> None:
+    def record_contact_state(self, terminated, contact_step, contact_count,
+                             store_dropped=False) -> None:
         """Record the OBSTACLE-CONTACT rule's per-episode outcome.
 
         Called once per episode from Main.py, before write_episode, ONLY when
@@ -385,11 +386,21 @@ class HDF5Logger:
           contact_count       int — number of contact steps this episode
               (readout for the contact-rate-per-episode metric; > 1 only in
               penalty-only mode, where the penalty re-applies per step).
+          contact_store_dropped  bool — the penalty-bearing done=True contact
+              transition was NOT stored in any replay buffer (either the
+              legacy time_steps<=2 store guard, or a terminating contact
+              within K steps of the physical episode end whose E2E FIFO
+              entry never matured before reset_gsp_label_buffer). Both edges
+              are also logged at INFO ("OBSTACLE_CONTACT store dropped:").
+              The episode counted as terminated but the learner never saw
+              the grounded terminal — kill-criteria/verdict denominators
+              must subtract these episodes.
         """
         self.contact_state = {
             "contact_terminated": bool(terminated),
             "contact_step": int(contact_step),
             "contact_count": int(contact_count),
+            "contact_store_dropped": bool(store_dropped),
         }
 
     def record_stored_transition(self, label, input_vec) -> None:
@@ -591,6 +602,10 @@ class HDF5Logger:
             timesteps = len(self.reward)
             success = bool(np.any(term_arr)) if term_arr.size > 0 else False
 
+            # OBSTACLE-CONTACT caveat: on contact_terminated episodes this sums
+            # the FULL physical episode INCLUDING the learner-invisible zombie
+            # phase — engaged-run analysis must recompute from the per-step
+            # reward dataset truncated at the contact_step attr, not read this.
             if rewards.ndim == 2:
                 reward_per_robot = np.sum(rewards, axis=0).tolist()
             elif rewards.size > 0:
