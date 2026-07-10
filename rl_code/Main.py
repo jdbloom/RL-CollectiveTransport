@@ -5,6 +5,7 @@ from src.env import calculate_gsp_reward, ZMQ_Utility, angle_normalize_signed_de
 from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
+from src.contact_rule import ContactRule
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -430,6 +431,26 @@ if getattr(_adv_splice_model, 'gsp_splice_advantage_engaged', False):
 else:
     log.info("GSP_SPLICE_ADVANTAGE_ONLY: off")
 
+# OBSTACLE-CONTACT rule (operator-directed 2026-07-10) — flag-gated, default
+# OFF = byte-identical. See src/contact_rule.py for the full mechanism note
+# (shared terminal consequence -> natural occlusion -> forecast becomes
+# decision-relevant) and the zombie-phase caveat (ARGoS owns the physical
+# episode state machine; termination here is LOGICAL/learner-visible: the
+# contact-step transition stores with done=True and nothing after it enters
+# any replay buffer, while the physical episode runs to its natural end).
+# Fail-loud engaged-path assertion — exactly one of the two lines prints at
+# every startup, keyed on the rule's own effective gate (terminate or
+# penalty != 0), same contract as the BATCHED_ACTOR_FORWARD /
+# GSP_SPLICE_ADVANTAGE_ONLY lines above. The same two silent-drop traps
+# apply: (a) a dispatcher daemon that imported launcher.py before the
+# OBSTACLE_CONTACT_* passthrough merged drops the keys from agent_config.yml
+# until the daemon is RESTARTED; (b) a cell pinned to a pre-contact-rule
+# RL-CT sha ignores the keys without error. Grep the first cell's log for
+# "OBSTACLE_CONTACT rule: ENGAGED" before trusting any contact-rule arm.
+# ContactRule raises loudly when the rule is engaged in an obstacle-free env.
+_contact_rule = ContactRule(config, Utility.params['num_obstacles'])
+log.info(_contact_rule.startup_line())
+
 # M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
 # Read once at startup. The prediction transform is applied at the single
 # next_heading_gsp injection site via src.pred_ablation.apply_pred_ablation.
@@ -561,6 +582,15 @@ try:
             # M2: reset the frozen_mean running-mean accumulator at every episode
             # boundary so the prediction mean never bleeds across episodes.
             _pred_frozen_mean_state = RunningMeanState()
+
+            # OBSTACLE-CONTACT per-episode state. _contact_logical_done marks
+            # the zombie phase (terminate mode): once True, no NEW transition
+            # (agent or GSP-head) enters any replay buffer for the rest of
+            # the physical episode. _contact_first_step / _contact_events
+            # feed the per-episode h5 attrs (contact_step / contact_count).
+            _contact_logical_done = False
+            _contact_first_step = -1
+            _contact_events = 0
 
             # Eval feature-stats warm-up phase for this episode (see the
             # GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES block above). The flag on
@@ -737,6 +767,39 @@ try:
                         obstacle_stats = Utility.parse_obstacle_stats(msgs[7])
                     elif Utility.params['use_gate'] == 1:
                         gate_stats = Utility.parse_gate_stats(msgs[7])
+
+                    # OBSTACLE-CONTACT detection — post-step global sim state
+                    # (robot_stats + obstacle_stats, both just parsed). CTDE:
+                    # the reward side reads global state; observations are
+                    # untouched. Default-off path is a single False check.
+                    # In penalty-only mode every in-contact step is a contact
+                    # event (dense re-application); in terminate mode only
+                    # the first fires (the zombie phase suppresses the rest).
+                    _contact_now = False
+                    if _contact_rule.enabled and not _contact_logical_done:
+                        _c_hit, _c_robot, _c_obs, _c_dist = _contact_rule.detect(
+                            robot_stats, obstacle_stats)
+                        if _c_hit:
+                            _contact_now = True
+                            _contact_events += 1
+                            if _contact_first_step < 0:
+                                _contact_first_step = time_steps
+                            # The analysis reads these event lines — keep the
+                            # fields (episode, step, robot, obstacle, dist).
+                            log.info(
+                                "OBSTACLE_CONTACT event: episode=%d step=%d "
+                                "robot=%d obstacle=%d dist=%.4f terminate=%s",
+                                ep_counter, time_steps, _c_robot, _c_obs,
+                                _c_dist, _contact_rule.terminate,
+                            )
+                    # done flag for THIS step's stored transitions: ARGoS
+                    # terminal state OR a terminating contact. Flag off ->
+                    # `episode_done or False` == episode_done (byte-identical).
+                    # Cuts the DDQN bootstrap (q_next[dones]=0, GSP-RL
+                    # learning_aids) so the contact-step Q-target is exactly
+                    # the shared penalty-bearing reward.
+                    _step_store_done = bool(episode_done) or (
+                        _contact_now and _contact_rule.terminate)
 
                     ############################## gsp REWARD ##############################################
                     gsp_reward, label, gsp_squared_error, raw_diff_rad = calculate_gsp_reward(
@@ -1067,7 +1130,19 @@ try:
                         # docs/research/2026-04-13-gsp-ddpg-vs-attention-collapse.md).
                         # 0.0 = filter disabled (legacy behavior).
                         force_thr = float(config.get('GSP_STORE_FORCE_THRESHOLD', 0.0))
-                        if model.gsp_neighbors:
+                        if _contact_logical_done:
+                            # OBSTACLE-CONTACT zombie phase: the episode is
+                            # logically terminated — no NEW head-training data
+                            # may enter the GSP replay (prediction above still
+                            # runs; the actor keeps acting until ARGoS ends the
+                            # physical episode). The head-store FIFO's unmatured
+                            # pre-contact entries are dropped exactly as a real
+                            # termination would drop them (reset_gsp_label_buffer
+                            # at episode end). E2E-traj cells never used this
+                            # path anyway (their FIFO lives at the RL-store site
+                            # below, which keeps maturing pre-contact pushes).
+                            pass
+                        elif model.gsp_neighbors:
                             _env_obs_arg = env_observations if _gsp_input_needs_env_obs else None
                             states, state_prox_flags = model.make_gsp_states(
                                 old_agent_prox_flags, neighbors_old_heading_gsp, True,
@@ -1255,6 +1330,17 @@ try:
                         prox_values = env_observations[i][7:]
                         prox_value = np.sum(prox_values)
                         rewards[i] += (-1)*prox_value
+                        # OBSTACLE-CONTACT shared penalty: on a contact step
+                        # the SAME value is added to EVERY robot's individual
+                        # reward — shared consequence is the whole mechanism
+                        # (the far-side robot must feel the near-side contact).
+                        # Per-robot reward convention: rewards here are
+                        # per-robot streams; do NOT divide by num_robots (the
+                        # summed/num_robots normalization lives in analysis,
+                        # never in the reward). Default off: _contact_now is
+                        # always False -> bit-identical reward stream.
+                        if _contact_now:
+                            rewards[i] += _contact_rule.penalty
                         # H-phase5-2 reward shaping: when GSP_REWARD_COEF > 0, add
                         # gsp_reward[i] (signed prediction-error penalty in [-2, 0])
                         # scaled by coef to the actor's training reward. Default 0.0
@@ -1332,7 +1418,17 @@ try:
                             and getattr(model, 'gsp_prediction_target', 'delta_theta')
                             in _GSP_TRAJ_TARGETS
                         )
-                        if time_steps > 2 and not _defer_immediate_e2e_store:
+                        # OBSTACLE-CONTACT: the done flag stored with this
+                        # transition is _step_store_done (== episode_done when
+                        # the rule is off; True on a terminating contact step,
+                        # where episode_done from ARGoS is still False so the
+                        # `if not episode_done` guard below lets the store
+                        # through — the penalty-bearing terminal transition is
+                        # the one transition the rule exists to create). The
+                        # `not _contact_logical_done` guard suppresses all
+                        # post-contact (zombie-phase) stores.
+                        if (time_steps > 2 and not _defer_immediate_e2e_store
+                                and not _contact_logical_done):
                             if train_mode:
                                 if learning_scheme != 'None':
                                     if not old_failures[i] and not failures[i]:
@@ -1342,7 +1438,7 @@ try:
                                                                     (actions[i], actions_to_take[i]),
                                                                     rewards[i],
                                                                     new_agent_states[i],
-                                                                    episode_done,
+                                                                    _step_store_done,
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
                                                                     phi=sf_phi)
@@ -1351,7 +1447,7 @@ try:
                                                                     (actions[i], actions_to_take[i]),
                                                                     rewards[i],
                                                                     new_agent_states[i],
-                                                                    episode_done,
+                                                                    _step_store_done,
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
                                                                     phi=sf_phi)
@@ -1402,7 +1498,10 @@ try:
                             'action': [(actions[i], actions_to_take[i]) for i in range(_n_r)],
                             'reward': [rewards[i] for i in range(_n_r)],
                             'new_agent_state': [np.asarray(new_agent_states[i], dtype=np.float32).copy() for i in range(_n_r)],
-                            'done': bool(episode_done),
+                            # OBSTACLE-CONTACT: carries the terminating-contact
+                            # done=True through the delayed FIFO (== episode_done
+                            # when the rule is off).
+                            'done': _step_store_done,
                             'gsp_obs': [np.asarray(e2e_gsp_obs[i], dtype=np.float32).copy() if e2e_gsp_obs[i] is not None else None for i in range(_n_r)],
                             'phi': [None] * _n_r,
                             # Store guards captured at push time (t-K); replayed at maturity.
@@ -1426,7 +1525,17 @@ try:
                                 'cyl_x': float(obj_stats[0]),
                                 'cyl_y': float(obj_stats[1]),
                             },
-                            e2e_transition=_e2e_tx,
+                            # OBSTACLE-CONTACT zombie phase: keep pushing the
+                            # REAL post-contact payload windows (they are the
+                            # K-step labels of the still-maturing pre-contact
+                            # transitions, INCLUDING the penalty-bearing
+                            # contact-step transition, which needs K more
+                            # pushes to mature) but carry NO transition of
+                            # their own — the maturity block below skips
+                            # e2e_transition=None entries, so nothing pushed
+                            # after the contact step ever enters the replay.
+                            e2e_transition=(
+                                None if _contact_logical_done else _e2e_tx),
                         )
                         _matured_e2e = model.pop_matured_gsp_label(None)
                         if _matured_e2e is not None and _matured_e2e.get('e2e_transition') is not None:
@@ -1466,6 +1575,21 @@ try:
                             # scaled per-step targets) so a crushed/near-binary label is
                             # visible in the log without waiting for h5 analysis.
                             hdf5_writer.record_stored_transition(_traj_label, _tx['gsp_obs'][0])
+
+                    # OBSTACLE-CONTACT logical termination: flips AFTER the
+                    # contact step's own stores ran (with done=True), so the
+                    # penalty-bearing terminal transition is in the buffer and
+                    # everything AFTER it is not. The physical episode runs on
+                    # (ARGoS owns the episode state machine — no abort channel
+                    # in the actions message); during this zombie phase acting
+                    # continues unchanged, learn() keeps firing on its normal
+                    # cadence from the (frozen-content) replay buffer — the
+                    # same off-policy updates a truly terminated episode's
+                    # wall-clock would have hosted for the NEXT episode — and
+                    # h5 per-step logging continues (analysis truncates at the
+                    # contact_step attr).
+                    if _contact_now and _contact_rule.terminate:
+                        _contact_logical_done = True
 
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
@@ -1735,6 +1859,20 @@ try:
                                 hdf5_writer.record_gsp_loss_step_corr(_c)
                             model.last_gsp_loss_step_corr_samples = []
 
+                        # OBSTACLE-CONTACT per-episode h5 attrs (mirrors the
+                        # `success` attr pattern in write_episode). Recorded
+                        # ONLY when the rule is engaged so the default-off h5
+                        # stays byte-identical. contact_terminated=True marks
+                        # a logically-terminated episode — verdicts read THIS
+                        # attr (a zombie-phase physical success is NOT a
+                        # success under the rule; see the counter gate below).
+                        if _contact_rule.enabled:
+                            hdf5_writer.record_contact_state(
+                                terminated=_contact_logical_done,
+                                contact_step=_contact_first_step,
+                                contact_count=_contact_events,
+                            )
+
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
                         # gate was always-true dead code. Removed during the same cleanup
                         # that dropped the data_logger references.
@@ -1749,7 +1887,14 @@ try:
                             exp_rewards.append(np.average(running_reward))
                         else:
                             exp_rewards.append(running_reward)
-                        if not reached_goal:
+                        # OBSTACLE-CONTACT outcome gate: a logically-terminated
+                        # episode counts as a FAILURE even if the zombie-phase
+                        # physics later pushed the payload to the goal (the
+                        # learner never saw anything past the contact step).
+                        # Rule off -> _contact_logical_done is always False ->
+                        # identical to legacy reached_goal counting.
+                        _ep_outcome_success = reached_goal and not _contact_logical_done
+                        if not _ep_outcome_success:
                             if not args.no_print:
                                 print("Episode", ep_counter ,"timed out")
                             # Feature-stats warm-up burn-in episodes run with
