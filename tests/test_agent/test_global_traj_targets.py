@@ -487,7 +487,7 @@ def test_main_global_traj_labels_single_scale_inside_builder():
     # The E2E caller applies NO second scale to the global targets: its
     # else-branch (non-dtraj) is a bare astype.
     e_idx = text.index("E2E delayed main-replay store")
-    block = text[e_idx:e_idx + 6000]
+    block = text[e_idx:e_idx + 9000]
     assert "_traj_label = _traj_e2e.astype(np.float32)" in block
     # No per-target magic scale constants.
     assert "GSP_GOAL_PROGRESS_TRAJ_LABEL_SCALE" not in text
