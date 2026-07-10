@@ -186,6 +186,21 @@ class TestUnsupportedSchemesRaiseLoudly:
             _make_agent(
                 _config(GSP_SPLICE_ADVANTAGE_ONLY=True), gsp=False)
 
+    def test_global_knowledge_raises(self):
+        """--global_knowledge (mirrored into config['GLOBAL_KNOWLEDGE'] by
+        Main.py) widens input_size with the (R-1)*4 gk block that
+        make_agent_state places AFTER the pred, so the (input_size, K)
+        pred-column span would exclude the gk TAIL instead of the pred —
+        rejected loudly at Agent construction (GSP-RL#42 review, finding 1)."""
+        with pytest.raises(ValueError, match='global_knowledge'):
+            _make_agent(
+                _traj(GSP_SPLICE_ADVANTAGE_ONLY=True, GLOBAL_KNOWLEDGE=True))
+
+    def test_global_knowledge_without_flag_builds(self):
+        """GLOBAL_KNOWLEDGE alone (splice flag off) stays a legal build."""
+        agent = _make_agent(_traj(GLOBAL_KNOWLEDGE=True))
+        assert agent.gsp_splice_advantage_engaged is False
+
 
 class TestMainStartupContract:
     """Static source contracts on rl_code/Main.py (same technique as
@@ -223,3 +238,22 @@ class TestMainStartupContract:
         assert construct < log_line, (
             "the ENGAGED line reads the constructed Agent's gate attribute, "
             "so it must come after Agent construction")
+
+    def test_global_knowledge_mirrored_before_agent_construction(self):
+        """Finding 1 (GSP-RL#42 review): Main.py must mirror the
+        --global_knowledge CLI flag into config['GLOBAL_KNOWLEDGE'] (the
+        #53-B single-condition-source pattern) BEFORE Agent construction, so
+        Actor.build_networks can reject GSP_SPLICE_ADVANTAGE_ONLY +
+        global_knowledge loudly instead of building a dueling head whose
+        pred-column span silently excludes the gk tail."""
+        text = self._main_text()
+        mirror = text.find(
+            "config['GLOBAL_KNOWLEDGE'] = bool(args.global_knowledge)")
+        construct = text.find("Agent.Agent(")
+        assert mirror != -1, (
+            "Main.py no longer mirrors --global_knowledge into "
+            "config['GLOBAL_KNOWLEDGE'] — the Actor-side splice×gk rejection "
+            "cannot see the CLI flag (silent mis-spanned value stream)")
+        assert construct != -1 and mirror < construct, (
+            "the GLOBAL_KNOWLEDGE mirror must precede Agent construction — "
+            "the Actor validates the combination at build time")

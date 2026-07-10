@@ -134,6 +134,19 @@ else:
 # sequential for it. The Agent cannot see argparse; this key is its only view.
 config['INDEPENDENT_LEARNING'] = bool(args.independent_learning)
 
+# Same #53-B mirror for --global_knowledge (GSP-RL#42 review, finding 1):
+# under global knowledge, num_obs above INCLUDES the (R-1)*4 gk block while
+# make_agent_state places it AFTER the spliced GSP prediction, so the
+# advantage-only splice's (input_size, K) pred-column span would exclude the
+# gk TAIL instead of the pred — V would silently read the prediction.
+# Actor.build_networks (GSP-RL) reads this key and raises loudly when
+# GSP_SPLICE_ADVANTAGE_ONLY is set together with it — the same single
+# validation site as every other unsupported-scheme rejection, hit here at
+# Agent construction below, before any episode runs. Without the mirror the
+# Actor cannot see the CLI flag and the combination would build a
+# silently-mis-spanned dueling head.
+config['GLOBAL_KNOWLEDGE'] = bool(args.global_knowledge)
+
 agent_nn_args = {
     'config': config,
     'network': config['LEARNING_SCHEME'],
