@@ -126,6 +126,14 @@ elif args.global_knowledge:
 else:
     num_obs = Utility.params['num_obs']
 
+# #53-B: mirror the CLI --independent_learning flag into the config dict the
+# Agent receives, so choose_agent_gsp's batched gate can exclude
+# independent-learning cells from the SAME condition source as the acting-loop
+# gate below (args.independent_learning). Independent-learning keeps per-robot
+# nets — nothing to batch through one net — so both batched paths must stay
+# sequential for it. The Agent cannot see argparse; this key is its only view.
+config['INDEPENDENT_LEARNING'] = bool(args.independent_learning)
+
 agent_nn_args = {
     'config': config,
     'network': config['LEARNING_SCHEME'],
@@ -344,6 +352,50 @@ log.info("GSP_REWARD_COEF = %s", _gsp_reward_coef)
 # from "any aux reward of right scale helps." Default False is unchanged.
 _gsp_reward_random_noise = bool(config.get('GSP_REWARD_RANDOM_NOISE', False))
 log.info("GSP_REWARD_RANDOM_NOISE = %s", _gsp_reward_random_noise)
+
+# #53 Sub-project B — batched-agent forward (opt-in, BASELINE-CHANGING).
+# When active, the per-robot acting loop below routes ALL robots through one
+# stacked choose_agent_actions_batch forward on the shared CTDE net instead
+# of R sequential forwards (~4x fewer acting forwards/step). Effective only
+# for the shared-model DQN/DDQN case: independent_learning keeps per-robot
+# nets (nothing to batch through one net) and any step with a failed robot
+# falls back to the sequential path so failure semantics stay legacy-exact.
+# Default False = byte-identical legacy acting. Activation requires the
+# pre-registered n-seed noise-floor re-baseline (float-reduction order + the
+# R epsilon-greedy gate draws collapse to one).
+_batched_actor_forward = (
+    bool(config.get('BATCHED_ACTOR_FORWARD', False))
+    and not args.independent_learning
+    and config['LEARNING_SCHEME'] in ('DQN', 'DDQN')
+)
+log.info(
+    "BATCHED_ACTOR_FORWARD = %s (effective acting-loop gate: %s)",
+    config.get('BATCHED_ACTOR_FORWARD', False), _batched_actor_forward,
+)
+# Fail-loud engaged-path assertion (#53-B activation contract). Exactly one of
+# these two lines prints at every startup, and the ENGAGED line prints ONLY
+# when a batched path will actually execute this run — the acting loop
+# (_batched_actor_forward) and/or the GSP-head prediction loop (the Agent's
+# own gate, read via batched_gsp_path_engaged() so log and execution share one
+# condition source). Two known silent-sequential traps make this line the
+# activation check: (a) a dispatcher daemon that imported launcher.py before
+# the passthrough merged drops BATCHED_ACTOR_FORWARD from agent_config.yml
+# entirely until the daemon is restarted; (b) a cell pinned to a pre-#39
+# RL-CT sha ignores the key without error. Grep the first cell's log for
+# "BATCHED_ACTOR_FORWARD: ENGAGED" before trusting any re-baseline run.
+# `model` is undefined under --independent_learning (per-robot `models` list);
+# the gate is False for those cells by construction, so short-circuit first.
+_batched_gsp_engaged = (
+    False if args.independent_learning else model.batched_gsp_path_engaged()
+)
+if _batched_actor_forward or _batched_gsp_engaged:
+    log.info(
+        "BATCHED_ACTOR_FORWARD: ENGAGED (batched acting path; "
+        "acting_loop=%s, gsp_head=%s)",
+        _batched_actor_forward, _batched_gsp_engaged,
+    )
+else:
+    log.info("BATCHED_ACTOR_FORWARD: off (sequential)")
 
 # M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
 # Read once at startup. The prediction transform is applied at the single
@@ -615,14 +667,22 @@ try:
                     time_steps += 1
                     robot_failures = []
 
-                    for i in range(Utility.params['num_robots']):
-                        # Choose an action
-                        if args.independent_learning:
-                            action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
-                        else:
-                            action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
-                        actions_to_take.append(action)
-                        actions.append(action_num)
+                    # #53-B: one stacked forward for all robots when the
+                    # batched gate is on and no robot is failed this step
+                    # (bool(f) mirrors choose_agent_action's `if failures:`
+                    # truthiness on the per-robot failure entries).
+                    if _batched_actor_forward and not any(bool(np.any(f)) for f in failures):
+                        actions_to_take, actions = model.choose_agent_actions_batch(
+                            agent_states, test_mode)
+                    else:
+                        for i in range(Utility.params['num_robots']):
+                            # Choose an action
+                            if args.independent_learning:
+                                action, action_num = models[i].choose_agent_action(agent_states[i], failures[i], test_mode)
+                            else:
+                                action, action_num = model.choose_agent_action(agent_states[i], failures[i], test_mode)
+                            actions_to_take.append(action)
+                            actions.append(action_num)
 
                     old_failures = failures[:]
                     # Take Step
