@@ -243,6 +243,18 @@ _delta_theta_traj_label_scale = (
 # past tanh range with GSP_E2E_LINEAR_OUTPUT=true.
 _gsp_traj_label_scale = float(config.get('GSP_TRAJ_LABEL_SCALE', 1.0))
 log.info("GSP_TRAJ_LABEL_SCALE = %s", _gsp_traj_label_scale)
+if _gsp_traj_label_scale != 1.0:
+    # The GSP head output is BOUNDED either way: tanh by default, and
+    # GSP_E2E_LINEAR_OUTPUT is a hard clamp at ±MIN_MAX_ACTION (ddpg.py), so
+    # labels pushed past that bound are unfittable (zero gradient at the
+    # clamp). Choose the scale so |label| stays inside the bound — measured
+    # cdt tails: per-step displacement absmax ~9.4e-3 m ⇒ scale 80 → 0.75.
+    log.warning(
+        "GSP_TRAJ_LABEL_SCALE=%s: head output is bounded (tanh or clamp at "
+        "±MIN_MAX_ACTION) — verify scaled |label| max stays inside the bound "
+        "(and note gsp_label_std/gsp_mse h5 metrics change units vs scale=1 runs)",
+        _gsp_traj_label_scale,
+    )
 
 # K-step trajectory targets — all share the delayed FIFO (push per step, pop at
 # maturity K steps later) and the auto-derived horizon-coupled GSP_OUTPUT_KIND.
@@ -292,7 +304,12 @@ def _build_traj_label_from_windows(pred_target, ang_win, trk_win):
         for k in range(len(trk_win) - 1):
             _disp.append(float(trk_win[k + 1]['cyl_x']) - float(trk_win[k]['cyl_x']))
             _disp.append(float(trk_win[k + 1]['cyl_y']) - float(trk_win[k]['cyl_y']))
-        return (np.array(_disp, dtype=np.float32) * _gsp_traj_label_scale).astype(np.float32)
+        # Multiply in float64 BEFORE the float32 cast (single rounding, same
+        # convention as the goal_progress branch) so offline recomputation
+        # from raw h5 cyl positions reproduces the stored labels bit-exactly.
+        return (
+            np.asarray(_disp, dtype=np.float64) * _gsp_traj_label_scale
+        ).astype(np.float32)
     raise ValueError(f"not a trajectory target: {pred_target}")
 
 # Input enrichment flags — need to pass env_observations to make_gsp_states

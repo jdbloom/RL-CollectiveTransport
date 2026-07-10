@@ -466,17 +466,29 @@ def test_main_defers_immediate_e2e_store_for_traj_set():
     )
 
 
-def test_main_global_traj_labels_are_raw_no_magic_scale():
-    """The goal_progress/cyl_displacement E2E labels must be RAW physical units:
-    the label build must not apply _delta_theta_traj_label_scale (that scale is
-    dtraj-specific) and no new scale constant may be introduced for them."""
+def test_main_global_traj_labels_single_scale_inside_builder():
+    """Global-target label scaling contract (2026-07-10): the ONLY scale on
+    goal_progress/cyl_displacement labels is GSP_TRAJ_LABEL_SCALE (default 1.0
+    = raw meters), applied INSIDE _build_traj_label_from_windows so head-store,
+    E2E, and h5 logging share one target definition. The dtraj-specific
+    _delta_theta_traj_label_scale must not touch them, no per-target scale
+    constants may appear, and no caller may apply a second scale outside the
+    builder."""
     text = _MAIN_PY.read_text()
-    # The label build for the global targets lives in the delayed E2E store block.
-    idx = text.index("E2E delayed main-replay store")
-    block = text[idx:idx + 6000]
-    assert "goal_progress_traj" in block or "_GSP_TRAJ_TARGETS" in block
-    # The raw-label build for the global targets exists.
-    assert "payload_track_window" in text
-    # No magic scaling keywords attached to the new targets.
+    # The single scale constant is read once with a raw default.
+    assert "GSP_TRAJ_LABEL_SCALE" in text
+    assert "config.get('GSP_TRAJ_LABEL_SCALE', 1.0)" in text
+    # Applied inside the builder, on both metric kinds.
+    b_idx = text.index("def _build_traj_label_from_windows")
+    builder = text[b_idx:text.index("raise ValueError", b_idx)]
+    assert builder.count("* _gsp_traj_label_scale") == 2, (
+        "expected the scale MULTIPLIED exactly once per metric kind inside the builder"
+    )
+    # The E2E caller applies NO second scale to the global targets: its
+    # else-branch (non-dtraj) is a bare astype.
+    e_idx = text.index("E2E delayed main-replay store")
+    block = text[e_idx:e_idx + 6000]
+    assert "_traj_label = _traj_e2e.astype(np.float32)" in block
+    # No per-target magic scale constants.
     assert "GSP_GOAL_PROGRESS_TRAJ_LABEL_SCALE" not in text
     assert "GSP_CYL_DISPLACEMENT_TRAJ_LABEL_SCALE" not in text
