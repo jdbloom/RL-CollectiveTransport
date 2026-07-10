@@ -127,6 +127,46 @@ def test_warmup_with_zero_out_does_not_update():
     assert agent.gsp_feature_stats.count == 0
 
 
+def test_warmup_standardizes_with_frozen_stats_then_updates():
+    """Order contract (matches the learn splice): the returned slot is
+    standardized with the PRE-update stats. The very first warm-up step must
+    therefore pass through the count==0 identity (raw scaled slot), not
+    (x-mean)/sqrt(eps) garbage."""
+    agent = _agent_with_flag_on()
+    agent.gsp_eval_stats_warmup_active = True
+    scale = np.degrees(1.0) / 10.0
+    aug = agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    assert abs(aug[-1] - 0.5 * scale) < 1e-6  # identity read, THEN update
+    assert agent.gsp_feature_stats.count == 1
+
+
+def test_warmup_skips_all_zero_placeholder_slot():
+    """Main.py's episode-init make_agent_state call runs with the zero-
+    initialized placeholder slot before any head inference — placeholders
+    must not be folded into the stats."""
+    agent = _agent_with_flag_on()
+    agent.gsp_eval_stats_warmup_active = True
+    agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.0)
+    assert agent.gsp_feature_stats.count == 0
+    agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    assert agent.gsp_feature_stats.count == 1
+
+
+def test_warmup_skips_ema_mode_stats():
+    """EMA-mode stats tick the half-life clock per update CALL; warm-up's
+    per-robot-step single-sample calls are a different estimator than the
+    per-learn-step batch updates the policy was trained with — EMA stats must
+    come from the checkpoint npz, never from warm-up."""
+    cfg = _load_base_config()
+    cfg["GSP_E2E_ENABLED"] = True
+    cfg["GSP_E2E_NORMALIZE_FEATURE"] = True
+    cfg["GSP_E2E_NORMALIZE_EMA_HALFLIFE"] = 100.0
+    agent = Agent(**_base_agent_kwargs(cfg))
+    agent.gsp_eval_stats_warmup_active = True
+    agent.make_agent_state(ENV_OBS.copy(), heading_gsp=0.5)
+    assert agent.gsp_feature_stats.count == 0
+
+
 def test_warmup_flag_without_normalize_flag_is_inert():
     """Warm-up flag set but normalize lever off -> gsp_feature_stats is None,
     make_agent_state stays byte-identical (no crash, plain scaled slot)."""

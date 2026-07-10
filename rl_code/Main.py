@@ -339,6 +339,33 @@ _pred_frozen_mean_state = RunningMeanState()
 _gsp_eval_stats_warmup_eps = int(config.get('GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES', 0))
 log.info("GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES = %s", _gsp_eval_stats_warmup_eps)
 _in_stats_warmup = False
+if _gsp_eval_stats_warmup_eps > 0 and test_mode:
+    # Post-GSP-RL#37 checkpoints restore the training stats via load_model
+    # (which already ran above). Warming on top of restored stats would
+    # overwrite the exact calibration the persistence fix preserves — auto-
+    # disable and say so. Mixed batches (old + new checkpoints) can then share
+    # one YAML: new ones restore, old ones warm up.
+    _stats_models = models if args.independent_learning else [model]
+    if any(
+        getattr(_m, 'gsp_feature_stats', None) is not None
+        and _m.gsp_feature_stats.count > 0
+        for _m in _stats_models
+    ):
+        log.info(
+            "feature stats restored from checkpoint (count>0) — warm-up "
+            "disabled; restored training stats are authoritative"
+        )
+        _gsp_eval_stats_warmup_eps = 0
+    elif args.best_gsp_ckpt:
+        # The GSP head was swapped to a different episode's snapshot AFTER
+        # load_model, so the warmed stats will describe the SNAPSHOT head's
+        # output stream. That is self-consistent for the warm-up path, but
+        # flag the combination loudly — for restored-stats runs the same
+        # combination is episode-mismatched with no warning possible.
+        log.warning(
+            "warm-up active with --best_gsp_ckpt: stats will be warmed on "
+            "the snapshot head's predictions"
+        )
 
 # M4 — candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
 # When 1, all four candidate GSP targets (delta_theta, future_prox, cyl_kin Δx/Δy/Δθ,
@@ -1587,12 +1614,16 @@ try:
                         if not reached_goal:
                             if not args.no_print:
                                 print("Episode", ep_counter ,"timed out")
-                            if test_mode:
+                            # Feature-stats warm-up burn-in episodes run with
+                            # the ablation deferred and evolving stats — they
+                            # are not measurement episodes and must not dilute
+                            # the headline success percentage.
+                            if test_mode and not _in_stats_warmup:
                                 Testing_Failures += 1
                         else:
                             if not args.no_print:
                                 print("Episode", ep_counter ,"reached goal")
-                            if test_mode:
+                            if test_mode and not _in_stats_warmup:
                                 Testing_Successes += 1
                         if not args.no_print:
                             for i in range(Utility.params['num_robots']):

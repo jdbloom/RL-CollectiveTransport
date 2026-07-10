@@ -548,12 +548,33 @@ class Agent(Actor):
                 # incident. During the burn-in episodes Main.py sets this flag
                 # and the acting splice — the one place that sees the slot at
                 # the exact per-kind scale the learn splice standardized —
-                # folds the live prediction into the stats before reading them.
+                # folds the live prediction into the stats. Guards (review
+                # findings, 2026-07-10):
+                #   * standardize FIRST with the frozen stats, update AFTER —
+                #     the learn splice's BatchNorm-style order; also keeps the
+                #     first burn-in steps on the count==0 identity instead of
+                #     (x-mean)/sqrt(eps) garbage.
+                #   * skip the exact all-zeros slot: Main.py's episode-init
+                #     make_agent_state call runs before any head inference with
+                #     next_heading_gsp zero-initialized — a placeholder, not a
+                #     prediction (a continuous head emitting exact 0.0 across
+                #     all K dims has measure zero).
+                #   * Welford-mode only: the EMA half-life clock ticks per
+                #     UPDATE call, and warm-up calls it per robot-step on
+                #     single samples — a different estimator than the per-
+                #     learn-step batch updates it was trained with. EMA-mode
+                #     stats must come from the checkpoint npz instead.
                 # Off (default) preserves the acting-reads-frozen-stats
                 # contract byte-identically.
-                if getattr(self, 'gsp_eval_stats_warmup_active', False):
-                    _stats.update(gsp_slot.reshape(1, -1))
+                _warm = (
+                    getattr(self, 'gsp_eval_stats_warmup_active', False)
+                    and _stats.ema_halflife == 0
+                    and np.any(gsp_slot)
+                )
+                _raw_slot = gsp_slot if _warm else None
                 gsp_slot = _stats.standardize(gsp_slot)
+                if _warm:
+                    _stats.update(_raw_slot.reshape(1, -1))
             # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
             # so the actor's input is [latent | global] (or [latent]) — the actor is
             # forced to route through the encoder latent. Must stay in lockstep with
