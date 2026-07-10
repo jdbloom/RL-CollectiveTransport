@@ -319,6 +319,27 @@ _pred_ablation_rng = np.random.default_rng(int(config.get('SEED', 0)))
 # across episodes. Initialized here for module scope; reset per episode below.
 _pred_frozen_mean_state = RunningMeanState()
 
+# Eval-time feature-stats warm-up (GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES).
+# The GSP_E2E_NORMALIZE_FEATURE standardizer's running stats are part of the
+# policy, but checkpoints saved before GSP-RL#37 never persisted them — a
+# fresh eval process reconstructs the standardizer cold, standardize() is the
+# identity, and the actor receives the raw tiny-scale feature it was NOT
+# trained on (the 2026-07-10 incident that voided the abl500r2 verdict).
+# When W > 0 in test mode, the first W episodes are BURN-IN: the acting splice
+# (Agent.make_agent_state) updates the stats from the live post-scale
+# predictions, and the GSP_EVAL_ABLATE_PRED transform is deferred (burn-in
+# runs as 'none' so the stats reflect the TRUE prediction distribution, not an
+# ablated one). From episode W on, the stats freeze and the configured
+# ablation applies — measured episodes see warm stats. Analyses MUST drop
+# episodes < W (read this key from agent_config.yml). Default 0 → inert.
+# Caveat: warm-up estimates the FINAL head's output stats, while training
+# standardized with all-history stats; valid when the training run's
+# e2e_gsp_feature_std_postnorm held ~1.0 (stationary feature scale), as in the
+# lambda=100 dtraj campaign cells this exists to re-verdict.
+_gsp_eval_stats_warmup_eps = int(config.get('GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES', 0))
+log.info("GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES = %s", _gsp_eval_stats_warmup_eps)
+_in_stats_warmup = False
+
 # M4 — candidate-target logging (GSP_LOG_CANDIDATE_TARGETS).
 # When 1, all four candidate GSP targets (delta_theta, future_prox, cyl_kin Δx/Δy/Δθ,
 # centroid-to-goal) are computed EVERY step regardless of the active GSP_OUTPUT_KIND
@@ -384,6 +405,18 @@ try:
             # M2: reset the frozen_mean running-mean accumulator at every episode
             # boundary so the prediction mean never bleeds across episodes.
             _pred_frozen_mean_state = RunningMeanState()
+
+            # Eval feature-stats warm-up phase for this episode (see the
+            # GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES block above). The flag on
+            # each Agent gates the stats update inside make_agent_state; while
+            # warm-up is active the M2 ablation transform is deferred (guarded
+            # at both injection sites below).
+            _in_stats_warmup = bool(
+                test_mode and ep_counter < _gsp_eval_stats_warmup_eps
+            )
+            if _gsp_eval_stats_warmup_eps > 0:
+                for _m in (models if args.independent_learning else [model]):
+                    _m.gsp_eval_stats_warmup_active = _in_stats_warmup
 
             # Receive initial observations from the environment
             env_observations, failures, rewards, stats, robot_stats, obj_stats = Utility.parse_msgs(msgs)
@@ -791,7 +824,9 @@ try:
                                 next_heading_gsp[i] = next_object_heading[i]
                                 # M2 eval-time prediction ablation (injection site).
                                 # 'none' (default) is a literal identity no-op.
-                                if _gsp_eval_ablate_pred != 'none':
+                                # Deferred during the feature-stats warm-up burn-in
+                                # (stats must reflect the true prediction stream).
+                                if _gsp_eval_ablate_pred != 'none' and not _in_stats_warmup:
                                     next_heading_gsp[i] = apply_pred_ablation(
                                         next_heading_gsp[i], _gsp_eval_ablate_pred,
                                         _pred_ablation_rng, _pred_frozen_mean_state,
@@ -850,7 +885,9 @@ try:
                                 # Applied immediately after next_heading_gsp[i] is set
                                 # and BEFORE make_agent_state consumes it. 'none'
                                 # (default) is a literal identity no-op → bit-exact.
-                                if _gsp_eval_ablate_pred != 'none':
+                                # Deferred during the feature-stats warm-up burn-in
+                                # (stats must reflect the true prediction stream).
+                                if _gsp_eval_ablate_pred != 'none' and not _in_stats_warmup:
                                     next_heading_gsp[i] = apply_pred_ablation(
                                         next_heading_gsp[i], _gsp_eval_ablate_pred,
                                         _pred_ablation_rng, _pred_frozen_mean_state,

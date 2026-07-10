@@ -541,6 +541,18 @@ class Agent(Actor):
                 and not getattr(self, 'gsp_zero_out_signal', False)
                 and gsp_slot.shape[0] == _stats.dim
             ):
+                # Eval feature-stats warm-up (GSP_EVAL_FEATURE_STATS_WARMUP_
+                # EPISODES): checkpoints saved before GSP-RL#37 carry no
+                # standardizer state, so a fresh eval process would standardize
+                # with the identity (count==0) — the 2026-07-10 eval-restore
+                # incident. During the burn-in episodes Main.py sets this flag
+                # and the acting splice — the one place that sees the slot at
+                # the exact per-kind scale the learn splice standardized —
+                # folds the live prediction into the stats before reading them.
+                # Off (default) preserves the acting-reads-frozen-stats
+                # contract byte-identically.
+                if getattr(self, 'gsp_eval_stats_warmup_active', False):
+                    _stats.update(gsp_slot.reshape(1, -1))
                 gsp_slot = _stats.standardize(gsp_slot)
             # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
             # so the actor's input is [latent | global] (or [latent]) — the actor is
