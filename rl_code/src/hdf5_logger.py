@@ -227,6 +227,12 @@ class HDF5Logger:
         self.cand_target_future_prox: list = []
         self.cand_target_cyl_kin: list = []       # each entry is a length-3 vector
         self.cand_target_centroid_goal: list = []
+        # OBSTACLE-CONTACT rule per-episode state (record_contact_state).
+        # None → no attrs written (rule off → byte-identical h5). Main.py
+        # records it once per episode, before write_episode, ONLY when the
+        # rule is engaged — so every episode of an engaged run carries the
+        # attrs (including no-contact episodes, the analysis denominators).
+        self.contact_state: dict | None = None
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -359,6 +365,43 @@ class HDF5Logger:
             np.asarray(cyl_kin, dtype=np.float32).ravel().tolist()
         )
         self.cand_target_centroid_goal.append(float(centroid_goal))
+
+    def record_contact_state(self, terminated, contact_step, contact_count,
+                             store_dropped=False) -> None:
+        """Record the OBSTACLE-CONTACT rule's per-episode outcome.
+
+        Called once per episode from Main.py, before write_episode, ONLY when
+        the rule is engaged (terminate or penalty != 0) — the default-off h5
+        stays byte-identical. Persisted as episode-group attrs alongside
+        ``success`` (same pattern):
+
+          contact_terminated  bool — episode was LOGICALLY terminated by a
+              contact. Verdict readouts must treat these episodes as
+              failures regardless of the ``success`` attr: ``success`` stays
+              the PHYSICAL outcome, and a zombie-phase goal-reach after the
+              logical termination is invisible to the learner.
+          contact_step        int — timestep of the first contact event
+              (-1 = no contact this episode). Under terminate mode this is
+              the logical episode length.
+          contact_count       int — number of contact steps this episode
+              (readout for the contact-rate-per-episode metric; > 1 only in
+              penalty-only mode, where the penalty re-applies per step).
+          contact_store_dropped  bool — the penalty-bearing done=True contact
+              transition was NOT stored in any replay buffer (either the
+              legacy time_steps<=2 store guard, or a terminating contact
+              within K steps of the physical episode end whose E2E FIFO
+              entry never matured before reset_gsp_label_buffer). Both edges
+              are also logged at INFO ("OBSTACLE_CONTACT store dropped:").
+              The episode counted as terminated but the learner never saw
+              the grounded terminal — kill-criteria/verdict denominators
+              must subtract these episodes.
+        """
+        self.contact_state = {
+            "contact_terminated": bool(terminated),
+            "contact_step": int(contact_step),
+            "contact_count": int(contact_count),
+            "contact_store_dropped": bool(store_dropped),
+        }
 
     def record_stored_transition(self, label, input_vec) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
@@ -559,6 +602,10 @@ class HDF5Logger:
             timesteps = len(self.reward)
             success = bool(np.any(term_arr)) if term_arr.size > 0 else False
 
+            # OBSTACLE-CONTACT caveat: on contact_terminated episodes this sums
+            # the FULL physical episode INCLUDING the learner-invisible zombie
+            # phase — engaged-run analysis must recompute from the per-step
+            # reward dataset truncated at the contact_step attr, not read this.
             if rewards.ndim == 2:
                 reward_per_robot = np.sum(rewards, axis=0).tolist()
             elif rewards.size > 0:
@@ -611,6 +658,16 @@ class HDF5Logger:
             grp.attrs["success"] = success
             grp.attrs["reward_per_robot"] = reward_per_robot
             grp.attrs["gsp_reward_per_robot"] = gsp_per_robot
+
+            # OBSTACLE-CONTACT rule attrs — present on every episode of an
+            # engaged run, absent otherwise (record_contact_state docstring;
+            # conditional-additive like the M4 cand_target_* datasets, so no
+            # schema bump). NOTE: ``success`` above stays the PHYSICAL
+            # outcome; when contact_terminated is True the episode is a
+            # failure for every verdict readout.
+            if self.contact_state is not None:
+                for _ck, _cv in self.contact_state.items():
+                    grp.attrs[_ck] = _cv
 
             # Per-episode diagnostic attrs (FAU / weight norms / effective rank /
             # Q-gap / pred diversity). Only written on episodes where

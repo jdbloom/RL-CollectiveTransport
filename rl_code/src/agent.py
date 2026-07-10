@@ -488,6 +488,44 @@ class Agent(Actor):
         from the previous episode never bleed into the next."""
         self._gsp_label_buffer.clear()
 
+    def unmatured_done_e2e_transitions(self):
+        """OBSTACLE-CONTACT K-step FIFO edge (2026-07-10 review finding):
+        entries still in the delayed-label FIFO whose e2e_transition carries a
+        CONTACT-terminating done=True.
+
+        A terminating contact within K steps of the PHYSICAL (ARGoS) episode
+        end never receives its K label-maturing pushes, so the penalty-bearing
+        done=True transition — the one grounded terminal the rule exists to
+        create — is silently deleted by reset_gsp_label_buffer while the h5
+        attrs still count the termination. Main.py calls this at episode end,
+        BEFORE the reset, to make the drop LOUD (INFO log + the
+        contact_store_dropped h5 attr, so kill-criteria denominators can
+        subtract these episodes).
+
+        Why the transition is DROPPED rather than flush-stored (the inspected
+        options, least-fabricating chosen — no-mock-data):
+          * _build_traj_label_from_windows has NO short-window/padding
+            convention (it strictly differences a full K+1 window); inventing
+            pad values would fabricate label data.
+          * the replay store contract (GSP-RL ReplayBuffer.store_transition)
+            has no absent-label mask — gsp_label=None stores ZEROS, which
+            learn_DDQN_e2e's batch MSE would consume as a real supervised
+            pair (a fabricated zero trajectory against a real gsp_obs).
+        Dropping fabricates nothing and matches the legacy fate of every
+        final-K-steps transition; the loss is one grounded terminal in a rare
+        (contact within K of timeout) edge, now visible instead of silent.
+
+        Filter: done=True AND NOT guard_episode_done. An ARGoS-terminal-step
+        push also carries done=True (via _step_store_done) but with
+        guard_episode_done=True — that is the legacy never-stored terminal,
+        not a contact drop, and must not be counted."""
+        return [
+            e['e2e_transition'] for e in self._gsp_label_buffer
+            if e.get('e2e_transition') is not None
+            and e['e2e_transition'].get('done')
+            and not e['e2e_transition'].get('guard_episode_done')
+        ]
+
     def build_neighbors(self):
         agents_available = np.arange(self.n_agents)
         for agent in range(self.n_agents):
