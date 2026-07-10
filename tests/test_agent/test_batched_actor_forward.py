@@ -131,6 +131,39 @@ class TestFlagOffByteIdentical:
             np.testing.assert_array_equal(got, want)
 
 
+class TestMainStartupContract:
+    """Static source contracts on rl_code/Main.py (same technique as
+    tests/test_main_gsp_contract.py — no ARGoS needed).
+
+    Fail-loud activation contract (#53-B): Main.py must emit exactly one of
+    the two unmistakable BATCHED_ACTOR_FORWARD startup lines, and must mirror
+    --independent_learning into config BEFORE constructing agents so the
+    Agent-side GSP gate shares Main.py's condition source.
+    """
+
+    @staticmethod
+    def _main_text():
+        import pathlib
+        return (pathlib.Path(__file__).resolve().parents[2]
+                / "rl_code" / "Main.py").read_text()
+
+    def test_engaged_and_off_startup_lines_present(self):
+        text = self._main_text()
+        assert "BATCHED_ACTOR_FORWARD: ENGAGED" in text
+        assert "BATCHED_ACTOR_FORWARD: off (sequential)" in text
+
+    def test_independent_learning_mirrored_before_agent_construction(self):
+        text = self._main_text()
+        inject = text.find(
+            "config['INDEPENDENT_LEARNING'] = bool(args.independent_learning)")
+        construct = text.find("Agent.Agent(")
+        assert inject != -1, "INDEPENDENT_LEARNING config mirror missing"
+        assert construct != -1
+        assert inject < construct, (
+            "INDEPENDENT_LEARNING must be mirrored into config BEFORE any "
+            "Agent construction — the Agent reads it in __init__")
+
+
 class TestFlagOnGSPHead:
     """(b)+(c) Batched GSP-head prediction path."""
 
@@ -212,6 +245,40 @@ class TestFlagOnActing:
 
         assert action_nums == expected
 
+    def test_exploiting_consumes_single_gate_draw_and_goes_greedy(self):
+        """0 < epsilon < 1, a seed whose gate draw EXPLOITS: the step consumes
+        exactly ONE np.random.random() gate draw and ZERO np.random.choice
+        draws, then returns the batched greedy actions — the exploit-branch
+        RNG contract, pinned via np.random state equality."""
+        agent = _make_ddqn_agent(_config(EPSILON=0.5))
+        agent.batched_actor_forward = True
+        rng = np.random.default_rng(5)
+        observations = [
+            rng.standard_normal(31).astype(np.float32) for _ in range(4)
+        ]
+
+        # Greedy reference: the test=True path never touches np.random.
+        _, greedy_nums = agent.choose_agent_actions_batch(
+            observations, test=True)
+
+        np.random.seed(0)  # first np.random.random() = 0.5488... > 0.5
+        _, action_nums = agent.choose_agent_actions_batch(
+            observations, test=False)
+        state_after = np.random.get_state()
+
+        np.random.seed(0)
+        gate = np.random.random()
+        assert gate > agent.epsilon  # seed sanity: this seed exploits
+        expected_state = np.random.get_state()
+
+        # Exploiting step returns the batched greedy actions...
+        assert action_nums == greedy_nums
+        # ...and leaves np.random exactly one gate draw ahead: no
+        # np.random.choice was consumed anywhere in the call.
+        assert state_after[0] == expected_state[0]
+        np.testing.assert_array_equal(state_after[1], expected_state[1])
+        assert state_after[2:] == expected_state[2:]
+
     def test_non_discrete_scheme_raises(self):
         T.manual_seed(0)
         agent = Agent(
@@ -224,3 +291,48 @@ class TestFlagOnActing:
         observations = [np.zeros(31, dtype=np.float32) for _ in range(4)]
         with pytest.raises(NotImplementedError):
             agent.choose_agent_actions_batch(observations, test=True)
+
+
+class TestIndependentLearningExclusion:
+    """Independent-learning cells must NEVER take the batched GSP path.
+
+    Main.py mirrors --independent_learning into config['INDEPENDENT_LEARNING']
+    before agent construction; the choose_agent_gsp gate (via
+    batched_gsp_path_engaged) excludes it — same condition source as Main.py's
+    acting-loop gate. Per-robot nets have nothing to batch through one net, so
+    these cells stay on the legacy sequential loop outside the #53-B
+    contamination contract.
+    """
+
+    def test_gate_helper_false_under_independent_learning(self):
+        agent = _make_gsp_n_agent(
+            _config(BATCHED_ACTOR_FORWARD=True, INDEPENDENT_LEARNING=True))
+        assert agent.batched_gsp_path_engaged() is False
+
+    def test_gate_helper_true_for_shared_model(self):
+        """Guard: the exclusion must not break the shared-model engaged path
+        (key absent = non-Main.py caller = shared-model by construction)."""
+        agent = _make_gsp_n_agent(_config(BATCHED_ACTOR_FORWARD=True))
+        assert agent.batched_gsp_path_engaged() is True
+
+    def test_flag_on_independent_learning_stays_sequential_bit_exact(self):
+        """Same technique as TestFlagOffByteIdentical: bit-exact match against
+        the sequential per-agent reference loop under exploration noise. The
+        batched path draws ONE (R, K) noise tensor instead of R sequential
+        (1, K) draws, so it could not reproduce this stream — bit-exact
+        equality proves the sequential path executed."""
+        config = _config(
+            NOISE=0.1, BATCHED_ACTOR_FORWARD=True, INDEPENDENT_LEARNING=True)
+        agent = _make_gsp_n_agent(config)
+        states = _gsp_states(seed=23)
+
+        T.manual_seed(1234)
+        via_agent = agent.choose_agent_gsp(states, test=False)
+        T.manual_seed(1234)
+        reference = [
+            agent.choose_action(states[i], agent.gsp_networks, False)
+            for i in range(4)
+        ]
+
+        for got, want in zip(via_agent, reference):
+            np.testing.assert_array_equal(got, want)

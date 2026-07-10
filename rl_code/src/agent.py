@@ -248,6 +248,17 @@ class Agent(Actor):
         # noise-floor re-baseline. Default False = byte-identical legacy
         # sequential path (each robot forwards alone, exactly as before).
         self.batched_actor_forward = bool(config.get('BATCHED_ACTOR_FORWARD', False))
+        # Independent-learning exclusion for the batched GSP gate. Main.py
+        # mirrors its CLI --independent_learning flag into
+        # config['INDEPENDENT_LEARNING'] before constructing agents (the same
+        # condition source as its own acting-loop gate). Independent-learning
+        # cells keep per-robot nets — nothing to batch through one net — so
+        # the batched GSP path must never engage for them; they stay on the
+        # legacy sequential loop outside the #53-B contamination contract.
+        # Fail-safe: a missing key means a non-Main.py caller (tests construct
+        # Agent directly); those are shared-model by construction and the
+        # batched path stays opt-in via BATCHED_ACTOR_FORWARD regardless.
+        self._independent_learning = bool(config.get('INDEPENDENT_LEARNING', False))
 
         gsp_rl_args = {
             'config': config,
@@ -943,6 +954,31 @@ class Agent(Actor):
         actions = [self.parse_action(a) for a in action_nums]
         return actions, action_nums
 
+    def batched_gsp_path_engaged(self):
+        """True iff choose_agent_gsp will take the #53-B batched stacked-forward
+        path for the per-agent (neighbors/broadcast) prediction loop.
+
+        Single condition source for the gate — choose_agent_gsp calls this,
+        and Main.py reads it for the fail-loud BATCHED_ACTOR_FORWARD startup
+        line, so the logged state can never drift from the executed path.
+        Excluded (sequential path, outside the #53-B contamination contract):
+          - independent_learning cells (per-robot nets — nothing to batch
+            through one net; mirrors Main.py's acting-loop gate),
+          - recurrent (RDDPG) and non-DDPG-scheme heads (per-agent state —
+            batching would change semantics, not just float order),
+          - JEPA-encoder cells (choose_agent_gsp returns from the encoder
+            path before the gate is ever reached),
+          - non-neighbor/non-broadcast heads (no per-agent loop to batch).
+        """
+        return (
+            self.batched_actor_forward
+            and not self._independent_learning
+            and not self.recurrent_gsp
+            and not getattr(self, 'gsp_jepa_enabled', False)
+            and (self._neighbors or self._broadcast)
+            and getattr(self, 'gsp_networks', {}).get('learning_scheme') == 'DDPG'
+        )
+
     def choose_agent_gsp(self, agent_gsp_states, test = False):
         # The GSP head is a supervised regressor; when configured deterministic,
         # its prediction is greedy (no exploration noise) even during training.
@@ -979,10 +1015,10 @@ class Agent(Actor):
             # drawn as one (R, K) tensor). Recurrent (RDDPG) and attention
             # heads keep the sequential path — they carry per-agent state, so
             # batching would change semantics, not just float order (see
-            # kb/wiki/concepts/batched-inference.md).
-            if (self.batched_actor_forward
-                    and not self.recurrent_gsp
-                    and self.gsp_networks.get('learning_scheme') == 'DDPG'):
+            # kb/wiki/concepts/batched-inference.md). Independent-learning
+            # cells are excluded too — the full gate condition lives in
+            # batched_gsp_path_engaged() (shared with Main.py's startup line).
+            if self.batched_gsp_path_engaged():
                 batched = self.choose_actions_batch(
                     agent_gsp_states, self.gsp_networks, gsp_test)
                 # Same consumer contract as the sequential loop: a list with
