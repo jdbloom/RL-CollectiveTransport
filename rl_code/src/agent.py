@@ -579,6 +579,15 @@ class Agent(Actor):
                 gsp_slot = _stats.standardize(gsp_slot)
                 if _warm:
                     _stats.update(_raw_slot.reshape(1, -1))
+            # GSP_E2E_SPLICE_GAIN (GSP-RL#39): fixed constant salience gain,
+            # the LAST transform before concatenation — must mirror the learn
+            # splices exactly (learning_aids.py applies the same attr after the
+            # optional standardizer). 1.0 (default) = exact no-op. Not applied
+            # to a zero-out-severed slot (0 × gain = 0 anyway, but skipping
+            # keeps the guard structure symmetric with the standardizer block).
+            _gain = float(getattr(self, 'gsp_e2e_splice_gain', 1.0))
+            if _gain != 1.0 and not getattr(self, 'gsp_zero_out_signal', False):
+                gsp_slot = gsp_slot * _gain
             # Latent-primary (GSP_ACTOR_LATENT_PRIMARY): drop the raw env_obs block
             # so the actor's input is [latent | global] (or [latent]) — the actor is
             # forced to route through the encoder latent. Must stay in lockstep with
