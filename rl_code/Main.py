@@ -431,6 +431,42 @@ if getattr(_adv_splice_model, 'gsp_splice_advantage_engaged', False):
 else:
     log.info("GSP_SPLICE_ADVANTAGE_ONLY: off")
 
+# GSP_E2E_UNIFIED_TARGET_ARITH (E2E Bellman-target parity, GSP-RL#43) —
+# fail-loud engaged-path assertion, same contract as the lines above: exactly
+# one line prints at every startup, keyed on the Actor's OWN effective gate
+# (gsp_e2e_unified_arith_engaged = GSP_E2E_ENABLED and
+# GSP_E2E_UNIFIED_TARGET_ARITH, set in Hyperparameters.__init__ — single
+# condition source, so the logged state can never drift from the arithmetic
+# the learn fn will run). This line lives HERE and not only in GSP-RL because
+# GSP-RL's own startup line goes to logger "stelaris.learn", which has no
+# handler in production — the run logger is stelaris.<exp_name> with
+# propagate=False, and logging.lastResort drops INFO — so it is silently
+# discarded on every real run (it surfaces only under pytest). The same two
+# silent-drop traps as above apply: (a) a dispatcher daemon that imported
+# launcher.py before the passthrough merged drops the key from
+# agent_config.yml until the daemon is RESTARTED; (b) a cell pinned to a
+# pre-GSP-RL#43 sha ignores the key without error. Grep the first cell's log
+# for "GSP_E2E_UNIFIED_TARGET_ARITH: ENGAGED" before trusting any
+# unified-arith E2E arm. Under --independent_learning every per-robot Agent
+# shares one config, so models[0] carries the same gate state as all of them.
+_e2e_arith_model = models[0] if args.independent_learning else model
+_e2e_arith_engaged = getattr(
+    _e2e_arith_model, 'gsp_e2e_unified_arith_engaged', None)
+if _e2e_arith_engaged:
+    log.info(
+        "GSP_E2E_UNIFIED_TARGET_ARITH: ENGAGED (E2E Q-target via _q_target "
+        "+ critic grad clip, parity with learn_DDQN)")
+elif _e2e_arith_engaged is None:
+    # Pinned GSP-RL sha predates the gate attribute — engagement state is
+    # unknowable from here; warn loudly rather than falsely claim "off".
+    log.warning(
+        "GSP_E2E_UNIFIED_TARGET_ARITH: gate attribute missing (GSP-RL pin "
+        "predates gsp_e2e_unified_arith_engaged) — engagement state UNKNOWN")
+else:
+    log.info(
+        "GSP_E2E_UNIFIED_TARGET_ARITH: off (legacy E2E arithmetic, or "
+        "non-E2E arm)")
+
 # OBSTACLE-CONTACT rule (operator-directed 2026-07-10) — flag-gated, default
 # OFF = byte-identical. See src/contact_rule.py for the full mechanism note
 # (shared terminal consequence -> natural occlusion -> forecast becomes
