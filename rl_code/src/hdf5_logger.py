@@ -233,6 +233,11 @@ class HDF5Logger:
         # rule is engaged — so every episode of an engaged run carries the
         # attrs (including no-contact episodes, the analysis denominators).
         self.contact_state: dict | None = None
+        # GOAL-ENTRY bonus rule per-episode state (record_goal_state). Same
+        # contract as contact_state above: None → no attrs written (rule off
+        # → byte-identical h5); Main.py records it once per episode, before
+        # write_episode, ONLY when the rule is engaged.
+        self.goal_state: dict | None = None
 
     def writerow(
         self, rewards, epsilons, terminations, losses,
@@ -401,6 +406,36 @@ class HDF5Logger:
             "contact_step": int(contact_step),
             "contact_count": int(contact_count),
             "contact_store_dropped": bool(store_dropped),
+        }
+
+    def record_goal_state(self, terminal, goal_step, store_dropped=False) -> None:
+        """Record the GOAL-ENTRY bonus rule's per-episode outcome.
+
+        Called once per episode from Main.py, before write_episode, ONLY when
+        the rule is engaged (GOAL_BONUS != 0) — the default-off h5 stays
+        byte-identical. Persisted as episode-group attrs alongside
+        ``success`` (same pattern as the contact attrs):
+
+          goal_terminal   bool — the payload entered GOAL_TERMINAL_DIST and
+              the episode was LOGICALLY terminated with the bonus booked.
+              ``success`` stays the PHYSICAL outcome (normally True a few
+              zombie steps later; a stalled-in-the-annulus timeout shows
+              goal_terminal=True, success=False).
+          goal_step       int — timestep of the goal-entry event (-1 = no
+              entry this episode). Under the rule this is the logical
+              episode length.
+          goal_store_dropped  bool — the bonus-bearing done=True transition
+              was NOT stored in any replay buffer (the legacy time_steps<=2
+              store guard, or a goal entry within K steps of the physical
+              episode end whose E2E FIFO entry never matured before
+              reset_gsp_label_buffer). Both edges are also logged at INFO
+              ("GOAL_BONUS store dropped:"). Screen denominators (the
+              BONUS-VISIBILITY gate) must subtract these episodes.
+        """
+        self.goal_state = {
+            "goal_terminal": bool(terminal),
+            "goal_step": int(goal_step),
+            "goal_store_dropped": bool(store_dropped),
         }
 
     def record_stored_transition(self, label, input_vec) -> None:
@@ -668,6 +703,13 @@ class HDF5Logger:
             if self.contact_state is not None:
                 for _ck, _cv in self.contact_state.items():
                     grp.attrs[_ck] = _cv
+
+            # GOAL-ENTRY bonus rule attrs — same conditional-additive
+            # pattern as the contact attrs above (present on every episode
+            # of an engaged run, absent otherwise; no schema bump).
+            if self.goal_state is not None:
+                for _gk, _gv in self.goal_state.items():
+                    grp.attrs[_gk] = _gv
 
             # Per-episode diagnostic attrs (FAU / weight norms / effective rank /
             # Q-gap / pred diversity). Only written on episodes where
