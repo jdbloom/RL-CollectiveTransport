@@ -6,6 +6,7 @@ from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
 from src.contact_rule import ContactRule
+from src.goal_rule import GoalBonusRule
 from src.zmq_diagnostics import DiagnosticSocket
 from src.diagnostics import ExperimentLogger
 
@@ -488,6 +489,22 @@ else:
 _contact_rule = ContactRule(config, Utility.params['num_obstacles'])
 log.info(_contact_rule.startup_line())
 
+# GOAL-ENTRY bonus rule (Option A, operator-approved 2026-07-13) —
+# flag-gated, default OFF = byte-identical. See src/goal_rule.py for the
+# full mechanism note (clean success becomes the highest-value exit; the
+# section-2.5 learner-invisibility trap is dodged by firing strictly BEFORE
+# the ARGoS success step) and the zombie-phase caveat shared with the
+# contact rule. Fail-loud engaged-path assertion — exactly one of the two
+# lines prints at every startup, keyed on the rule's own effective gate
+# (bonus != 0), same contract as the OBSTACLE_CONTACT line above, and the
+# same two silent-drop traps apply (daemon restart for the launcher
+# passthrough; stale RL-CT pin). Grep the first cell's log for
+# "GOAL_BONUS rule: ENGAGED" before trusting any bonus arm. GoalBonusRule
+# raises loudly when engaged with a terminal distance at or inside the
+# success radius.
+_goal_rule = GoalBonusRule(config)
+log.info(_goal_rule.startup_line())
+
 # M2 — eval-time GSP prediction ablation (GSP_EVAL_ABLATE_PRED).
 # Read once at startup. The prediction transform is applied at the single
 # next_heading_gsp injection site via src.pred_ablation.apply_pred_ablation.
@@ -634,6 +651,18 @@ try:
             _contact_first_step = -1
             _contact_events = 0
             _contact_store_dropped = False
+
+            # GOAL-ENTRY per-episode state (mirrors the OBSTACLE-CONTACT
+            # state above). _goal_logical_done marks the goal zombie phase:
+            # once True, no NEW transition (agent or GSP-head) enters any
+            # replay buffer while the physical episode runs on to its ARGoS
+            # success. _goal_first_step feeds the goal_step h5 attr;
+            # _goal_store_dropped the goal_store_dropped attr (the
+            # time_steps<=2 legacy guard, or a goal entry within K of the
+            # physical end whose E2E FIFO entry never matured).
+            _goal_logical_done = False
+            _goal_first_step = -1
+            _goal_store_dropped = False
 
             # Eval feature-stats warm-up phase for this episode (see the
             # GSP_EVAL_FEATURE_STATS_WARMUP_EPISODES block above). The flag on
@@ -819,7 +848,8 @@ try:
                     # event (dense re-application); in terminate mode only
                     # the first fires (the zombie phase suppresses the rest).
                     _contact_now = False
-                    if _contact_rule.enabled and not _contact_logical_done:
+                    if (_contact_rule.enabled and not _contact_logical_done
+                            and not _goal_logical_done):
                         _c_hit, _c_robot, _c_obs, _c_dist = _contact_rule.detect(
                             robot_stats, obstacle_stats)
                         if _c_hit:
@@ -835,14 +865,52 @@ try:
                                 ep_counter, time_steps, _c_robot, _c_obs,
                                 _c_dist, _contact_rule.terminate,
                             )
+                    # GOAL-ENTRY detection — post-step cyl_dist2goal
+                    # (observation slot 6, raw meters — the SAME quantity the
+                    # C++ success check compares against m_fThreshold).
+                    # First-event-wins: suppressed in the contact zombie
+                    # phase (and the gate above suppresses contact in the
+                    # goal zombie phase); on a same-step tie the contact wins
+                    # (`not _contact_now`). Default-off path is a single
+                    # False check.
+                    # PENALTY-ONLY interaction (OBSTACLE_CONTACT_TERMINATE
+                    # false): there is no contact zombie phase, so
+                    # _contact_now re-fires on EVERY step of a continuous
+                    # contact (dense re-application, see the contact block
+                    # above) — the `not _contact_now` gate then suppresses
+                    # goal detection for the ENTIRE in-contact transit, not
+                    # just a single-step tiebreak. A payload dragged into
+                    # the goal region while touching an obstacle books no
+                    # bonus until the first contact-free post-step inside
+                    # the threshold. Conservative direction accepted
+                    # 2026-07-13 (no behavior change; a goal reached while
+                    # colliding is not the clean exit the bonus exists to
+                    # reward) — the pre-reg A+D400 arm note in the stelaris
+                    # superrepo covers this suppressor.
+                    _goal_now = False
+                    if (_goal_rule.enabled and not _goal_logical_done
+                            and not _contact_logical_done and not _contact_now
+                            and len(env_observations) > 0
+                            and _goal_rule.detect(env_observations[0][6])):
+                        _goal_now = True
+                        _goal_first_step = time_steps
+                        # The analysis reads these event lines — keep the
+                        # fields (episode, step, dist, bonus).
+                        log.info(
+                            "GOAL_BONUS event: episode=%d step=%d dist=%.4f "
+                            "bonus=%s",
+                            ep_counter, time_steps,
+                            float(env_observations[0][6]), _goal_rule.bonus,
+                        )
                     # done flag for THIS step's stored transitions: ARGoS
-                    # terminal state OR a terminating contact. Flag off ->
-                    # `episode_done or False` == episode_done (byte-identical).
-                    # Cuts the DDQN bootstrap (q_next[dones]=0, GSP-RL
-                    # learning_aids) so the contact-step Q-target is exactly
-                    # the shared penalty-bearing reward.
+                    # terminal state OR a terminating contact OR a goal
+                    # entry. Flags off -> `episode_done or False or False` ==
+                    # episode_done (byte-identical). Cuts the DDQN bootstrap
+                    # (q_next[dones]=0, GSP-RL learning_aids) so the terminal
+                    # step's Q-target is exactly the grounded shared
+                    # penalty-/bonus-bearing reward.
                     _step_store_done = bool(episode_done) or (
-                        _contact_now and _contact_rule.terminate)
+                        _contact_now and _contact_rule.terminate) or _goal_now
 
                     ############################## gsp REWARD ##############################################
                     gsp_reward, label, gsp_squared_error, raw_diff_rad = calculate_gsp_reward(
@@ -1173,7 +1241,14 @@ try:
                         # docs/research/2026-04-13-gsp-ddpg-vs-attention-collapse.md).
                         # 0.0 = filter disabled (legacy behavior).
                         force_thr = float(config.get('GSP_STORE_FORCE_THRESHOLD', 0.0))
-                        if _contact_logical_done:
+                        if _goal_logical_done:
+                            # GOAL-ENTRY zombie phase: same suppression as
+                            # the contact zombie below — the episode is
+                            # logically terminated, no NEW head-training data
+                            # enters the GSP replay while physics runs on to
+                            # the ARGoS success.
+                            pass
+                        elif _contact_logical_done:
                             # OBSTACLE-CONTACT zombie phase: the episode is
                             # logically terminated — no NEW head-training data
                             # may enter the GSP replay (prediction above still
@@ -1384,6 +1459,15 @@ try:
                         # always False -> bit-identical reward stream.
                         if _contact_now:
                             rewards[i] += _contact_rule.penalty
+                        # GOAL-ENTRY shared bonus: on the goal-entry step the
+                        # SAME value is added to EVERY robot's individual
+                        # reward (shared consequence, per-robot convention —
+                        # never divided by num_robots; raw units upstream of
+                        # REWARD_SCALE, exactly like the contact penalty
+                        # above). Default off: _goal_now is always False ->
+                        # bit-identical reward stream.
+                        if _goal_now:
+                            rewards[i] += _goal_rule.bonus
                         # H-phase5-2 reward shaping: when GSP_REWARD_COEF > 0, add
                         # gsp_reward[i] (signed prediction-error penalty in [-2, 0])
                         # scaled by coef to the actor's training reward. Default 0.0
@@ -1471,6 +1555,7 @@ try:
                         # `not _contact_logical_done` guard suppresses all
                         # post-contact (zombie-phase) stores.
                         if (time_steps > 2 and not _defer_immediate_e2e_store
+                                and not _goal_logical_done
                                 and not _contact_logical_done):
                             if train_mode:
                                 if learning_scheme != 'None':
@@ -1577,8 +1662,14 @@ try:
                             # their own — the maturity block below skips
                             # e2e_transition=None entries, so nothing pushed
                             # after the contact step ever enters the replay.
+                            # GOAL-ENTRY zombie phase composes identically:
+                            # keep pushing REAL payload windows (they mature
+                            # the still-pending pre-goal entries, including
+                            # the bonus-bearing goal-entry transition itself)
+                            # but carry no transition of their own.
                             e2e_transition=(
-                                None if _contact_logical_done else _e2e_tx),
+                                None if _goal_logical_done else
+                                (None if _contact_logical_done else _e2e_tx)),
                         )
                         _matured_e2e = model.pop_matured_gsp_label(None)
                         if _matured_e2e is not None and _matured_e2e.get('e2e_transition') is not None:
@@ -1653,6 +1744,48 @@ try:
                                 time_steps, ep_counter,
                             )
                         _contact_logical_done = True
+
+                    # GOAL-ENTRY logical termination: flips AFTER the goal-
+                    # entry step's own stores ran (with done=True), so the
+                    # bonus-bearing terminal transition is in the buffer and
+                    # everything AFTER it is not — mirrors the contact flip
+                    # above, including the time_steps<=2 legacy-guard edge
+                    # (the bonus-bearing done=True transition is dropped by
+                    # the t>2 store guard; LOUD and countable via the
+                    # goal_store_dropped attr).
+                    if _goal_now:
+                        if bool(episode_done):
+                            # Terminal-coincident entry: the goal detector
+                            # fired on the ARGoS terminal step itself, so the
+                            # immediate-store path's legacy `if not
+                            # episode_done` guard drops the bonus-bearing
+                            # done=True transition — the section-2.5
+                            # learner-invisibility trap the >radius margin
+                            # exists to dodge. LOUD and countable, exactly
+                            # like the other two drop edges.
+                            _goal_store_dropped = True
+                            log.info(
+                                "GOAL_BONUS store dropped: goal entry "
+                                "coincides with the ARGoS terminal step %d "
+                                "(episode=%d) — the legacy `if not "
+                                "episode_done` store guard drops the "
+                                "bonus-bearing done=True transition (the "
+                                "section-2.5 trap); screen denominators "
+                                "must subtract goal_store_dropped episodes",
+                                time_steps, ep_counter,
+                            )
+                        elif time_steps <= 2:
+                            _goal_store_dropped = True
+                            log.info(
+                                "GOAL_BONUS store dropped: goal entry at "
+                                "step %d <= 2 (episode=%d) — the legacy "
+                                "time_steps>2 store guard drops the "
+                                "bonus-bearing done=True transition; screen "
+                                "denominators must subtract "
+                                "goal_store_dropped episodes",
+                                time_steps, ep_counter,
+                            )
+                        _goal_logical_done = True
 
                     if train_mode and config['LEARNING_SCHEME'] != 'None':
                         if time_steps % learn_every == 0:
@@ -1794,10 +1927,31 @@ try:
                         # itself (independent_learning never populates
                         # e2e_transition).
                         if (not args.independent_learning
-                                and _contact_rule.enabled
+                                and (_contact_rule.enabled or _goal_rule.enabled)
                                 and hasattr(model, 'unmatured_done_e2e_transitions')):
                             _unmatured_done = model.unmatured_done_e2e_transitions()
-                            if _unmatured_done:
+                            # First-event-wins means at most ONE of the two
+                            # logical terminations fired this episode, so the
+                            # unmatured done=True drop attributes
+                            # unambiguously. A goal entry within K of the
+                            # physical (ARGoS success) end is the GOAL twin
+                            # of the contact edge — the margin/typical-speed
+                            # window makes it rare by construction, and it is
+                            # LOUD when it happens.
+                            if _unmatured_done and _goal_logical_done:
+                                _goal_store_dropped = True
+                                log.info(
+                                    "GOAL_BONUS store dropped: episode=%d "
+                                    "ended %d step(s) after the goal entry "
+                                    "(< K) — the bonus-bearing done=True E2E "
+                                    "transition never matured in the delayed "
+                                    "FIFO and is dropped with it; screen "
+                                    "denominators must subtract "
+                                    "goal_store_dropped episodes",
+                                    ep_counter,
+                                    time_steps - _goal_first_step,
+                                )
+                            elif _unmatured_done:
                                 _contact_store_dropped = True
                                 log.info(
                                     "OBSTACLE_CONTACT store dropped: episode=%d "
@@ -1967,6 +2121,22 @@ try:
                                 contact_step=_contact_first_step,
                                 contact_count=_contact_events,
                                 store_dropped=_contact_store_dropped,
+                            )
+
+                        # GOAL-ENTRY per-episode h5 attrs (mirrors the
+                        # contact attrs above). Recorded ONLY when the rule
+                        # is engaged so the default-off h5 stays
+                        # byte-identical. NOTE: the `success` attr stays the
+                        # PHYSICAL outcome; goal_terminal marks the
+                        # learner-visible bonus terminal (physical success
+                        # normally follows a few zombie steps later — a
+                        # goal_terminal episode whose payload then stalls to
+                        # timeout shows goal_terminal=True, success=False).
+                        if _goal_rule.enabled:
+                            hdf5_writer.record_goal_state(
+                                terminal=_goal_logical_done,
+                                goal_step=_goal_first_step,
+                                store_dropped=_goal_store_dropped,
                             )
 
                         # h5py is a hard dep of src.hdf5_logger, so the previous HAS_HDF5
