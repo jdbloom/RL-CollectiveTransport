@@ -12,7 +12,7 @@ from src.diagnostics import ExperimentLogger
 #from python_code.comms_viz import viz
 
 import argparse
-from collections import namedtuple
+from collections import namedtuple, deque
 from struct import pack, unpack, Struct
 import numpy as np
 import math
@@ -116,7 +116,7 @@ hdf5_writer = HDF5Logger(
 # be drawn from the same distribution the head actually sees during training.
 # Cap at max size so memory stays bounded on long runs.
 _DIAG_POOL_MAX_SIZE = 8192
-diag_gsp_obs_pool: list = []
+diag_gsp_obs_pool: deque = deque(maxlen=_DIAG_POOL_MAX_SIZE)
 diag_eval_batch_frozen: bool = False
 diag_episode_predictions: list = []  # per-step GSP predictions this episode, reset each ep
 
@@ -1768,8 +1768,6 @@ try:
                         if diag_gsp_head_input is not None:
                             for obs in diag_gsp_head_input:
                                 diag_gsp_obs_pool.append(np.asarray(obs, dtype=np.float32))
-                            while len(diag_gsp_obs_pool) > _DIAG_POOL_MAX_SIZE:
-                                diag_gsp_obs_pool.pop(0)
                         # Accumulate this-episode GSP predictions for the diversity entropy metric.
                         if next_heading_gsp is not None:
                             diag_episode_predictions.extend(
