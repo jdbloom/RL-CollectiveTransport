@@ -34,12 +34,22 @@ Flags (agent_config.yml, launcher passthrough on the stelaris side):
       Per-robot reward convention: the SAME value is added to each robot's
       own reward stream — do NOT divide by num_robots.
       UNITS: raw env-reward units, UPSTREAM of REWARD_SCALE — the same
-      stream as the C++ dense reward and the contact penalty; scaled once
-      at the TD target (GSP-RL gsp_rl/src/actors/learning_aids.py,
-      `target = reward_scale * rewards + gamma * bootstrap`). At the
-      current recipe's REWARD_SCALE=0.1 and Q_TARGET_CLIP=1000, a YAML
-      value of 10000.0 reaches the learner as a grounded target of ~+999.8
-      — the clip edge without crossing it (research doc section 2.3).
+      stream as the C++ dense reward and the contact penalty. What the
+      LEARNER sees depends on the learn path's TD-target arithmetic
+      (GSP-RL gsp_rl/src/actors/learning_aids.py):
+        * plain DDQN (learn_DDQN) and E2E with
+          GSP_E2E_UNIFIED_TARGET_ARITH=true both route through _q_target
+          (`reward_scale * rewards + gamma * bootstrap`, then the
+          Q_TARGET_CLIP clamp) — at the current recipe's REWARD_SCALE=0.1
+          and Q_TARGET_CLIP=1000, a YAML value of 10000.0 reaches the
+          learner as a grounded target of ~+999.8, the clip edge without
+          crossing it (research doc section 2.3).
+        * LEGACY E2E arithmetic (GSP_E2E_UNIFIED_TARGET_ARITH
+          absent/false) applies NO reward_scale and NO target clip
+          (`rewards + gamma * bootstrap`): the same YAML 10000.0 lands as
+          ~+9998 UNBOUNDED — a 10x-scale unclipped target that voids the
+          +999.8 calibration above. Any GOAL_BONUS + E2E cell MUST set
+          GSP_E2E_UNIFIED_TARGET_ARITH=true.
       When engaged, goal entry ALWAYS logically terminates (no separate
       terminate flag: a bonus the learner keeps bootstrapping past would
       be farmable and would not be a grounded terminal).

@@ -191,6 +191,7 @@ def _run_fake_episode(goal_rule, contact_rule, cyl_traj, robot_traj,
     contact_events = 0
     goal_logical_done = False
     goal_first_step = -1
+    goal_store_dropped = False
     cyl_dist = 8.0
     positions = robot_traj[min(robot_traj)] if robot_traj else \
         [(3.0, 3.0), (3.0, -3.0), (-3.0, 3.0), (-3.0, -3.0)]
@@ -240,11 +241,18 @@ def _run_fake_episode(goal_rule, contact_rule, cyl_traj, robot_traj,
         if contact_now and contact_rule.terminate:
             contact_logical_done = True
         if goal_now:
+            # Drop edges mirrored from the Main.py flip site: the
+            # terminal-coincident entry (the `if not episode_done` guard
+            # drops the bonus-bearing transition — the section-2.5 trap)
+            # and the legacy t<=2 store-guard edge.
+            if episode_done or t <= 2:
+                goal_store_dropped = True
             goal_logical_done = True
 
     state = {
         "goal_terminal": goal_logical_done,
         "goal_step": goal_first_step,
+        "goal_store_dropped": goal_store_dropped,
         "contact_terminated": contact_logical_done,
         "contact_step": contact_first_step,
         "contact_count": contact_events,
@@ -375,7 +383,9 @@ class TestGoalTerminal:
         """Entry coinciding with the ARGoS terminal step: the legacy
         `if not episode_done` guard drops the transition (the documented
         section-2.5 trap the >radius default margin exists to dodge) —
-        attrs still record it."""
+        attrs still record it, and the drop is LOUD: the flip site sets
+        goal_store_dropped so the BONUS-VISIBILITY denominator can
+        subtract the episode."""
         rule = GoalBonusRule({"GOAL_BONUS": 10000.0})
         cyl_traj = {1: 8.0, 20: 2.2}
         stored, state, _ = _run_fake_episode(
@@ -383,6 +393,7 @@ class TestGoalTerminal:
         assert all(t < 20 for (t, _, _, _) in stored)
         assert state["goal_terminal"] is True
         assert state["goal_step"] == 20
+        assert state["goal_store_dropped"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -649,10 +660,12 @@ class TestMainSourceContract:
         assert "_ep_outcome_success = reached_goal and not _contact_logical_done" in text
 
     def test_store_dropped_edges_are_loud_and_recorded(self):
-        """Both goal drop edges log the same greppable INFO prefix, and the
-        flag reaches the h5 attrs through record_goal_state."""
+        """All three goal drop edges (terminal-coincident entry, t<=2
+        legacy guard, unmatured E2E FIFO) log the same greppable INFO
+        prefix, and the flag reaches the h5 attrs through
+        record_goal_state."""
         text = self._main_text()
-        assert text.count("GOAL_BONUS store dropped:") == 2
+        assert text.count("GOAL_BONUS store dropped:") == 3
         assert "store_dropped=_goal_store_dropped," in text
         assert "_goal_store_dropped = False" in text  # per-episode reset
         # The contact edges are untouched (still exactly two).

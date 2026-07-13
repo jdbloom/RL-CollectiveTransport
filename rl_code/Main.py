@@ -873,6 +873,20 @@ try:
                     # goal zombie phase); on a same-step tie the contact wins
                     # (`not _contact_now`). Default-off path is a single
                     # False check.
+                    # PENALTY-ONLY interaction (OBSTACLE_CONTACT_TERMINATE
+                    # false): there is no contact zombie phase, so
+                    # _contact_now re-fires on EVERY step of a continuous
+                    # contact (dense re-application, see the contact block
+                    # above) — the `not _contact_now` gate then suppresses
+                    # goal detection for the ENTIRE in-contact transit, not
+                    # just a single-step tiebreak. A payload dragged into
+                    # the goal region while touching an obstacle books no
+                    # bonus until the first contact-free post-step inside
+                    # the threshold. Conservative direction accepted
+                    # 2026-07-13 (no behavior change; a goal reached while
+                    # colliding is not the clean exit the bonus exists to
+                    # reward) — the pre-reg A+D400 arm note in the stelaris
+                    # superrepo covers this suppressor.
                     _goal_now = False
                     if (_goal_rule.enabled and not _goal_logical_done
                             and not _contact_logical_done and not _contact_now
@@ -1740,7 +1754,27 @@ try:
                     # the t>2 store guard; LOUD and countable via the
                     # goal_store_dropped attr).
                     if _goal_now:
-                        if time_steps <= 2:
+                        if bool(episode_done):
+                            # Terminal-coincident entry: the goal detector
+                            # fired on the ARGoS terminal step itself, so the
+                            # immediate-store path's legacy `if not
+                            # episode_done` guard drops the bonus-bearing
+                            # done=True transition — the section-2.5
+                            # learner-invisibility trap the >radius margin
+                            # exists to dodge. LOUD and countable, exactly
+                            # like the other two drop edges.
+                            _goal_store_dropped = True
+                            log.info(
+                                "GOAL_BONUS store dropped: goal entry "
+                                "coincides with the ARGoS terminal step %d "
+                                "(episode=%d) — the legacy `if not "
+                                "episode_done` store guard drops the "
+                                "bonus-bearing done=True transition (the "
+                                "section-2.5 trap); screen denominators "
+                                "must subtract goal_store_dropped episodes",
+                                time_steps, ep_counter,
+                            )
+                        elif time_steps <= 2:
                             _goal_store_dropped = True
                             log.info(
                                 "GOAL_BONUS store dropped: goal entry at "
