@@ -303,9 +303,9 @@ class Agent(Actor):
             # per-agent self-centric views, so each agent has its own history.
             self.gsp_observation = []
             for _ in range(self._n_agents):
-                self.gsp_observation.append([[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)])
+                self.gsp_observation.append(deque([[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)], maxlen=self.gsp_sequence_length))
         else:
-            self.gsp_observation = [[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)]
+            self.gsp_observation = deque([[0 for _ in range(_ring_slot_size)] for _ in range(self.gsp_sequence_length)], maxlen=self.gsp_sequence_length)
 
         # Per-agent LSTM hidden state for R-GSP-N inference
         self._agent_hidden_states = {}
@@ -700,7 +700,6 @@ class Agent(Actor):
                 i += 2
             # Maintain gsp_observation ring buffer the same way make_gsp_states does,
             # so recurrent/attention variants can still see sequences if added later.
-            self.gsp_observation[agent].pop(0)
             self.gsp_observation[agent].append(agent_state)
             states.append(agent_state)
         return states
@@ -894,18 +893,17 @@ class Agent(Actor):
             # For K=1 the ring buffer stores full-size vectors (same as before).
             # For K>1 the ring buffer stores single-step vectors; the stacked output
             # is assembled below from the last K entries.
-            self.gsp_observation[agent].pop(0)
             self.gsp_observation[agent].append(agent_state)
 
             # Temporal stacking: flatten last K entries from ring buffer.
-            # gsp_observation[agent] is a list of single-step vectors, newest last.
+            # gsp_observation[agent] is a deque of single-step vectors, newest last.
             # K=1 returns the single-step vector unchanged — strict no-op.
             if temporal_stack_k == 1:
                 stacked = agent_state
             else:
                 # Take the last K entries (newest at end); flatten in temporal order
                 # oldest-first so the model sees a causal sequence.
-                history = self.gsp_observation[agent]
+                history = list(self.gsp_observation[agent])
                 k_entries = history[-temporal_stack_k:]
                 stacked = np.concatenate(k_entries).astype(np.float32)
 
@@ -1086,7 +1084,6 @@ class Agent(Actor):
         else:
             if self.recurrent_gsp:
                 self.gsp_observation.append(agent_gsp_states)
-                self.gsp_observation.pop(0)
                 action = self.choose_action(self.gsp_observation, self.gsp_networks, gsp_test)
                 return action
 
