@@ -243,10 +243,12 @@ class Agent(Actor):
         # When True, the CTDE acting loop (Main.py) and the stateless GSP-head
         # prediction loop (choose_agent_gsp) route the R per-robot forwards
         # through ONE stacked choose_actions_batch call on the shared net.
-        # Changes float-reduction order and collapses the R epsilon-greedy
-        # gate draws to one — activation is gated on the pre-registered n-seed
-        # noise-floor re-baseline. Default False = byte-identical legacy
-        # sequential path (each robot forwards alone, exactly as before).
+        # Changes float-reduction order only — since the #91 v2 fix the
+        # batched DQN/DDQN path replays the sequential per-robot np.random
+        # stream exactly (R epsilon gates + explorer draws in robot order).
+        # Activation is still gated on the pre-registered n-seed noise-floor
+        # re-baseline. Default False = byte-identical legacy sequential path
+        # (each robot forwards alone, exactly as before).
         self.batched_actor_forward = bool(config.get('BATCHED_ACTOR_FORWARD', False))
         # Independent-learning exclusion for the batched GSP gate. Main.py
         # mirrors its CLI --independent_learning flag into
@@ -974,7 +976,8 @@ class Agent(Actor):
         sequential path so failure semantics stay legacy-exact.
 
         Baseline-changing by contract (see batched_actor_forward in __init__):
-        batched matmul float order + ONE epsilon gate draw for the whole step.
+        batched matmul float order only — the #91 v2 fix replays the
+        sequential per-robot epsilon-gate/explorer np.random stream exactly.
 
         Returns (actions_to_take, action_nums) — the same two lists the
         legacy loop builds one robot at a time.

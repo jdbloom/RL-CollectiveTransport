@@ -228,9 +228,10 @@ class TestFlagOnActing:
             np.testing.assert_array_equal(got, want)
         assert agent.failed is False
 
-    def test_exploring_consumes_single_gate_draw(self):
-        """epsilon=1.0: ONE np.random.random() gate for the whole step, then
-        one choice per robot — the documented RNG-contract change."""
+    def test_exploring_draws_per_robot_gates(self):
+        """epsilon=1.0: one np.random.random() gate per robot with the
+        explorer choice draws interleaved in robot order — the #91 v2 RNG
+        contract (flag-on stream IDENTICAL to sequential)."""
         agent = _make_ddqn_agent(_config(EPSILON=1.0))
         agent.batched_actor_forward = True
         observations = [np.zeros(31, dtype=np.float32) for _ in range(4)]
@@ -240,16 +241,17 @@ class TestFlagOnActing:
             observations, test=False)
 
         np.random.seed(99)
-        _ = np.random.random()
-        expected = [np.random.choice(agent.action_space) for _ in range(4)]
+        expected = []
+        for _ in range(4):
+            _ = np.random.random()
+            expected.append(np.random.choice(agent.action_space))
 
         assert action_nums == expected
 
-    def test_exploiting_consumes_single_gate_draw_and_goes_greedy(self):
-        """0 < epsilon < 1, a seed whose gate draw EXPLOITS: the step consumes
-        exactly ONE np.random.random() gate draw and ZERO np.random.choice
-        draws, then returns the batched greedy actions — the exploit-branch
-        RNG contract, pinned via np.random state equality."""
+    def test_all_exploit_step_consumes_per_robot_gate_draws_and_goes_greedy(self):
+        """0 < epsilon < 1, a seed whose FOUR gate draws all EXPLOIT: exactly
+        R np.random.random() gate draws (one per robot — #91 v2), ZERO
+        np.random.choice draws, then the batched greedy actions."""
         agent = _make_ddqn_agent(_config(EPSILON=0.5))
         agent.batched_actor_forward = True
         rng = np.random.default_rng(5)
@@ -261,23 +263,60 @@ class TestFlagOnActing:
         _, greedy_nums = agent.choose_agent_actions_batch(
             observations, test=True)
 
-        np.random.seed(0)  # first np.random.random() = 0.5488... > 0.5
+        np.random.seed(0)  # first four np.random.random() draws all > 0.5
         _, action_nums = agent.choose_agent_actions_batch(
             observations, test=False)
         state_after = np.random.get_state()
 
         np.random.seed(0)
-        gate = np.random.random()
-        assert gate > agent.epsilon  # seed sanity: this seed exploits
+        gates = [np.random.random() for _ in range(4)]
+        assert all(g > agent.epsilon for g in gates)  # seed sanity: all exploit
         expected_state = np.random.get_state()
 
-        # Exploiting step returns the batched greedy actions...
         assert action_nums == greedy_nums
-        # ...and leaves np.random exactly one gate draw ahead: no
-        # np.random.choice was consumed anywhere in the call.
         assert state_after[0] == expected_state[0]
         np.testing.assert_array_equal(state_after[1], expected_state[1])
         assert state_after[2:] == expected_state[2:]
+
+    def test_mixed_step_matches_sequential_stream_and_actions(self):
+        """#91 v2 acceptance gate at the call site: on a MIXED explore/
+        exploit step, flag-on actions AND the post-call np.random state equal
+        the sequential choose_agent_action loop's exactly."""
+        agent = _make_ddqn_agent(_config(EPSILON=0.6))
+        agent.batched_actor_forward = True
+        rng = np.random.default_rng(9)
+        observations = [
+            rng.standard_normal(31).astype(np.float32) for _ in range(4)
+        ]
+
+        np.random.seed(0)
+        actions_to_take, action_nums = agent.choose_agent_actions_batch(
+            observations, test=False)
+        state_batched = np.random.get_state()
+
+        np.random.seed(0)
+        sequential = [
+            agent.choose_agent_action(obs, _NO_FAILURE, test=False)
+            for obs in observations
+        ]
+        state_sequential = np.random.get_state()
+
+        # Seed sanity: this seed/epsilon mixes both branches across the step.
+        np.random.seed(0)
+        exploits = []
+        for _ in range(4):
+            exploit = np.random.random() > agent.epsilon
+            exploits.append(exploit)
+            if not exploit:
+                np.random.choice(agent.action_space)
+        assert any(exploits) and not all(exploits)
+
+        assert action_nums == [a[1] for a in sequential]
+        for got, want in zip(actions_to_take, (a[0] for a in sequential)):
+            np.testing.assert_array_equal(got, want)
+        assert state_batched[0] == state_sequential[0]
+        np.testing.assert_array_equal(state_batched[1], state_sequential[1])
+        assert state_batched[2:] == state_sequential[2:]
 
     def test_non_discrete_scheme_raises(self):
         T.manual_seed(0)

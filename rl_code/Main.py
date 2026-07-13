@@ -375,8 +375,9 @@ log.info("GSP_REWARD_RANDOM_NOISE = %s", _gsp_reward_random_noise)
 # nets (nothing to batch through one net) and any step with a failed robot
 # falls back to the sequential path so failure semantics stay legacy-exact.
 # Default False = byte-identical legacy acting. Activation requires the
-# pre-registered n-seed noise-floor re-baseline (float-reduction order + the
-# R epsilon-greedy gate draws collapse to one).
+# pre-registered n-seed noise-floor re-baseline (float-reduction order; since
+# the #91 v2 fix the R per-robot epsilon gates + explorer draws replay the
+# sequential np.random stream exactly).
 _batched_actor_forward = (
     bool(config.get('BATCHED_ACTOR_FORWARD', False))
     and not args.independent_learning
