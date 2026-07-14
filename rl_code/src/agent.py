@@ -383,7 +383,7 @@ class Agent(Actor):
 
     def push_pending_gsp_obs(self, state_per_robot, gsp_obs_per_robot,
                              payload_angle_deg=None, e2e_transition=None,
-                             payload_track=None):
+                             payload_track=None, action_per_robot=None):
         """Delayed-label mode: snapshot per-robot (state, gsp_obs) for label
         maturation K steps later. No-op when the target is not a delayed-label
         target (see _DELAYED_LABEL_TARGETS).
@@ -425,6 +425,10 @@ class Agent(Actor):
             'payload_track': (
                 {k: float(v) for k, v in payload_track.items()}
                 if payload_track is not None else None
+            ),
+            'action_per_robot': (
+                [int(a) for a in action_per_robot]
+                if action_per_robot is not None else None
             ),
             'e2e_transition': e2e_transition,
         })
@@ -477,6 +481,7 @@ class Agent(Actor):
         )
         return {
             'state_per_robot': oldest['state_per_robot'],
+            'action_per_robot': oldest.get('action_per_robot'),
             'gsp_obs_per_robot': oldest['gsp_obs_per_robot'],
             'payload_angle_deg': oldest.get('payload_angle_deg'),
             'payload_angle_window': angle_window,
