@@ -1326,7 +1326,11 @@ try:
                                     if not config.get('GSP_E2E_ENABLED'):
                                         if _gsp_pred_target == 'delta_theta_traj':
                                             model.push_pending_gsp_obs(
-                                                states, states, payload_angle_deg=float(obj_stats[5])
+                                                states, states, payload_angle_deg=float(obj_stats[5]),
+                                                action_per_robot=[
+                                                    int(actions[i])
+                                                    for i in range(Utility.params['num_robots'])
+                                                ],
                                             )
                                         else:
                                             # Global targets: carry the payload track (raw meters).
@@ -1391,11 +1395,13 @@ try:
                                             float(matured['label_per_robot'][i])
                                             for i in range(Utility.params['num_robots'])
                                         ]
+                                    _act_row = matured.get('action_per_robot')
                                     for i in range(Utility.params['num_robots']):
                                         s_to_store = matured['state_per_robot'][i]
                                         label_to_store = _matured_labels[i]
+                                        _act_i = int(_act_row[i]) if _act_row is not None else None
                                         model.store_gsp_transition(s_to_store, label_to_store, 0, s_to_store, 0)
-                                        hdf5_writer.record_stored_transition(label_to_store, s_to_store)
+                                        hdf5_writer.record_stored_transition(label_to_store, s_to_store, action=_act_i)
                             else:
                                 # Multi-target label: use _multi_label for all non-future_prox kinds.
                                 # For scalar kinds (_multi_label.size==1) the store_gsp_transition

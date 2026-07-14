@@ -203,6 +203,7 @@ class HDF5Logger:
         # Aggregated into attrs on write_episode; not stored as full datasets.
         self.stored_gsp_labels: list = []
         self.stored_gsp_inputs: list = []
+        self.stored_gsp_actions: list = []
         # Phase 4 loss-step correlation diagnostic. One float per GSP learn step:
         # the Pearson correlation between the fresh forward-pass predictions used
         # in the MSE loss and the replay-buffer labels for that same batch.
@@ -438,7 +439,7 @@ class HDF5Logger:
             "goal_store_dropped": bool(store_dropped),
         }
 
-    def record_stored_transition(self, label, input_vec) -> None:
+    def record_stored_transition(self, label, input_vec, action=None) -> None:
         """Record one (label, input) pair at the moment it's stored in the GSP
         replay buffer. Per Phase 1 sample-quality spec — gives us label/input
         distribution summaries without having to reach into the external gsp_rl
@@ -461,6 +462,11 @@ class HDF5Logger:
             )
         except (TypeError, ValueError):
             pass
+        if action is not None:
+            try:
+                self.stored_gsp_actions.append(int(action))
+            except (TypeError, ValueError):
+                pass
 
     def record_episode_diagnostics(self, diag: dict) -> None:
         """Record per-episode diagnostic scalars (FAU, weight norms, effective rank,
@@ -678,6 +684,29 @@ class HDF5Logger:
                     if finite_std.size > 0:
                         grp.attrs["gsp_train_input_std"] = float(np.mean(finite_std))
                         grp.attrs["gsp_train_input_count"] = int(X.shape[0])
+
+            # Raw per-episode GSP training triples (state, scalar label, realized
+            # action) — the action-conditioned pre-check reads these to test
+            # whether the label depends on a single robot's own action. Additive
+            # datasets; absent on runs that never log an action (byte-identical
+            # off-path). Guarded by homogeneous input shape like the stats above.
+            if self.stored_gsp_inputs:
+                _shapes = {tuple(x.shape) for x in self.stored_gsp_inputs}
+                if len(_shapes) == 1:
+                    grp.create_dataset(
+                        "gsp_stored_inputs",
+                        data=np.stack(self.stored_gsp_inputs).astype(np.float32),
+                        compression="gzip", compression_opts=4)
+            if self.stored_gsp_labels:
+                grp.create_dataset(
+                    "gsp_stored_labels",
+                    data=np.asarray(self.stored_gsp_labels, dtype=np.float64),
+                    compression="gzip", compression_opts=4)
+            if self.stored_gsp_actions:
+                grp.create_dataset(
+                    "gsp_stored_actions",
+                    data=np.asarray(self.stored_gsp_actions, dtype=np.int64),
+                    compression="gzip", compression_opts=4)
 
             # Logging schema version. Bump on every change that adds/removes a field
             # or changes semantics of an existing field. Analyzer reads this attr

@@ -582,3 +582,56 @@ def test_label_scale_is_non_saturating():
     # And it must NOT be the saturating x100-in-radians scale.
     saturating = 0.09 * 100.0
     assert saturating > 1.0, "sanity: x100 rad scale would saturate (context)"
+
+
+def test_action_per_robot_round_trips_through_maturation():
+    """Additive action logging (action-conditioned pre-check): the per-robot
+    realized action pushed at step t must ride the delayed FIFO and return on the
+    matured pop, paired with the SAME-step (t-K) state."""
+    K = 3
+    n = 4
+    agent = _make_agent(
+        gsp_output_kind="delta_theta_traj",
+        prediction_target="delta_theta_traj",
+        K=K,
+        n_agents=n,
+    )
+    pushed = {}
+    got = {}
+    for t in range(K + 3):
+        states = [np.full(8, float(t), dtype=np.float32) for _ in range(n)]
+        acts = [(t * 10 + i) % 9 for i in range(n)]
+        pushed[t] = acts
+        agent.push_pending_gsp_obs(
+            states, states, payload_angle_deg=float(t),
+            action_per_robot=acts,
+        )
+        matured = agent.pop_matured_gsp_label(None)
+        if matured is not None:
+            state_t = int(round(float(matured["state_per_robot"][0][0])))
+            got[state_t] = list(matured["action_per_robot"])
+    assert got, "no transitions matured"
+    for src_t, acts in got.items():
+        assert acts == pushed[src_t], (
+            f"action mismatch for state t={src_t}: {acts} != {pushed[src_t]}"
+        )
+
+
+def test_action_per_robot_defaults_none_offpath():
+    """When action_per_robot is not supplied the matured dict carries None —
+    strict no-op for every existing target."""
+    agent = _make_agent(
+        gsp_output_kind="delta_theta_traj",
+        prediction_target="delta_theta_traj",
+        K=3,
+    )
+    n = agent.n_agents
+    seen = False
+    for t in range(6):
+        states = [np.full(8, float(t), dtype=np.float32) for _ in range(n)]
+        agent.push_pending_gsp_obs(states, states, payload_angle_deg=float(t))
+        matured = agent.pop_matured_gsp_label(None)
+        if matured is not None:
+            seen = True
+            assert matured.get("action_per_robot") is None
+    assert seen
