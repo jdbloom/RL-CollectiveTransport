@@ -56,6 +56,7 @@ class Agent(Actor):
             'cyl_kinematics_goal_4d': 4,
             'time_to_goal_1d': 1,
             'neighbor_force_1d': 1,
+            'force_disagreement_1d': 1,
             # delta_theta_traj: size == K == GSP_PREDICTION_HORIZON. The label is the
             # per-step payload-rotation trajectory [Δθ(t→t+1), …, Δθ(t+K-1→t+K)].
             'delta_theta_traj': None,
@@ -374,7 +375,7 @@ class Agent(Actor):
     # K-step payload track window and form the size-K progress / size-2K
     # displacement trajectory (raw meters, no scaling).
     _DELAYED_LABEL_TARGETS = (
-        'future_prox', 'neighbor_force', 'delta_theta_traj',
+        'future_prox', 'neighbor_force', 'force_disagreement', 'delta_theta_traj',
         'goal_progress_traj', 'cyl_displacement_traj',
     )
 

@@ -1312,7 +1312,8 @@ try:
                             #                   [Δx1,Δy1,…,ΔxK,ΔyK] from the same track window
                             #                   (cyl_x/cyl_y = obj_stats[0]/[1]). RAW meters.
                             _gsp_pred_target = getattr(model, 'gsp_prediction_target', 'delta_theta')
-                            if (_gsp_pred_target in ('future_prox', 'neighbor_force')
+                            if (_gsp_pred_target in ('future_prox', 'neighbor_force',
+                                                     'force_disagreement')
                                     or _gsp_pred_target in _GSP_TRAJ_TARGETS):
                                 if _gsp_pred_target in _GSP_TRAJ_TARGETS:
                                     # Carry the CURRENT payload angle (degrees) / payload track
@@ -1362,6 +1363,29 @@ try:
                                         ).astype(np.float32)
                                     else:
                                         _current_label = np.zeros(_n_r, dtype=np.float32)
+                                elif _gsp_pred_target == 'force_disagreement':
+                                    # GLOBAL directional-disagreement scalar of the applied
+                                    # forces at the (delayed) maturity step: 1 - |Σf_i|/Σ|f_i|
+                                    # (0 = all forces aligned, ~1 = forces cancel / robots
+                                    # fighting). Same value broadcast to every robot — a
+                                    # GLOBAL target (GSP premise), non-redundant (a single
+                                    # robot can't infer the collective's misalignment).
+                                    # stats[j][0]=force magnitude, stats[j][1]=force angle (deg).
+                                    model.push_pending_gsp_obs(states, states)
+                                    _n_r = Utility.params['num_robots']
+                                    _fmag = np.asarray(
+                                        [float(stats[j][0]) for j in range(_n_r)],
+                                        dtype=np.float64)
+                                    _fang = np.deg2rad(np.asarray(
+                                        [float(stats[j][1]) for j in range(_n_r)],
+                                        dtype=np.float64))
+                                    _netx = float((_fmag * np.cos(_fang)).sum())
+                                    _nety = float((_fmag * np.sin(_fang)).sum())
+                                    _summag = float(_fmag.sum())
+                                    _disag = (
+                                        1.0 - float(np.hypot(_netx, _nety)) / _summag
+                                        if _summag > 1e-9 else 0.0)
+                                    _current_label = np.full(_n_r, _disag, dtype=np.float32)
                                 else:  # future_prox
                                     model.push_pending_gsp_obs(states, states)
                                     _current_label = np.asarray(agent_prox_flags, dtype=np.float32)
