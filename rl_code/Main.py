@@ -5,6 +5,7 @@ from src.env import calculate_gsp_reward, ZMQ_Utility, angle_normalize_signed_de
 from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
+from src.obs_delay import ObsDelayBuffer
 from src.contact_rule import ContactRule
 from src.goal_rule import GoalBonusRule
 from src.zmq_diagnostics import DiagnosticSocket
@@ -580,6 +581,29 @@ if _gsp_eval_stats_warmup_eps > 0 and test_mode:
 _gsp_log_candidate_targets = bool(int(config.get('GSP_LOG_CANDIDATE_TARGETS', 0)))
 log.info("GSP_LOG_CANDIDATE_TARGETS = %s", _gsp_log_candidate_targets)
 
+# Axis-1 CONDITION lever — OBS_DELAY_K (actor-observation delay).
+# Pre-reg: docs/predictions/2026-07-14-delay-sweep-prereg.md (Option B). Delay
+# ONLY the actor's egocentric observation (the env_observations[i] consumed by
+# the make_agent_state / IC agent_state block) by k steps. The GSP head input,
+# reward path, prox-filter / GSP-head prox-flag computation, and label/store
+# (obj_stats) paths all stay LIVE — the head predicts forward from the CURRENT
+# input; the actor reads a STALE (t-k) direct observation. This isolates the
+# hypothesis: does a live forward prediction let the actor compensate for a
+# stale direct observation? k=0 (default) is a STRICT no-op (see src/obs_delay.py:
+# the k+1=1 slot returns the value just pushed) → byte-identical to current.
+# The buffer is RESET at every episode boundary (see the episode-init block) so
+# no observation leaks across episodes. Applied identically to IC and GSP-N — the
+# delay is the shared handicap, the prediction is the only between-arm difference.
+_obs_delay_k = int(config.get('OBS_DELAY_K', 0))
+if _obs_delay_k < 0:
+    raise ValueError(f"OBS_DELAY_K must be >= 0, got {_obs_delay_k}")
+log.info("OBS_DELAY_K = %s%s", _obs_delay_k,
+         " (ENGAGED — actor observation delayed)" if _obs_delay_k > 0 else " (no-op)")
+# One buffer per episode; constructed here for module scope and reset (fresh
+# construction) at every episode boundary below so the delay never bleeds across
+# episodes. On the default k=0 path push_and_get is a strict pass-through.
+_obs_delay_buf = ObsDelayBuffer(_obs_delay_k)
+
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
 # Initialized to None; on the first step the velocity terms default to zero.
@@ -636,6 +660,10 @@ try:
             # M2: reset the frozen_mean running-mean accumulator at every episode
             # boundary so the prediction mean never bleeds across episodes.
             _pred_frozen_mean_state = RunningMeanState()
+            # OBS_DELAY_K: reset the actor-observation delay buffer at every
+            # episode boundary so no observation leaks from the previous episode
+            # (the #1 correctness risk). On the default k=0 path this is inert.
+            _obs_delay_buf.reset()
 
             # OBSTACLE-CONTACT per-episode state. _contact_logical_done marks
             # the zombie phase (terminate mode): once True, no NEW transition
@@ -725,35 +753,44 @@ try:
             global_knowledge = build_global_knowledge(robot_stats, stats)
             g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
+            # OBS_DELAY_K (Option B): push the CURRENT post-prox-filter observation
+            # into the delay buffer and read back the (t-k) snapshot the actor
+            # should consume this step. _actor_env_obs is used ONLY in the
+            # make_agent_state / IC agent_state construction below; the reward,
+            # prox-flag, GSP-head, and label/store paths keep reading the live
+            # env_observations. On k=0 push_and_get returns the value just pushed
+            # (strict pass-through) so _actor_env_obs IS env_observations content.
+            _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+
             for i in range(Utility.params['num_robots']):
                 g_knowledge = g_knowledge_all[i]
                 if args.independent_learning:
                     running_reward.append(0)
                     if config['GSP']:
                         if args.global_knowledge:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                            agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge)
                         else:
-                            agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                            agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i])
                     else:
                         if args.global_knowledge:
-                            agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                            agent_state = models[i].make_agent_state(_actor_env_obs[i], global_knowledge = g_knowledge)
                         else:
-                            agent_state = env_observations[i]
-                    
+                            agent_state = _actor_env_obs[i]
+
                 else:
                     if config['GSP']:
                         if args.global_knowledge:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                            agent_state = model.make_agent_state(_actor_env_obs[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
                         else:
-                            agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                    else: 
+                            agent_state = model.make_agent_state(_actor_env_obs[i], heading_gsp=next_heading_gsp[i])
+                    else:
                         if args.share_prox_values:
-                            agent_state = np.concatenate((env_observations[i], agent_prox_flags))
+                            agent_state = np.concatenate((_actor_env_obs[i], agent_prox_flags))
                         else:
                             if args.global_knowledge:
-                                agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
+                                agent_state = model.make_agent_state(_actor_env_obs[i], global_knowledge=g_knowledge)
                             else:
-                                agent_state = env_observations[i]
+                                agent_state = _actor_env_obs[i]
                 agent_states.append(agent_state)
                 force_mags.append(stats[i][0])
                 force_angs.append(stats[i][1])
@@ -1473,6 +1510,16 @@ try:
                     global_knowledge = build_global_knowledge(robot_stats, stats)
                     g_knowledge_all = build_g_knowledge_all(global_knowledge)
 
+                    # OBS_DELAY_K (Option B): push the CURRENT post-prox-filter
+                    # observation (this is the NEXT step's observation, built above
+                    # via the prox-filter at ~line 1038) into the delay buffer and
+                    # read back the (t-k) snapshot the actor should consume. Used
+                    # ONLY in the make_agent_state / IC new_agent_state block below;
+                    # the reward path (env_observations[i][7:] just below), the
+                    # GSP-head input, and the SF/label/store paths keep reading the
+                    # live env_observations. On k=0 this is a strict pass-through.
+                    _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+
                     for i in range(Utility.params['num_robots']):
                         g_knowledge = g_knowledge_all[i]
                         prox_values = env_observations[i][7:]
@@ -1520,29 +1567,29 @@ try:
                         if args.independent_learning:
                             if config['GSP']:
                                 if args.global_knowledge:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge) 
+                                    new_agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i], global_knowledge=g_knowledge)
                                 else:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], heading_gsp = next_heading_gsp[i])
+                                    new_agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i])
                             else:
                                 if args.global_knowledge:
-                                    new_agent_state = models[i].make_agent_state(env_observations[i], global_knowledge = g_knowledge)
+                                    new_agent_state = models[i].make_agent_state(_actor_env_obs[i], global_knowledge = g_knowledge)
                                 else:
-                                    new_agent_state = env_observations[i]
-                            
+                                    new_agent_state = _actor_env_obs[i]
+
                         else:
                             if config['GSP']:
                                 if args.global_knowledge:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
+                                    new_agent_state = model.make_agent_state(_actor_env_obs[i], heading_gsp=next_heading_gsp[i], global_knowledge=g_knowledge)
                                 else:
-                                    new_agent_state = model.make_agent_state(env_observations[i], heading_gsp=next_heading_gsp[i])
-                            else: 
+                                    new_agent_state = model.make_agent_state(_actor_env_obs[i], heading_gsp=next_heading_gsp[i])
+                            else:
                                 if args.share_prox_values:
-                                    new_agent_state = np.concatenate((env_observations[i], agent_prox_flags))
+                                    new_agent_state = np.concatenate((_actor_env_obs[i], agent_prox_flags))
                                 else:
                                     if args.global_knowledge:
-                                        new_agent_state = model.make_agent_state(env_observations[i], global_knowledge=g_knowledge)
+                                        new_agent_state = model.make_agent_state(_actor_env_obs[i], global_knowledge=g_knowledge)
                                     else:
-                                        new_agent_state = env_observations[i]
+                                        new_agent_state = _actor_env_obs[i]
 
                         new_agent_states.append(new_agent_state)
                         # Successor-Features cumulant phi (GSP_SF_ENABLED). The GSP-RL
