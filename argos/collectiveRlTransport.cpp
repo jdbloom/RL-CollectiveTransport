@@ -18,6 +18,17 @@ static const Real CYLINDER_MASS             = 100;  // kg
 // m_fObstacleHeight now read from XML — see m_fObstacleHeight
 static const Real OBSTACLE_MASS             = 100;  // kg
 static const Real FOOTBOT_RADIUS            = 0.085036758f; // m
+
+// Fixed LOGICAL play area = the ORIGINAL arena bounds (size 20x10, center
+// 0,0,0.5 -> min (-10,-5,0) max (10,5,1)). The PHYSICAL arena is now larger
+// (containment margin against the OOB-crash) but ALL task logic -- placement,
+// gate geometry, the goal-distance normalizer, EnforceBoundaries -- uses THIS,
+// so spawns/observations are byte-identical regardless of physical arena size.
+// See docs/research/2026-07-16-sim-containment-fix-spec.md (stelaris).
+static CRange<CVector3> PlayLimits() {
+   return CRange<CVector3>(CVector3(-10.0, -5.0, 0.0),
+                           CVector3(10.0, 5.0, 1.0));
+}
 static const Real ROBOT_CYLINDER_DISTANCE   = 0.6;  // m
 static const Real PRISM_HEIGHT           = 0.25; // m
 static const Real PRISM_MASS = 100;
@@ -139,7 +150,7 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       m_unEpisodeTicksLeft = m_unEpisodeTime;
       /* Performance-gated curriculum runtime state (gate_curriculum==2).
        * Start at the same wide half-gap as mode 1's initial offset. */
-      m_fGateRuntimeOffset = GetSpace().GetArenaLimits().GetMax().GetY();
+      m_fGateRuntimeOffset = PlayLimits().GetMax().GetY();
       m_unGateEpisodesSinceAdvance = 0;
       m_dequeGateOutcomes.clear();
       /* Create structures for observations, reward, and actions */
@@ -316,19 +327,19 @@ void CCollectiveRLTransport::CreateEntities() {
    /* Generating random positions for the cylinder */
    /* We divide the arena in two horizontal halves */
    // LOG << "Initializing Cylinder X"<<std::endl;
-   // LOG << "Min Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS <<std::endl;
-   // LOG << "Max Space Lim " << GetSpace().GetArenaLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS <<std::endl;
-   // LOG << "Max Space X / 2 " << GetSpace().GetArenaLimits().GetMin().GetX()/2 <<std::endl;
-   // LOG << "Max Space X " << GetSpace().GetArenaLimits().GetMin().GetX() <<std::endl;
+   // LOG << "Min Space Lim " << PlayLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space Lim " << PlayLimits().GetMin().GetX()/2 -PRISM_PLACEMENT_RADIUS <<std::endl;
+   // LOG << "Max Space X / 2 " << PlayLimits().GetMin().GetX()/2 <<std::endl;
+   // LOG << "Max Space X " << PlayLimits().GetMin().GetX() <<std::endl;
    // LOG << "Prism Radius " << PRISM_PLACEMENT_RADIUS <<std::endl;
    
    CRange<Real> cXCylinderRange(
-      GetSpace().GetArenaLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
-      GetSpace().GetArenaLimits().GetMin().GetX()/2
+      PlayLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
+      PlayLimits().GetMin().GetX()/2
       );
    // LOG << "Initializing Obstacle X"<<std::endl;
    CRange<Real> cXObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/2,
+      PlayLimits().GetMin().GetX()/2,
       0
    );
    // LOG << "Initializing Cylinder Y"<<std::endl;
@@ -340,11 +351,11 @@ void CCollectiveRLTransport::CreateEntities() {
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       auto x_pos = m_pcRNG->Uniform(cXCylinderRange);
       auto y_pos = m_pcRNG->Uniform(cYRange);
-      if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+      if (x_pos < PlayLimits().GetMin().GetX() || x_pos > PlayLimits().GetMax().GetX()){
          LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
          throw std::out_of_range("X Value is outside the acceptable range");
       }
-      if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+      if (y_pos < PlayLimits().GetMin().GetY() || y_pos > PlayLimits().GetMax().GetY()){
          LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
          throw std::out_of_range("Y Value is outside the acceptable range");
       }
@@ -372,11 +383,11 @@ void CCollectiveRLTransport::CreateEntities() {
          cPos += m_vecObjectPos[i];
          auto x_pos = cPos.GetX();
          auto y_pos = cPos.GetY();
-         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+         if (x_pos < PlayLimits().GetMin().GetX() || x_pos > PlayLimits().GetMax().GetX()){
             LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
             throw std::out_of_range("X Value is outside the acceptable range");
          }
-         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+         if (y_pos < PlayLimits().GetMin().GetY() || y_pos > PlayLimits().GetMax().GetY()){
             LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
             throw std::out_of_range("Y Value is outside the acceptable range");
          }
@@ -391,19 +402,19 @@ void CCollectiveRLTransport::CreateEntities() {
    LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
    CRange<Real> cYObstacleRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + m_fObstacleRadius,
-      GetSpace().GetArenaLimits().GetMax().GetY() - m_fObstacleRadius
+      PlayLimits().GetMin().GetY() + m_fObstacleRadius,
+      PlayLimits().GetMax().GetY() - m_fObstacleRadius
       );
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       m_vecObstaclePos.push_back(std::vector<CVector3>());
       for(size_t j = 0; j < m_unNumObstacles; j++){
          auto x_pos = m_pcRNG->Uniform(cXObstacleRange);
          auto y_pos = m_pcRNG->Uniform(cYObstacleRange); 
-         if (x_pos < GetSpace().GetArenaLimits().GetMin().GetX() || x_pos > GetSpace().GetArenaLimits().GetMax().GetX()){
+         if (x_pos < PlayLimits().GetMin().GetX() || x_pos > PlayLimits().GetMax().GetX()){
             LOG << "X value is outside of acceptable range: " << x_pos <<std::endl;
             throw std::out_of_range("X Value is outside the acceptable range");
          }
-         if (y_pos < GetSpace().GetArenaLimits().GetMin().GetY() || y_pos > GetSpace().GetArenaLimits().GetMax().GetY()){
+         if (y_pos < PlayLimits().GetMin().GetY() || y_pos > PlayLimits().GetMax().GetY()){
             LOG << "Y value is outside of acceptable range: " << y_pos <<std::endl;
             throw std::out_of_range("Y Value is outside the acceptable range");
          }
@@ -446,7 +457,7 @@ void CCollectiveRLTransport::CreateEntities() {
         * clears the threshold. Per-episode geometry is built lazily in
         * Reset() via BuildGateGeometry(). Modes 0/1 keep the precomputed path
         * below unchanged (bit-identical). */
-       m_fGateRuntimeOffset = GetSpace().GetArenaLimits().GetMax().GetY();
+       m_fGateRuntimeOffset = PlayLimits().GetMax().GetY();
        m_unGateEpisodesSinceAdvance = 0;
        m_dequeGateOutcomes.clear();
        /* Build the episode-0 geometry so the very first Reset() has data to
@@ -456,7 +467,7 @@ void CCollectiveRLTransport::CreateEntities() {
      else{
        Real offset ;
        if(m_unGateCurriculum == 1){
-         offset = GetSpace().GetArenaLimits().GetMax().GetY();
+         offset = PlayLimits().GetMax().GetY();
        }
        else{
          offset = (m_fGateMinimum/2.0);
@@ -507,13 +518,13 @@ bool CCollectiveRLTransport::ShouldAdvanceGate(UInt32 un_window_size,
 void CCollectiveRLTransport::BuildGateGeometry(Real f_offset, size_t un_episode){
    CVector3 cPos;
    CRange<Real> cXWallRange(
-      GetSpace().GetArenaLimits().GetMin().GetX()/2,
+      PlayLimits().GetMin().GetX()/2,
       0
       );
    m_vecOffset.push_back(f_offset);
    CRange<Real> cYRange(
-      GetSpace().GetArenaLimits().GetMin().GetY() + f_offset,
-      GetSpace().GetArenaLimits().GetMax().GetY() - f_offset
+      PlayLimits().GetMin().GetY() + f_offset,
+      PlayLimits().GetMax().GetY() - f_offset
       );
    m_vecGateWallPos.push_back(std::vector<CVector3>());
    m_vecGateWallSize.push_back(std::vector<CVector3>());
@@ -522,28 +533,28 @@ void CCollectiveRLTransport::BuildGateGeometry(Real f_offset, size_t un_episode)
    Real XPos = m_pcRNG->Uniform(cXWallRange);
    /** set position*/
    cPos.Set(XPos,
-            GetSpace().GetArenaLimits().GetMin().GetY() + (abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - f_offset)))/2,
+            PlayLimits().GetMin().GetY() + (abs(PlayLimits().GetMin().GetY() - (YPos - f_offset)))/2,
             0.0);
    EnforceBoundaries(cPos, un_episode, "Gate Lower");
    m_vecGateWallPos.back().push_back(cPos);
    cPos.Set(XPos,
-            GetSpace().GetArenaLimits().GetMax().GetY() - (abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + f_offset)))/2,
+            PlayLimits().GetMax().GetY() - (abs(PlayLimits().GetMax().GetY() - (YPos + f_offset)))/2,
             0.0);
    EnforceBoundaries(cPos, un_episode, "Gate Upper");
    m_vecGateWallPos.back().push_back(cPos);
    /** Set Size */
    cPos.Set(0.5,
-            abs(GetSpace().GetArenaLimits().GetMin().GetY() - (YPos - f_offset)),
+            abs(PlayLimits().GetMin().GetY() - (YPos - f_offset)),
             0.5);
    m_vecGateWallSize.back().push_back(cPos);
    cPos.Set(0.5,
-            abs(GetSpace().GetArenaLimits().GetMax().GetY() - (YPos + f_offset)),
+            abs(PlayLimits().GetMax().GetY() - (YPos + f_offset)),
             0.5);
    m_vecGateWallSize.back().push_back(cPos);
 }
 
 void CCollectiveRLTransport::EnforceBoundaries(CVector3& pos, size_t episode, std::string state){
-   const CRange<CVector3>& cArenaLimits = GetSpace().GetArenaLimits();
+   const CRange<CVector3>& cArenaLimits = PlayLimits();
 
    Real buffer = 0.1;
 
@@ -1047,6 +1058,22 @@ void CCollectiveRLTransport::PostStep() {
          THROW_ARGOSEXCEPTION("Physics simulation produced NaN position for robot " << i);
       }
    }
+   /* Fail-loud containment guard: LOG (do not throw) any robot that leaves
+    * the logical play area. With the enlarged physical arena + thick walls
+    * this must never fire; the verification harness greps for [OOB]. */
+   {
+      CRange<CVector3> cPlay = PlayLimits();
+      for(size_t i = 0; i < m_vecRobots.size(); ++i) {
+         CVector3 p = m_vecRobots[i]->GetEmbodiedEntity().GetOriginAnchor().Position;
+         if(p.GetX() < cPlay.GetMin().GetX() || p.GetX() > cPlay.GetMax().GetX() ||
+            p.GetY() < cPlay.GetMin().GetY() || p.GetY() > cPlay.GetMax().GetY()) {
+            LOG << "[OOB] robot " << i << " left play area at episode "
+                << m_unEpisodeCounter << " tick "
+                << (m_unEpisodeTime - m_unEpisodeTicksLeft)
+                << ": (" << p.GetX() << ", " << p.GetY() << ")" << std::endl;
+         }
+      }
+   }
    /* Check object position for NaN */
    CVector3 cObjPos = CVector3::ZERO;
    if(m_unObjectChoice == 0) {
@@ -1275,10 +1302,10 @@ void CCollectiveRLTransport::ZMQSendParams() {
    vecParams.push_back(m_unAlphabetSize);
    vecParams.push_back(m_unUseGate);
    /* Calculate normalizing constants*/
-   float maxY = GetSpace().GetArenaLimits().GetMax().GetY();
-   float minY = GetSpace().GetArenaLimits().GetMin().GetY();
-   float maxX = GetSpace().GetArenaLimits().GetMax().GetX();
-   float minX = GetSpace().GetArenaLimits().GetMin().GetX();
+   float maxY = PlayLimits().GetMax().GetY();
+   float minY = PlayLimits().GetMin().GetY();
+   float maxX = PlayLimits().GetMax().GetX();
+   float minX = PlayLimits().GetMin().GetX();
    float goalX = m_cGoal.GetX();
    float goalY = m_cGoal.GetY();
    /* normalize distance to goal by looking at the max distance to the goal possible*/
