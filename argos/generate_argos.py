@@ -10,8 +10,8 @@ def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="
                    seed = "123", gate_minimum="4",
                    gate_success_threshold="0.8", gate_success_window="20",
                    use_prisms="0", random_objs="0", test_prism="0",
-                   arena_x="20", arena_y="10",
-                   wall_ns_y="4.9", wall_ew_x="9.9",
+                   arena_x="24", arena_y="14",
+                   wall_ns_y="5.1", wall_ew_x="10.1",
                    goal_x="4.5", goal_radius="2",
                    episode_time="4500",
                    cylinder_radius="0.5",
@@ -69,10 +69,10 @@ parser.add_argument("--gate_success_window", type=str, default="20")
 parser.add_argument('--use_prisms', type=str, default='0')
 parser.add_argument('--random_objs', type=str, default='0')
 parser.add_argument('--test_prism', type=str, default='0')
-parser.add_argument('--arena_x', type=str, default='20')
-parser.add_argument('--arena_y', type=str, default='10')
-parser.add_argument('--wall_ns_y', type=str, default='4.9')
-parser.add_argument('--wall_ew_x', type=str, default='9.9')
+parser.add_argument('--arena_x', type=str, default='24')
+parser.add_argument('--arena_y', type=str, default='14')
+parser.add_argument('--wall_ns_y', type=str, default='5.1')
+parser.add_argument('--wall_ew_x', type=str, default='10.1')
 parser.add_argument('--goal_x', type=str, default='4.5')
 parser.add_argument('--goal_radius', type=str, default='2')
 parser.add_argument('--episode_time', type=str, default='4500')
