@@ -6,6 +6,7 @@ from src.knowledge import build_global_knowledge, build_g_knowledge_all
 from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
 from src.obs_delay import ObsDelayBuffer
+from src.obs_mask import ObsMask
 from src.contact_rule import ContactRule
 from src.goal_rule import GoalBonusRule
 from src.zmq_diagnostics import DiagnosticSocket
@@ -604,6 +605,27 @@ log.info("OBS_DELAY_K = %s%s", _obs_delay_k,
 # episodes. On the default k=0 path push_and_get is a strict pass-through.
 _obs_delay_buf = ObsDelayBuffer(_obs_delay_k)
 
+# Blindfold Fusion Probe — OBS_MASK_INDICES (masking pilot, step 1).
+# Pre-reg: docs/research/2026-07-22-blindfold-fusion-probe-spec.md. Zero one or
+# more decision-critical channels from the actor's NATIVE 31-dim egocentric
+# observation so IC can be trained masked and the performance deficit measured.
+# Applied at the SAME actor-observation boundary as OBS_DELAY_K (the
+# _actor_env_obs the make_agent_state / IC pass-through consumes), AFTER the
+# delay buffer, so acting and stored-transition inputs agree. The reward path
+# (env_observations[i][7:]), the GSP head input, the prox-filter, and the
+# label/store paths all keep reading the LIVE, UNMASKED env_observations.
+# Fail-loud: bounds-checked against obs_dim=num_obs at construction. Default
+# None/[] is a STRICT byte-for-byte no-op (apply() returns the input list
+# unchanged). Channel->index map (source: argos/collectiveRlTransport.cpp
+# OBS_DESCRIPTIONS + m_vecObs): 0 robot2goal_dist, 1 robot2goal_angle
+# (goal-relative bearing), 2 lwheel, 3 rwheel, 4 robot2object_dist,
+# 5 robot2object_angle, 6 object2goal_dist, 7..30 proximity (own-contact proxy).
+# Own contact FORCE is NOT in this obs vector (separate ZMQ stats channel).
+_obs_mask_indices = config.get('OBS_MASK_INDICES', None)
+_obs_mask = ObsMask(_obs_mask_indices, obs_dim=int(Utility.params['num_obs']))
+log.info("OBS_MASK_INDICES = %s%s", list(_obs_mask.indices),
+         " (ENGAGED — actor obs channels zeroed)" if _obs_mask.enabled else " (no-op)")
+
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
 # Initialized to None; on the first step the velocity terms default to zero.
@@ -761,6 +783,10 @@ try:
             # env_observations. On k=0 push_and_get returns the value just pushed
             # (strict pass-through) so _actor_env_obs IS env_observations content.
             _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+            # OBS_MASK_INDICES: zero the masked channels on the actor's copy
+            # only (no-op when the mask is empty). Live env_observations above
+            # is untouched for the reward / GSP / label paths.
+            _actor_env_obs = _obs_mask.apply(_actor_env_obs)
 
             for i in range(Utility.params['num_robots']):
                 g_knowledge = g_knowledge_all[i]
@@ -1519,6 +1545,10 @@ try:
                     # GSP-head input, and the SF/label/store paths keep reading the
                     # live env_observations. On k=0 this is a strict pass-through.
                     _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+                    # OBS_MASK_INDICES: zero the masked channels on the actor's copy
+                    # only (no-op when the mask is empty). Live env_observations above
+                    # is untouched for the reward / GSP / label paths.
+                    _actor_env_obs = _obs_mask.apply(_actor_env_obs)
 
                     for i in range(Utility.params['num_robots']):
                         g_knowledge = g_knowledge_all[i]
