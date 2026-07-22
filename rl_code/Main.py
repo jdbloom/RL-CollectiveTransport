@@ -7,6 +7,7 @@ from src.hdf5_logger import HDF5Logger
 from src.pred_ablation import apply_pred_ablation, RunningMeanState
 from src.obs_delay import ObsDelayBuffer
 from src.obs_mask import ObsMask
+from src.restore_splice import RestoreSplice
 from src.contact_rule import ContactRule
 from src.goal_rule import GoalBonusRule
 from src.zmq_diagnostics import DiagnosticSocket
@@ -129,6 +130,61 @@ elif args.global_knowledge:
     num_obs = Utility.params['num_obs']+(Utility.params['num_robots']-1)*4  #need to account for the x and y positions and the x and y velocitis for each robot
 else:
     num_obs = Utility.params['num_obs']
+
+# Blindfold Fusion Probe — OBS_MASK_INDICES (masking pilot, step 1).
+# Pre-reg: docs/research/2026-07-22-blindfold-fusion-probe-spec.md. Zero one or
+# more decision-critical channels from the actor's NATIVE 31-dim egocentric
+# observation so IC can be trained masked and the performance deficit measured.
+# Applied at the SAME actor-observation boundary as OBS_DELAY_K (the
+# _actor_env_obs the make_agent_state / IC pass-through consumes), AFTER the
+# delay buffer, so acting and stored-transition inputs agree. The reward path
+# (env_observations[i][7:]), the GSP head input, the prox-filter, and the
+# label/store paths all keep reading the LIVE, UNMASKED env_observations.
+# Fail-loud: bounds-checked against obs_dim=num_obs at construction. Default
+# None/[] is a STRICT byte-for-byte no-op (apply() returns the input list
+# unchanged). Channel->index map (source: argos/collectiveRlTransport.cpp
+# OBS_DESCRIPTIONS + m_vecObs): 0 robot2goal_dist, 1 robot2goal_angle
+# (goal-relative bearing), 2 lwheel, 3 rwheel, 4 robot2object_dist,
+# 5 robot2object_angle, 6 object2goal_dist, 7..30 proximity (own-contact proxy).
+# Own contact FORCE is NOT in this obs vector (separate ZMQ stats channel).
+# (Constructed HERE — before the Agent block — because the restore probe below
+# must validate against the mask and widen n_obs before networks are built.)
+_obs_mask_indices = config.get('OBS_MASK_INDICES', None)
+_obs_mask = ObsMask(_obs_mask_indices, obs_dim=int(Utility.params['num_obs']))
+log.info("OBS_MASK_INDICES = %s%s", list(_obs_mask.indices),
+         " (ENGAGED — actor obs channels zeroed)" if _obs_mask.enabled else " (no-op)")
+
+# Blindfold Fusion Probe — RESTORE-VIA-SPLICE (step 2, restore arms).
+# Pre-reg: docs/research/2026-07-22-blindfold-fusion-probe-spec.md (step 2).
+# Re-injects the TRUE (pre-mask) value of one masked channel through the SAME
+# appended-feature path the GSP prediction uses (make_agent_state heading_gsp
+# — see src/restore_splice.py for the full apparatus-reuse contract):
+#   * late_splice (default): appended [31 obs | 1 restore] slot, riding the
+#     untouched GSP fusion; actor input widens by +1 below (the exact mirror of
+#     GSP-RL actor.py network_input_size += gsp_network_output, K=1).
+#   * early_fuse: the true value is written back INTO the masked native slot
+#     (gradient reaches the trunk from step 0); no width change.
+#   * warm-noise (late_splice only): uniform range-matched noise through the
+#     slot for the first RESTORE_WARM_NOISE_EPISODES episodes, then the truth.
+# Default (RESTORE_SPLICE_SOURCE_INDEX absent) is a STRICT bit-exact no-op.
+# All reads are fail-loud: None is the only value that degrades to a default.
+_restore_idx_raw = config.get('RESTORE_SPLICE_SOURCE_INDEX', None)
+_restore_splice = RestoreSplice(
+    source_index=None if _restore_idx_raw is None else int(_restore_idx_raw),
+    mode=config.get('RESTORE_SPLICE_MODE', None),
+    warm_noise_episodes=config.get('RESTORE_WARM_NOISE_EPISODES', None),
+    warm_noise_range=config.get('RESTORE_WARM_NOISE_RANGE', None),
+    mask_indices=_obs_mask.indices,
+    obs_dim=int(Utility.params['num_obs']),
+    gsp_enabled=bool(config['GSP']),
+    share_prox_values=bool(args.share_prox_values),
+    train_mode=train_mode,
+    seed=int(config.get('SEED', 0)),
+)
+log.info("RESTORE_SPLICE: %s", _restore_splice.describe())
+# late_splice widens the actor input by the appended restore slot — the same
+# +K extension the GSP condition applies inside GSP-RL's Actor (gsp=True path).
+num_obs = num_obs + _restore_splice.extra_actor_inputs
 
 # #53-B: mirror the CLI --independent_learning flag into the config dict the
 # Agent receives, so choose_agent_gsp's batched gate can exclude
@@ -605,26 +661,11 @@ log.info("OBS_DELAY_K = %s%s", _obs_delay_k,
 # episodes. On the default k=0 path push_and_get is a strict pass-through.
 _obs_delay_buf = ObsDelayBuffer(_obs_delay_k)
 
-# Blindfold Fusion Probe — OBS_MASK_INDICES (masking pilot, step 1).
-# Pre-reg: docs/research/2026-07-22-blindfold-fusion-probe-spec.md. Zero one or
-# more decision-critical channels from the actor's NATIVE 31-dim egocentric
-# observation so IC can be trained masked and the performance deficit measured.
-# Applied at the SAME actor-observation boundary as OBS_DELAY_K (the
-# _actor_env_obs the make_agent_state / IC pass-through consumes), AFTER the
-# delay buffer, so acting and stored-transition inputs agree. The reward path
-# (env_observations[i][7:]), the GSP head input, the prox-filter, and the
-# label/store paths all keep reading the LIVE, UNMASKED env_observations.
-# Fail-loud: bounds-checked against obs_dim=num_obs at construction. Default
-# None/[] is a STRICT byte-for-byte no-op (apply() returns the input list
-# unchanged). Channel->index map (source: argos/collectiveRlTransport.cpp
-# OBS_DESCRIPTIONS + m_vecObs): 0 robot2goal_dist, 1 robot2goal_angle
-# (goal-relative bearing), 2 lwheel, 3 rwheel, 4 robot2object_dist,
-# 5 robot2object_angle, 6 object2goal_dist, 7..30 proximity (own-contact proxy).
-# Own contact FORCE is NOT in this obs vector (separate ZMQ stats channel).
-_obs_mask_indices = config.get('OBS_MASK_INDICES', None)
-_obs_mask = ObsMask(_obs_mask_indices, obs_dim=int(Utility.params['num_obs']))
-log.info("OBS_MASK_INDICES = %s%s", list(_obs_mask.indices),
-         " (ENGAGED — actor obs channels zeroed)" if _obs_mask.enabled else " (no-op)")
+# Blindfold Fusion Probe — OBS_MASK_INDICES + RESTORE-VIA-SPLICE.
+# _obs_mask and _restore_splice are CONSTRUCTED just after the num_obs
+# computation above the Agent block (the restore probe's late_splice arm widens
+# the actor input by +1, so both must exist before agent_nn_args is built).
+# Their apply()/true_values() call sites remain here in the acting loop.
 
 # Ring buffer for previous-step payload state (needed for velocity computation).
 # comX_prev, comY_prev, cyl_angle_prev are the payload position at t-1.
@@ -649,6 +690,9 @@ try:
         msgs = socket.recv_multipart()
         exp_done, episode_done, reached_goal = Utility.parse_status(msgs[0])
         socket.set_episode(ep_counter)
+        # RESTORE-VIA-SPLICE: advance the probe's episode clock (warm-noise
+        # phase gating + first-episodes engaged-path range logging). No-op off.
+        _restore_splice.set_episode(ep_counter)
         log.info("Episode %d starting", ep_counter)
 
         if not exp_done:
@@ -783,10 +827,20 @@ try:
             # env_observations. On k=0 push_and_get returns the value just pushed
             # (strict pass-through) so _actor_env_obs IS env_observations content.
             _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+            # RESTORE-VIA-SPLICE: capture the TRUE value of the restored channel
+            # from the POST-DELAY, PRE-MASK observation — the exact per-robot
+            # observation the actor would have seen unmasked. None when off.
+            _restore_true = _restore_splice.true_values(_actor_env_obs)
             # OBS_MASK_INDICES: zero the masked channels on the actor's copy
             # only (no-op when the mask is empty). Live env_observations above
             # is untouched for the reward / GSP / label paths.
             _actor_env_obs = _obs_mask.apply(_actor_env_obs)
+            # RESTORE-VIA-SPLICE early_fuse: write the true value back into the
+            # masked native slot (actor copies only). Pass-through otherwise.
+            _actor_env_obs = _restore_splice.apply_early_fuse(_actor_env_obs, _restore_true)
+            # RESTORE-VIA-SPLICE late_splice: per-robot value the appended slot
+            # carries this step (warm noise during episodes < M, else truth).
+            _restore_slot = _restore_splice.slot_values(_restore_true)
 
             for i in range(Utility.params['num_robots']):
                 g_knowledge = g_knowledge_all[i]
@@ -798,7 +852,16 @@ try:
                         else:
                             agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i])
                     else:
-                        if args.global_knowledge:
+                        if _restore_splice.late_splice_engaged:
+                            # RESTORE-VIA-SPLICE: the restored value rides the
+                            # UNTOUCHED GSP fusion (make_agent_state heading_gsp
+                            # — same slot, same transforms; splice_arg pre-inverts
+                            # the legacy scalar units-conversion).
+                            agent_state = models[i].make_agent_state(
+                                _actor_env_obs[i],
+                                heading_gsp=_restore_splice.splice_arg(_restore_slot[i]),
+                                global_knowledge=g_knowledge if args.global_knowledge else None)
+                        elif args.global_knowledge:
                             agent_state = models[i].make_agent_state(_actor_env_obs[i], global_knowledge = g_knowledge)
                         else:
                             agent_state = _actor_env_obs[i]
@@ -812,6 +875,13 @@ try:
                     else:
                         if args.share_prox_values:
                             agent_state = np.concatenate((_actor_env_obs[i], agent_prox_flags))
+                        elif _restore_splice.late_splice_engaged:
+                            # RESTORE-VIA-SPLICE (shared-net IC): same untouched
+                            # GSP fusion path as the independent-learning branch.
+                            agent_state = model.make_agent_state(
+                                _actor_env_obs[i],
+                                heading_gsp=_restore_splice.splice_arg(_restore_slot[i]),
+                                global_knowledge=g_knowledge if args.global_knowledge else None)
                         else:
                             if args.global_knowledge:
                                 agent_state = model.make_agent_state(_actor_env_obs[i], global_knowledge=g_knowledge)
@@ -1545,10 +1615,17 @@ try:
                     # GSP-head input, and the SF/label/store paths keep reading the
                     # live env_observations. On k=0 this is a strict pass-through.
                     _actor_env_obs = _obs_delay_buf.push_and_get(env_observations)
+                    # RESTORE-VIA-SPLICE: capture the TRUE value of the restored
+                    # channel post-delay, PRE-mask (see episode-init site).
+                    _restore_true = _restore_splice.true_values(_actor_env_obs)
                     # OBS_MASK_INDICES: zero the masked channels on the actor's copy
                     # only (no-op when the mask is empty). Live env_observations above
                     # is untouched for the reward / GSP / label paths.
                     _actor_env_obs = _obs_mask.apply(_actor_env_obs)
+                    # RESTORE-VIA-SPLICE early_fuse un-mask / late_splice slot
+                    # value — mirrors the episode-init site exactly.
+                    _actor_env_obs = _restore_splice.apply_early_fuse(_actor_env_obs, _restore_true)
+                    _restore_slot = _restore_splice.slot_values(_restore_true)
 
                     for i in range(Utility.params['num_robots']):
                         g_knowledge = g_knowledge_all[i]
@@ -1601,7 +1678,14 @@ try:
                                 else:
                                     new_agent_state = models[i].make_agent_state(_actor_env_obs[i], heading_gsp = next_heading_gsp[i])
                             else:
-                                if args.global_knowledge:
+                                if _restore_splice.late_splice_engaged:
+                                    # RESTORE-VIA-SPLICE: untouched GSP fusion
+                                    # path (see episode-init site).
+                                    new_agent_state = models[i].make_agent_state(
+                                        _actor_env_obs[i],
+                                        heading_gsp=_restore_splice.splice_arg(_restore_slot[i]),
+                                        global_knowledge=g_knowledge if args.global_knowledge else None)
+                                elif args.global_knowledge:
                                     new_agent_state = models[i].make_agent_state(_actor_env_obs[i], global_knowledge = g_knowledge)
                                 else:
                                     new_agent_state = _actor_env_obs[i]
@@ -1615,6 +1699,13 @@ try:
                             else:
                                 if args.share_prox_values:
                                     new_agent_state = np.concatenate((_actor_env_obs[i], agent_prox_flags))
+                                elif _restore_splice.late_splice_engaged:
+                                    # RESTORE-VIA-SPLICE (shared-net IC): same
+                                    # untouched GSP fusion path.
+                                    new_agent_state = model.make_agent_state(
+                                        _actor_env_obs[i],
+                                        heading_gsp=_restore_splice.splice_arg(_restore_slot[i]),
+                                        global_knowledge=g_knowledge if args.global_knowledge else None)
                                 else:
                                     if args.global_knowledge:
                                         new_agent_state = model.make_agent_state(_actor_env_obs[i], global_knowledge=g_knowledge)
