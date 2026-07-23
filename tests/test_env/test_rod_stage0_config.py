@@ -80,6 +80,20 @@ class TestDefaultOff:
         before = dict(cfg)
         assert rbe.resolve_rod_geometry(cfg) == before
 
+    def test_yaml_roundtrip_none_ratio(self, tmp_path):
+        """write_yaml_config turns None into the string "None"; a config
+        cloned from a written agent_config.yml must still resolve as
+        disengaged (the test-eval clone path for cylinder parents)."""
+        import yaml
+        cfg = _base_config("rodcfg_rt")
+        path = tmp_path / "agent_config.yml"
+        rbe.write_yaml_config(cfg, str(path))
+        with open(path) as f:
+            cloned = yaml.safe_load(f)
+        assert cloned["CONSTRICTION_RATIO"] == "None"  # the YAML artifact
+        out = rbe.resolve_rod_geometry(dict(cloned))
+        assert out["GATE_MIN"] == cloned["GATE_MIN"]  # untouched, no raise
+
     def test_cylinder_xml_defaults(self, cleanup_argos):
         cfg = _base_config(
             "rodcfg_cyl", ARGOS_FILE_NAME="collectiveRlTransport_rodcfg_cyl.argos")

@@ -260,6 +260,15 @@ def resolve_rod_geometry(config):
     shape = config.get("OBJECT_SHAPE")
     shape = "cylinder" if shape is None else shape
     ratio = config.get("CONSTRICTION_RATIO")
+    # write_yaml_config emits plain "KEY: value" lines, and YAML round-trips an
+    # unquoted None as the STRING "None" (YAML null is ~/null/empty). A config
+    # cloned from a written agent_config.yml therefore carries "None" where the
+    # in-memory dict had None; normalize the YAML-null spellings back to the
+    # disengaged sentinel so cylinder-parent clones don't fail the
+    # ratio-with-cylinder check. (Real ratios arrive as float/str-float and are
+    # untouched.)
+    if isinstance(ratio, str) and ratio.strip() in ("None", "null", "~", ""):
+        ratio = None
     if shape == "cylinder":
         if ratio is not None:
             raise ValueError(
