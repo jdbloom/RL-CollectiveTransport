@@ -69,6 +69,9 @@
                   random_objs = "$$random_objs$$"
                   test_prism = "$$test_prism$$"
                   cylinder_radius = "$$cylinder_radius$$"
+                  object_shape = "$$object_shape$$"
+                  rod_length = "$$rod_length$$"
+                  rod_width = "$$rod_width$$"
                   obstacle_radius = "$$obstacle_radius$$"
                   obstacle_height = "$$obstacle_height$$"/>
 
