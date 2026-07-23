@@ -290,6 +290,22 @@ private:
    /** Use different prism for testing*/
    UInt32 m_unUseTestPrism;
 
+   /** Object shape selector: "cylinder" (default, legacy path) or "rod"
+    *  (Arm C Stage 0 elongated object -- a parameterized rectangular convex
+    *  prism routed through the existing ObjectChoice==1 path). */
+   std::string m_strObjectShape;
+
+   /** Rod long-axis length in meters (object_shape=="rod" only). */
+   Real m_fRodLength;
+
+   /** Rod short-axis width in meters (object_shape=="rod" only). */
+   Real m_fRodWidth;
+
+   /** Active convex-prism footprint vertices. Defaults to the legacy
+    *  CONVEX_PRISM_POINTS; overridden with the parameterized rod rectangle
+    *  (long axis along Y) when object_shape=="rod". */
+   std::vector<CVector2> m_vecConvexPoints;
+
    /** vector to keep track of the current offset (not used other than to print) */
    std::vector<Real> m_vecOffset;
 

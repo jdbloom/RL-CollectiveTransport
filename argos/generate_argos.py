@@ -15,6 +15,7 @@ def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="
                    goal_x="4.5", goal_radius="2",
                    episode_time="4500",
                    cylinder_radius="0.5",
+                   object_shape="cylinder", rod_length="3.0", rod_width="0.5",
                    obstacle_radius="0.5", obstacle_height="0.5"):
 
     containing_folder = os.path.dirname(os.path.realpath(__file__))
@@ -44,6 +45,9 @@ def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="
         filestring = re.sub(r'\$\$goal_radius\$\$', goal_radius, filestring)
         filestring = re.sub(r'\$\$episode_time\$\$', episode_time, filestring)
         filestring = re.sub(r'\$\$cylinder_radius\$\$', cylinder_radius, filestring)
+        filestring = re.sub(r'\$\$object_shape\$\$', object_shape, filestring)
+        filestring = re.sub(r'\$\$rod_length\$\$', rod_length, filestring)
+        filestring = re.sub(r'\$\$rod_width\$\$', rod_width, filestring)
         filestring = re.sub(r'\$\$obstacle_radius\$\$', obstacle_radius, filestring)
         filestring = re.sub(r'\$\$obstacle_height\$\$', obstacle_height, filestring)
 
@@ -77,6 +81,9 @@ parser.add_argument('--goal_x', type=str, default='4.5')
 parser.add_argument('--goal_radius', type=str, default='2')
 parser.add_argument('--episode_time', type=str, default='4500')
 parser.add_argument('--cylinder_radius', type=str, default='0.5')
+parser.add_argument('--object_shape', type=str, default='cylinder')
+parser.add_argument('--rod_length', type=str, default='3.0')
+parser.add_argument('--rod_width', type=str, default='0.5')
 parser.add_argument('--obstacle_radius', type=str, default='0.5')
 parser.add_argument('--obstacle_height', type=str, default='0.5')
 

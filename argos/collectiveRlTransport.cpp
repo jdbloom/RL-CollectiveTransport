@@ -109,6 +109,30 @@ void CCollectiveRLTransport::Init(TConfigurationNode& t_tree) {
       GetNodeAttribute(t_tree, "cylinder_radius", m_fCylinderRadius);
       GetNodeAttribute(t_tree, "obstacle_radius", m_fObstacleRadius);
       GetNodeAttribute(t_tree, "obstacle_height", m_fObstacleHeight);
+      /* Arm C Stage 0: elongated-rod rotate-to-fit object. Read with defaults
+       * so every pre-existing generated .argos (no object_shape attribute)
+       * keeps the legacy cylinder path bit-exact. */
+      GetNodeAttributeOrDefault(t_tree, "object_shape", m_strObjectShape, std::string("cylinder"));
+      GetNodeAttributeOrDefault(t_tree, "rod_length", m_fRodLength, Real(3.0));
+      GetNodeAttributeOrDefault(t_tree, "rod_width", m_fRodWidth, Real(0.5));
+      if(m_strObjectShape != "cylinder" && m_strObjectShape != "rod") {
+         THROW_ARGOSEXCEPTION("object_shape must be \"cylinder\" or \"rod\", got \"" << m_strObjectShape << "\"");
+      }
+      if(m_strObjectShape == "rod") {
+         if(m_unUsePrisms != 0 || m_unRandomizeObjects != 0) {
+            THROW_ARGOSEXCEPTION("object_shape=\"rod\" conflicts with use_prisms="
+                                 << m_unUsePrisms << " / random_objs="
+                                 << m_unRandomizeObjects << " -- set both to 0");
+         }
+         if(m_fRodLength <= 0.0 || m_fRodWidth <= 0.0 || m_fRodWidth >= m_fRodLength) {
+            THROW_ARGOSEXCEPTION("rod geometry invalid: need 0 < rod_width < rod_length, got rod_length="
+                                 << m_fRodLength << " rod_width=" << m_fRodWidth);
+         }
+         /* Fail-loud engaged-path log (announce BEFORE any entity is built). */
+         LOG << "[ROD] object_shape=rod ENGAGED: length=" << m_fRodLength
+             << " m, width=" << m_fRodWidth << " m, aspect="
+             << (m_fRodLength / m_fRodWidth) << ":1" << std::endl;
+      }
 
       /* Footbot dynamic equation parameters*/
       m_fFootbotAxelLength = 0.14; // m
@@ -199,6 +223,24 @@ void CCollectiveRLTransport::CreateEntities() {
       CRange<UInt32> ObjectRange(0,3);
       m_unObjectChoice = m_pcRNG->Uniform(ObjectRange);
    }
+   /* Arm C Stage 0: the rod is a parameterized rectangular convex prism and
+    * rides the existing ObjectChoice==1 (convex prism) path end-to-end
+    * (create / reset / observations / NaN-guard / termination). The rectangle's
+    * LONG axis is along Y, so at the identity spawn orientation the rod is
+    * broadside to the (east-west travel) gate and MUST be jointly rotated to
+    * pass. Conflicting use_prisms / random_objs configs were rejected in
+    * Init(). */
+   m_vecConvexPoints = CONVEX_PRISM_POINTS;
+   if(m_strObjectShape == "rod") {
+      m_unObjectChoice = 1;
+      const Real fHalfL = m_fRodLength / 2.0;
+      const Real fHalfW = m_fRodWidth / 2.0;
+      m_vecConvexPoints.clear();
+      m_vecConvexPoints.push_back(CVector2(-fHalfW, -fHalfL));
+      m_vecConvexPoints.push_back(CVector2( fHalfW, -fHalfL));
+      m_vecConvexPoints.push_back(CVector2( fHalfW,  fHalfL));
+      m_vecConvexPoints.push_back(CVector2(-fHalfW,  fHalfL));
+   }
     
    /* Create the object */
    Real max_length = 0;
@@ -221,19 +263,19 @@ void CCollectiveRLTransport::CreateEntities() {
          CVector3(),
          CQuaternion(),
          true,
-         CONVEX_PRISM_POINTS,
+         m_vecConvexPoints,
          PRISM_HEIGHT,
          PRISM_MASS);
       AddEntity(*m_pcConvexPrism);
 
       CVector2 origin = CVector2(m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetX(),m_pcConvexPrism->GetEmbodiedEntity().GetOriginAnchor().Position.GetY());
-      for(size_t i = 0; i < CONVEX_PRISM_POINTS.size(); i++) {
-         Real point_distance = Distance(origin, CONVEX_PRISM_POINTS[i]);
+      for(size_t i = 0; i < m_vecConvexPoints.size(); i++) {
+         Real point_distance = Distance(origin, m_vecConvexPoints[i]);
          if(point_distance > max_length) {
             max_length = point_distance;
          }
       }
-      m_cObjCOMOffsetPos = GetCoM(CONVEX_PRISM_POINTS);
+      m_cObjCOMOffsetPos = GetCoM(m_vecConvexPoints);
 
    }
    else if(m_unObjectChoice == 2) {
@@ -333,21 +375,62 @@ void CCollectiveRLTransport::CreateEntities() {
    // LOG << "Max Space X " << PlayLimits().GetMin().GetX() <<std::endl;
    // LOG << "Prism Radius " << PRISM_PLACEMENT_RADIUS <<std::endl;
    
-   CRange<Real> cXCylinderRange(
-      PlayLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
-      PlayLimits().GetMin().GetX()/2
-      );
    // LOG << "Initializing Obstacle X"<<std::endl;
    CRange<Real> cXObstacleRange(
       PlayLimits().GetMin().GetX()/2,
       0
    );
+   LOG << "Initializing Cylinder Pos"<<std::endl;
+   if(m_strObjectShape == "rod") {
+      /* Arm C Stage 0 (rod): FIXED west spawn -- no placement RNG. The legacy
+       * random-placement ranges are cylinder-calibrated
+       * (PRISM_PLACEMENT_RADIUS < 2 m is required for the +/-2 m Y band) and
+       * INVERT at rod scale, so this path replaces them wholesale: object COM
+       * fixed at (0.75*minX, 0), long axis along Y (identity orientation --
+       * broadside to the gate), robots on a deterministic ring
+       * ROBOT_CYLINDER_DISTANCE beyond the rod's bounding-circle radius
+       * (max_length = the half-diagonal). */
+      const Real fRodX = 0.75 * PlayLimits().GetMin().GetX();
+      const Real fRodRingDist = max_length + ROBOT_CYLINDER_DISTANCE;
+      LOG << "[ROD] fixed spawn ENGAGED: COM=(" << fRodX
+          << ", 0), robot ring radius=" << fRodRingDist << " m" << std::endl;
+      for(size_t i = 0; i < m_unNumEpisodes; ++i){
+         cPos.Set(fRodX, 0.0, 0.0);
+         EnforceBoundaries(cPos, i, "Cylinder");
+         m_vecObjectPos.push_back(cPos);
+         //Generate Failure Times for all episodes
+         m_vecRobotFailures.push_back(GenerateRobotFailure());
+      }
+      LOG << "Initializing Robot Pos"<<std::endl;
+      for(size_t i = 0; i < m_unNumEpisodes; ++i) {
+         m_vecRobotPos.push_back(std::vector<CVector3>());
+         m_vecRobotOrient.push_back(std::vector<CQuaternion>());
+         for(size_t j = 0; j < m_unNumRobots; ++j) {
+            /* Ring position wrt the rod's COM (spherical ctor, matches the
+             * legacy robot-precompute form), translated to the fixed spawn. */
+            CVector3 cRodRPos(
+               CVector3(fRodRingDist,
+                        CRadians::PI_OVER_TWO,
+                        j * cSlice));
+            cRodRPos += m_vecObjectPos[i];
+            EnforceBoundaries(cRodRPos, i, "Robot");
+            m_vecRobotPos.back().push_back(cRodRPos);
+            /* Face the rod's COM */
+            m_vecRobotOrient.back().push_back(
+               CQuaternion(j * cSlice + CRadians::PI, CVector3::Z));
+         }
+      }
+   }
+   else {
+   CRange<Real> cXCylinderRange(
+      PlayLimits().GetMin().GetX() + PRISM_PLACEMENT_RADIUS,
+      PlayLimits().GetMin().GetX()/2
+      );
    // LOG << "Initializing Cylinder Y"<<std::endl;
    CRange<Real> cYRange(
       -2 + PRISM_PLACEMENT_RADIUS,
       2 - PRISM_PLACEMENT_RADIUS
       );
-   LOG << "Initializing Cylinder Pos"<<std::endl;
    for(size_t i = 0; i < m_unNumEpisodes; ++i){
       auto x_pos = m_pcRNG->Uniform(cXCylinderRange);
       auto y_pos = m_pcRNG->Uniform(cYRange);
@@ -399,6 +482,7 @@ void CCollectiveRLTransport::CreateEntities() {
          m_vecRobotOrient.back().push_back(cOrient);
       }
    }
+   } /* end legacy (non-rod) placement precompute */
    LOG << "Initializing Obstacle Pos"<<std::endl;
    /** Generate Random Positions for the obstacles */
    CRange<Real> cYObstacleRange(

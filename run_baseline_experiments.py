@@ -108,7 +108,9 @@ TEST_PLAN = {
 
 def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curriculum,
                 use_prisms, port, num_episodes, test=False, model_num=490,
-                recurrent=False, attention=False):
+                recurrent=False, attention=False,
+                object_shape="cylinder", rod_length=3.0, rod_width=0.5,
+                constriction_ratio=None):
     return {
         "TEST": test,
         "MODEL_NUM": model_num,
@@ -127,6 +129,14 @@ def make_config(exp_name, gsp, neighbors, num_obstacles, use_gate, gate_curricul
         "USE_PRISMS": use_prisms,
         "RANDOM_OBJECTS": 0,
         "TEST_PRISM": 0,
+        # Arm C Stage 0 -- elongated-rod rotate-to-fit task. Defaults preserve
+        # the legacy cylinder task exactly; CONSTRICTION_RATIO=None means the
+        # knob is DISENGAGED (never a silently-remapped falsy value). See
+        # resolve_rod_geometry() for the derivation + validation.
+        "OBJECT_SHAPE": object_shape,
+        "ROD_LENGTH": rod_length,
+        "ROD_WIDTH": rod_width,
+        "CONSTRICTION_RATIO": constriction_ratio,
         "LEARNING_SCHEME": "DQN",
         "OPTIONS_PER_ACTION": 3,
         "MIN_MAX_ACTION": 1.0,
@@ -215,6 +225,87 @@ def write_yaml_config(config, path):
             f.write(f"{key}: {value}\n")
 
 
+# Rod-object geometry passthroughs (Arm C Stage 0). Omitted-when-not-set,
+# mirroring _SCALE_GEOM_FLAGS; CONSTRICTION_RATIO is resolved to GATE_MIN in
+# resolve_rod_geometry() and is deliberately NOT forwarded to the XML.
+_ROD_GEOM_FLAGS = [
+    ("OBJECT_SHAPE", "--object_shape"),
+    ("ROD_LENGTH", "--rod_length"),
+    ("ROD_WIDTH", "--rod_width"),
+]
+
+# Clearance margin per flank robot (body + gripped-turret reach, meters) used
+# for the rod-vs-gap passability WARNING in resolve_rod_geometry.
+_ROD_ROBOT_CLEARANCE = 0.35
+
+
+def resolve_rod_geometry(config):
+    """Validate the Arm C rod knobs and derive GATE_MIN from CONSTRICTION_RATIO.
+
+    OBJECT_SHAPE absent or "cylinder" (default): CONSTRICTION_RATIO must be
+    unset (None) -- the knob is meaningless without the rod, and silently
+    ignoring it would hide a mis-threaded config (fail loud). Config returned
+    untouched: the legacy cylinder task is bit-exact.
+
+    OBJECT_SHAPE == "rod" (Stage 0): requires USE_GATE == 1 and
+    GATE_CURRICULUM == 0 (fixed constriction, no curriculum) and a
+    CONSTRICTION_RATIO. Derives the physical wall-gap:
+
+        GATE_MIN = gap_width = CONSTRICTION_RATIO * ROD_LENGTH  [meters]
+
+    and enforces the rotate-to-fit constraint ROD_WIDTH < gap < ROD_LENGTH
+    strictly (the rod cannot pass broadside, must fit lengthwise). Mutates
+    config in place (GATE_MIN overwritten) and logs the engaged geometry.
+    """
+    shape = config.get("OBJECT_SHAPE")
+    shape = "cylinder" if shape is None else shape
+    ratio = config.get("CONSTRICTION_RATIO")
+    if shape == "cylinder":
+        if ratio is not None:
+            raise ValueError(
+                f"CONSTRICTION_RATIO={ratio} is set but OBJECT_SHAPE is "
+                f"'cylinder' -- the knob only applies to the rod task. "
+                f"Set OBJECT_SHAPE: rod or remove CONSTRICTION_RATIO.")
+        return config
+    if shape != "rod":
+        raise ValueError(f"OBJECT_SHAPE must be 'cylinder' or 'rod', got {shape!r}")
+    if int(config["USE_GATE"]) != 1:
+        raise ValueError("OBJECT_SHAPE=rod requires USE_GATE=1 -- without the "
+                         "gate there is no constriction and the task is not "
+                         "rotate-to-fit.")
+    if int(config["GATE_CURRICULUM"]) != 0:
+        raise ValueError(
+            f"OBJECT_SHAPE=rod (Stage 0) requires GATE_CURRICULUM=0 -- the "
+            f"constriction is FIXED at CONSTRICTION_RATIO*ROD_LENGTH from "
+            f"episode 0 (got GATE_CURRICULUM="
+            f"{config['GATE_CURRICULUM']}).")
+    if ratio is None:
+        raise ValueError("OBJECT_SHAPE=rod requires CONSTRICTION_RATIO "
+                         "(gap_width / rod_length).")
+    length = float(config["ROD_LENGTH"])
+    width = float(config["ROD_WIDTH"])
+    if not (0.0 < width < length):
+        raise ValueError(f"rod geometry invalid: need 0 < ROD_WIDTH < "
+                         f"ROD_LENGTH, got length={length} width={width}")
+    gap = float(ratio) * length
+    if not (width < gap < length):
+        raise ValueError(
+            f"CONSTRICTION_RATIO={ratio} violates the rotate-to-fit "
+            f"constraint ROD_WIDTH < gap < ROD_LENGTH: gap={gap:.4f}, "
+            f"width={width}, length={length}. Valid ratio range: "
+            f"({width / length:.4f}, 1.0).")
+    if gap < width + 2 * _ROD_ROBOT_CLEARANCE:
+        print(f"[ROD][WARN] gap {gap:.3f} m < rod_width + 2*"
+              f"{_ROD_ROBOT_CLEARANCE} m flank-robot clearance -- the rod may "
+              f"be physically unable to pass with robots gripped on its "
+              f"flanks.", flush=True)
+    config["GATE_MIN"] = gap
+    print(f"[ROD] OBJECT_SHAPE=rod ENGAGED: length={length} m, width={width} "
+          f"m, CONSTRICTION_RATIO={ratio} -> GATE_MIN(gap)={gap:.4f} m",
+          flush=True)
+    return config
+
+
 _SCALE_GEOM_FLAGS = [
     ("ARENA_X", "--arena_x"),
     ("ARENA_Y", "--arena_y"),
@@ -230,6 +321,7 @@ _SCALE_GEOM_FLAGS = [
 
 
 def generate_argos_xml(config):
+    resolve_rod_geometry(config)
     cmd = [
         sys.executable, os.path.join(PROJECT_ROOT, "argos", "generate_argos.py"),
         "--num_obstacles", str(config["NUM_OBSTACLES"]),
@@ -248,6 +340,9 @@ def generate_argos_xml(config):
         "--test_prism", str(config["TEST_PRISM"]),
     ]
     for cfg_key, cli_arg in _SCALE_GEOM_FLAGS:
+        if cfg_key in config:
+            cmd.extend([cli_arg, str(config[cfg_key])])
+    for cfg_key, cli_arg in _ROD_GEOM_FLAGS:
         if cfg_key in config:
             cmd.extend([cli_arg, str(config[cfg_key])])
     result = subprocess.run(cmd, cwd=os.path.join(PROJECT_ROOT, "argos"),
