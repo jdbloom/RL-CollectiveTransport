@@ -204,6 +204,11 @@ class HDF5Logger:
         self.stored_gsp_labels: list = []
         self.stored_gsp_inputs: list = []
         self.stored_gsp_actions: list = []
+        # [ACTCOND] per-step per-robot (N, K) action-conditioned forecast
+        # matrices, recorded at the Main.py PREDICT site (basis t — the same
+        # basis as gsp_obs). Additive dataset, absent on non-actcond runs
+        # (byte-identical off-path). See record_actcond_pred_matrix.
+        self.actcond_pred_matrix: list = []
         # Phase 4 loss-step correlation diagnostic. One float per GSP learn step:
         # the Pearson correlation between the fresh forward-pass predictions used
         # in the MSE loss and the replay-buffer labels for that same batch.
@@ -468,6 +473,24 @@ class HDF5Logger:
             except (TypeError, ValueError):
                 pass
 
+    def record_actcond_pred_matrix(self, pred_matrix) -> None:
+        """[ACTCOND] Record one timestep's per-robot (N, K) forecast matrix.
+
+        Called from the Main.py PREDICT site (basis t, same basis as gsp_obs)
+        with the matrix AS STASHED — post row-ablation, the exact matrix the
+        next act site scores. Follows the gsp_stored_actions additive
+        pattern: the actcond_pred_matrix dataset (T, R, N, K) is written only
+        on episodes where this was called (engaged runs); absent otherwise —
+        byte-identical off-path.
+
+        Rationale (review FIX 4): in actcond cells the per-step gsp_pred
+        column (gsp_heading, written at the act site) carries the row chosen
+        at time t from the basis t-1 matrix — one step offset vs baseline
+        cells. Analyses needing basis-t predictions read this dataset.
+        """
+        self.actcond_pred_matrix.append(
+            np.asarray(pred_matrix, dtype=np.float32).copy())
+
     def record_episode_diagnostics(self, diag: dict) -> None:
         """Record per-episode diagnostic scalars (FAU, weight norms, effective rank,
         Q-gap, pred diversity, etc.).
@@ -706,6 +729,15 @@ class HDF5Logger:
                 grp.create_dataset(
                     "gsp_stored_actions",
                     data=np.asarray(self.stored_gsp_actions, dtype=np.int64),
+                    compression="gzip", compression_opts=4)
+
+            # [ACTCOND] additive (T, R, N, K) per-step forecast-matrix dataset
+            # (see record_actcond_pred_matrix docstring). Conditional-additive
+            # like the gsp_stored_* datasets above — no schema bump.
+            if self.actcond_pred_matrix:
+                grp.create_dataset(
+                    "actcond_pred_matrix",
+                    data=np.stack(self.actcond_pred_matrix).astype(np.float32),
                     compression="gzip", compression_opts=4)
 
             # Logging schema version. Bump on every change that adds/removes a field
