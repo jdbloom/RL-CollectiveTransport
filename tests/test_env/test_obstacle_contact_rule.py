@@ -610,8 +610,11 @@ class TestMainSourceContract:
         """Both store_agent_transition call sites must pass the contact-aware
         done flag (== episode_done when the rule is off)."""
         text = self._main_text()
-        # 2 store_agent_transition call sites + the E2E delayed-FIFO tx dict.
-        assert text.count("_step_store_done,") == 3
+        # 2 store_agent_transition call sites + the E2E delayed-FIFO tx dict
+        # + the [ACTCOND] one-iteration delayed-store pending tuple (review
+        # FIX 2), which holds the flag at push time and stores it verbatim at
+        # the act-site / terminal flush.
+        assert text.count("_step_store_done,") == 4
         assert "'done': _step_store_done," in text
         assert "_step_store_done = bool(episode_done) or (" in text
 

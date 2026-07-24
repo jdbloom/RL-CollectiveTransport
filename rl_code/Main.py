@@ -498,6 +498,16 @@ if _actcond:
     _batched_actor_forward = False
 else:
     log.info("GSP_ACTION_CONDITIONED: off")
+# [ACTCOND] one-iteration delayed main-replay store (review FIX 2). Baseline
+# arms store next_state == the exact state acted on at t+1 (fresh splice).
+# The actcond act site re-chooses the splice row at t+1, so the immediately
+# available new_agent_states (chosen_row_t basis) would violate that
+# contract. Pending entries are held here for one iteration and completed at
+# the NEXT act site with the act-site-rebuilt agent_states[i]. Same delayed-
+# completion pattern as the E2E trajectory FIFO (push where the transition is
+# complete, store where the missing piece materializes). Module scope; the
+# episode-init block asserts the emptied-invariant per episode.
+_actcond_pending_store = []
 
 # GSP_SPLICE_ADVANTAGE_ONLY (advantage-stream splice, GSP-RL#42) — fail-loud
 # engaged-path assertion, same contract as the BATCHED_ACTOR_FORWARD lines
@@ -755,6 +765,25 @@ try:
                 )
                 if _actcond else None
             )
+            # [ACTCOND] FIX 1: per-robot index of the most recently REALIZED
+            # action (init 0, updated at the act site). The eval-ablation
+            # fold-stream reads the forecast row at this index — one
+            # realized-prediction-shaped vector per robot per step, matching
+            # the baseline arms' accumulator cardinality (R folds/step).
+            _actcond_last_act = (
+                np.zeros(Utility.params['num_robots'], dtype=int)
+                if _actcond else None
+            )
+            # [ACTCOND] FIX 2 invariant: every pending delayed store must have
+            # been completed (act-site flush) or terminally flushed (episode
+            # teardown) before a new episode starts. A leftover here means a
+            # transition would silently splice across episodes — fail loud.
+            if _actcond and _actcond_pending_store:
+                raise RuntimeError(
+                    "GSP_ACTION_CONDITIONED delayed store: "
+                    f"{len(_actcond_pending_store)} pending transition(s) "
+                    "survived the episode boundary — the act-site flush / "
+                    "terminal flush invariant is broken.")
             episode_gsp_rewards = np.zeros(Utility.params['num_robots'])
 
             # Reset Change-3 prev-step ring buffers at episode boundaries so
@@ -1012,6 +1041,29 @@ try:
                                 agent_states[i] = model.make_agent_state(
                                     _actor_env_obs[i],
                                     heading_gsp=next_heading_gsp[i])
+                                # FIX 1: remember the realized action — the
+                                # predict-site eval-ablation folds THIS row
+                                # index next step (realized-prediction analog).
+                                _actcond_last_act[i] = int(action_num)
+                        # [ACTCOND] FIX 2: complete the one-iteration delayed
+                        # stores. agent_states[i] was just rebuilt for every
+                        # robot (MAX_NUM_ROBOT_FAILURES=0 is a startup guard,
+                        # so no robot skips the rebuild) and is BIT-EQUAL to
+                        # the obs acted on this step — the baseline
+                        # next-state contract (next_state == the state acted
+                        # on at t+1, fresh splice).
+                        if _actcond_pending_store:
+                            for (_p_s, _p_a, _p_r, _p_i, _p_ns_fb,
+                                 _p_done, _p_gsp_obs, _p_phi) in _actcond_pending_store:
+                                model.store_agent_transition(
+                                    _p_s, _p_a, _p_r,
+                                    np.asarray(agent_states[_p_i],
+                                               dtype=np.float32).copy(),
+                                    _p_done,
+                                    gsp_obs=_p_gsp_obs,
+                                    gsp_label=None,
+                                    phi=_p_phi)
+                            _actcond_pending_store = []
                     elif _batched_actor_forward and not any(bool(np.any(f)) for f in failures):
                         actions_to_take, actions = model.choose_agent_actions_batch(
                             agent_states, test_mode)
@@ -1413,13 +1465,46 @@ try:
                                                 f"shape {_p_rows.shape}, expected "
                                                 f"({_actcond_n}, {_gsp_K}).")
                                         if _gsp_eval_ablate_pred != 'none' and not _in_stats_warmup:
-                                            for _a in range(_actcond_n):
-                                                _p_rows[_a] = apply_pred_ablation(
-                                                    _p_rows[_a], _gsp_eval_ablate_pred,
-                                                    _pred_ablation_rng,
-                                                    _pred_frozen_mean_state,
-                                                )
+                                            # FIX 1 (review): apply the ablation
+                                            # ONCE per robot per step, then
+                                            # BROADCAST the single ablated
+                                            # vector to all N rows. A per-row
+                                            # apply would fold N vectors/robot
+                                            # into RunningMeanState — rows would
+                                            # diverge (each sees the mean after
+                                            # a different fold count), the
+                                            # severing arm would leak row-
+                                            # varying signal, and the
+                                            # accumulator would track NxR per-
+                                            # action forecasts instead of R
+                                            # realized predictions. Fold-stream
+                                            # = realized-action rows only: the
+                                            # row at the robot's LAST chosen
+                                            # action index (init 0) is the
+                                            # realized-prediction analog,
+                                            # matching baseline cardinality
+                                            # (R folds/step). Broadcast rows
+                                            # are bit-identical -> the diagonal
+                                            # collapses to plain Q, exactly the
+                                            # causal-severing contract.
+                                            _abl_row = apply_pred_ablation(
+                                                _p_rows[int(_actcond_last_act[i])],
+                                                _gsp_eval_ablate_pred,
+                                                _pred_ablation_rng,
+                                                _pred_frozen_mean_state,
+                                            )
+                                            _p_rows = np.tile(
+                                                np.asarray(_abl_row,
+                                                           dtype=np.float32),
+                                                (_actcond_n, 1))
                                         _actcond_preds[i] = _p_rows
+                                    # [ACTCOND] FIX 4: additive h5 dataset —
+                                    # the per-robot (N, K) forecast matrix AS
+                                    # STASHED (post row-ablation), basis t
+                                    # (same basis as gsp_obs). The next act
+                                    # site scores exactly this matrix.
+                                    hdf5_writer.record_actcond_pred_matrix(
+                                        _actcond_preds)
                                     ctde_gsp = None  # no single shared prediction on the diagonal path
                                 else:
                                     ctde_gsp = model.choose_agent_gsp(agent_gsp_states, test_mode)
@@ -1912,6 +1997,35 @@ try:
                                                                     gsp_obs=e2e_gsp_obs[i] if _needs_gsp_obs else None,
                                                                     gsp_label=e2e_gsp_label if config.get('GSP_E2E_ENABLED') else None,
                                                                     phi=sf_phi)
+                                            elif _actcond:
+                                                # [ACTCOND] FIX 2: one-iteration
+                                                # delayed store. Hold the fully-
+                                                # guarded transition; the NEXT
+                                                # act site completes it with the
+                                                # rebuilt agent_states[i] (the
+                                                # exact obs acted on at t+1),
+                                                # restoring the baseline
+                                                # next-state contract. The
+                                                # currently-built
+                                                # new_agent_states[i]
+                                                # (chosen_row_t basis) rides
+                                                # along ONLY as the terminal-
+                                                # flush fallback. gsp_label is
+                                                # None by the E2E guard;
+                                                # gsp_obs/phi mirror the
+                                                # immediate-store args.
+                                                _actcond_pending_store.append((
+                                                    np.asarray(agent_states[i],
+                                                               dtype=np.float32).copy(),
+                                                    (actions[i], actions_to_take[i]),
+                                                    rewards[i],
+                                                    i,
+                                                    np.asarray(new_agent_states[i],
+                                                               dtype=np.float32).copy(),
+                                                    _step_store_done,
+                                                    e2e_gsp_obs[i] if _needs_gsp_obs else None,
+                                                    sf_phi,
+                                                ))
                                             else:
                                                 model.store_agent_transition(agent_states[i],
                                                                     (actions[i], actions_to_take[i]),
@@ -2224,6 +2338,16 @@ try:
                     # so it aligns with the (timesteps × robots) HDF5 schema. Needed for the
                     # information-collapse diagnostic (gsp_output_std, gsp_pred_target_corr).
                     gsp_target_per_robot = [float(label)] * Utility.params['num_robots']
+                    # [ACTCOND] basis note (review FIX 4): in actcond cells the
+                    # gsp_pred column below (next_heading_gsp -> gsp_heading)
+                    # carries the row CHOSEN at this step's ACT site, i.e. a
+                    # basis t-1 forecast — one step offset vs baseline cells,
+                    # where next_heading_gsp is refreshed at this step's
+                    # predict site (basis t). gsp_obs stays basis t in both.
+                    # Analyses needing basis-t actcond predictions must read
+                    # the ADDITIVE actcond_pred_matrix dataset (recorded at
+                    # the predict site), not this column. Existing columns
+                    # deliberately unchanged.
                     hdf5_writer.writerow(r, tmp_epsilon, reached_goal, loss, force_mags, force_angs,
                                     [average_force_mag, math.degrees(average_force_ang)], obj_stats[0], obj_stats[1],
                                     obj_stats[5], gate, obstacles, gsp_reward, next_heading_gsp,
@@ -2251,6 +2375,24 @@ try:
                             )
 
                     if episode_done:
+                        # [ACTCOND] FIX 2 terminal flush: no t+1 act exists —
+                        # complete any pending delayed store with the held
+                        # new_agent_states fallback (chosen_row_t basis). On
+                        # the normal path this list is already empty (pending
+                        # is pushed only when episode_done is False, which
+                        # guarantees a next iteration whose act site flushes
+                        # it); this covers the exotic exits. The terminal
+                        # splice is INERT for learning: Q(s') is done-masked
+                        # (q_next[dones]=0 in GSP-RL learning_aids), so the
+                        # fallback basis never reaches a Bellman target.
+                        if _actcond and _actcond_pending_store:
+                            for (_p_s, _p_a, _p_r, _p_i, _p_ns_fb,
+                                 _p_done, _p_gsp_obs, _p_phi) in _actcond_pending_store:
+                                model.store_agent_transition(
+                                    _p_s, _p_a, _p_r, _p_ns_fb, _p_done,
+                                    gsp_obs=_p_gsp_obs, gsp_label=None,
+                                    phi=_p_phi)
+                            _actcond_pending_store = []
                         # OBSTACLE-CONTACT K-step FIFO edge (2026-07-10 review
                         # finding): a terminating contact within K steps of the
                         # PHYSICAL episode end leaves its penalty-bearing

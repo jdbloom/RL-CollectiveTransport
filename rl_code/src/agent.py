@@ -1247,8 +1247,20 @@ def validate_action_conditioned(config, model):
             "GSP_ACTION_CONDITIONED is set but the Actor-side gate "
             "gsp_action_conditioned_engaged is False — the GSP-RL pin "
             "predates #46 or the head was not built action-conditioned.")
-
     _k = int(model.gsp_network_output)
+    if _k <= 1:
+        # Review FIX 3: make_agent_state's SCALAR branch rescales the slot
+        # (np.degrees(x/10)) — the stored obs would silently differ from the
+        # diagonal-scored raw concat. Only the vector path (K > 1) splices
+        # raw. delta_theta_traj couples K to the horizon, so this is the
+        # horizon lever.
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires a vector GSP slot "
+            f"(gsp_network_output > 1, got K={_k}) — lever "
+            "GSP_PREDICTION_HORIZON must be > 1: make_agent_state's scalar "
+            "branch rescales (degrees/10) and the stored obs would not "
+            "equal the diagonal-scored obs.")
+
     lines = [
         f"[ACTCOND] ENGAGED: N={n} encoding=onehot "
         f"target=delta_theta_traj K={_k}",
