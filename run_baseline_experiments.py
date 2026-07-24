@@ -421,6 +421,18 @@ def run_experiment(exp_name, config, test_mode=False, model_path=None):
     config_path = os.path.join(data_root, "agent_config.yml")
     write_yaml_config(config, config_path)
 
+    # [ACTCOND] startup surface (Arm C). Main.py owns the authoritative
+    # fail-loud validation and the grep-able ENGAGED line in the run log;
+    # this launcher-side echo makes the flag visible where Main.py's stdout
+    # is DEVNULL'd.
+    if config.get("GSP_ACTION_CONDITIONED"):
+        print(
+            f"[ACTCOND] GSP_ACTION_CONDITIONED set for {exp_name}: "
+            f"N={config.get('GSP_ACTION_COND_N')} "
+            f"encoding={config.get('GSP_ACTION_COND_ENCODING', 'onehot')} "
+            "(Main.py validates and logs the ENGAGED line)"
+        )
+
     generate_argos_xml(config)
     argos_file = os.path.join(PROJECT_ROOT, "argos", config["ARGOS_FILE_NAME"])
     shutil.copy(argos_file, os.path.join(data_root, config["ARGOS_FILE_NAME"]))

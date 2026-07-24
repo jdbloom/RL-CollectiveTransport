@@ -972,6 +972,34 @@ class Agent(Actor):
 
         return actions, action_num
 
+    def choose_agent_action_diagonal(self, env_obs, preds, failures, test=False):
+        """Arm C diagonal-Q acting wrapper (GSP_ACTION_CONDITIONED).
+
+        Mirrors choose_agent_action's failure contract verbatim (failed robot
+        -> the same no-op/idle action path and self.failed bookkeeping), then
+        routes the non-failed case through Actor.choose_action_diagonal
+        (GSP-RL): one batched q_eval forward over the N forecast-spliced obs
+        rows obs_a = concat(env_obs, preds[a]), argmax of the diagonal.
+
+        env_obs: (n_obs,) PRE-SPLICE egocentric obs (no GSP slot) — the act
+        site passes _actor_env_obs[i], NOT agent_states[i].
+        preds: (N, K) per-action forecasts (predict_gsp_actions output,
+        possibly eval-ablated row-wise upstream in Main.py).
+
+        Returns (action_to_take, action_num) with the exact mapping the
+        DQN/DDQN branch of choose_agent_action uses (parse_action). The
+        non-discrete schemes never reach here: choose_action_diagonal raises
+        on any non-DQN/DDQN networks dict (fail loud, no silent fallback).
+        """
+        if failures:
+            self.failed = True
+            return self.failure_action, self.failure_action_code
+
+        self.failed = False
+        action_num = self.choose_action_diagonal(env_obs, preds, self.networks, test)
+        actions = self.parse_action(action_num)
+        return actions, action_num
+
     def choose_agent_actions_batch(self, observations, test=False):
         """#53-B batched CTDE acting: one stacked forward for ALL robots.
 
@@ -1128,3 +1156,102 @@ class Agent(Actor):
             a = np.array(a[1][0:2])
         return super().store_agent_transition(s, a, r, s_, d, gsp_obs=gsp_obs, gsp_label=gsp_label, phi=phi)
     
+
+def validate_action_conditioned(config, model):
+    """GSP_ACTION_CONDITIONED startup guards + ENGAGED lines (Arm C plan 2e).
+
+    Pure validation helper — Main.py owns the logging lifecycle (it log.info's
+    every returned line into the per-run python.log, the only handler that
+    reaches production cell logs). Any violated lever raises ValueError naming
+    the lever, BEFORE the first episode (fail loud, never mid-run).
+
+    Returns (engaged: bool, n: int, startup_lines: list[str]).
+    """
+    if not config.get('GSP_ACTION_CONDITIONED'):
+        return False, 0, []
+
+    if config.get('INDEPENDENT_LEARNING'):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires the shared CTDE model — "
+            "lever INDEPENDENT_LEARNING must be off.")
+    if not config.get('GSP'):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GSP to be on.")
+    if not getattr(model, 'gsp_neighbors', False):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires the GSP-N neighbors head "
+            "(lever GSP_NEIGHBORS / neighbors=True) — the per-action "
+            "forecasts are made from the neighbors gsp_states.")
+    _kind = str(config.get('GSP_OUTPUT_KIND', 'delta_theta_1d'))
+    if _kind != 'delta_theta_traj':
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GSP_OUTPUT_KIND = "
+            f"'delta_theta_traj'; got {_kind!r}.")
+    if config.get('GSP_E2E_ENABLED'):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED does not compose with lever "
+            "GSP_E2E_ENABLED (E2E owns the FIFO + head-learn path).")
+    if config.get('GSP_E2E_NORMALIZE_FEATURE'):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GSP_E2E_NORMALIZE_FEATURE "
+            "off — the diagonal-evaluated obs must equal the raw-concat "
+            "stored obs (standardizer would break the equality).")
+    _gain = float(getattr(model, 'gsp_e2e_splice_gain', 1.0))
+    if _gain != 1.0:
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires the default splice gain — "
+            f"lever GSP_E2E_SPLICE_GAIN must be 1.0, got {_gain}.")
+    _enc = str(config.get('GSP_ACTION_COND_ENCODING', 'onehot'))
+    if _enc != 'onehot':
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED threading v1 supports lever "
+            f"GSP_ACTION_COND_ENCODING = 'onehot' only; got {_enc!r} "
+            "(embedding is head-side supported, threading v1 not).")
+    if getattr(model, 'gsp_zero_out_signal', False):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GSP_ZERO_OUT_SIGNAL off — "
+            "zero-out severs the splice while the diagonal scores live "
+            "forecast rows (stored obs would not equal the scored obs); the "
+            "sanctioned causal test is GSP_EVAL_ABLATE_PRED applied row-wise.")
+    if config.get('GLOBAL_KNOWLEDGE'):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GLOBAL_KNOWLEDGE off — "
+            "make_agent_state would append the global block and the stored "
+            "obs would not equal the diagonal-scored concat(obs, pred).")
+    _bt = float(getattr(model, 'boltzmann_temperature', 0.0))
+    if _bt > 0.0:
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever BOLTZMANN_TEMPERATURE = 0 "
+            f"(got {_bt}) — diagonal selection is greedy-only in v1.")
+    _mnrf = config.get('MAX_NUM_ROBOT_FAILURES')
+    _mnrf = 0 if _mnrf is None else int(_mnrf)
+    if _mnrf != 0:
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever MAX_NUM_ROBOT_FAILURES = 0 "
+            f"(got {_mnrf}) — a failed robot's failure_action_code cannot be "
+            "one-hot encoded into the head's N action slots.")
+    _n_raw = config.get('GSP_ACTION_COND_N')
+    if _n_raw is None:
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED requires lever GSP_ACTION_COND_N "
+            "(the discrete action count N).")
+    n = int(_n_raw)
+    _n_actions = len(model.action_space)
+    if n != _n_actions:
+        raise ValueError(
+            f"GSP_ACTION_CONDITIONED lever GSP_ACTION_COND_N = {n} does not "
+            f"match the actor's action count {_n_actions} — the diagonal "
+            "requires one forecast row per action.")
+    if not getattr(model, 'gsp_action_conditioned_engaged', False):
+        raise ValueError(
+            "GSP_ACTION_CONDITIONED is set but the Actor-side gate "
+            "gsp_action_conditioned_engaged is False — the GSP-RL pin "
+            "predates #46 or the head was not built action-conditioned.")
+
+    _k = int(model.gsp_network_output)
+    lines = [
+        f"[ACTCOND] ENGAGED: N={n} encoding=onehot "
+        f"target=delta_theta_traj K={_k}",
+        "[ACTCOND] batched actor forward disabled (per-robot diagonal path)",
+    ]
+    return True, n, lines
