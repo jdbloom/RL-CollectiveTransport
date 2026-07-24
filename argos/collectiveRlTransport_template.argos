@@ -42,7 +42,7 @@
                   data_file = "data.csv"
                   num_robots = "$$num_robots$$"
                   max_robot_failures = "$$max_robot_failures$$"
-		              latest_failure_time = "1000"
+		              latest_failure_time = "$$latest_failure_time$$"
 		              chance_failure = "$$chance_failure$$"
                   goal = "$$goal_x$$, 0"
                   threshold = "$$goal_radius$$"
