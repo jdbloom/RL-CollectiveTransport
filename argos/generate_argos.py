@@ -3,6 +3,7 @@ import argparse
 import os
 
 def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="1",
+                   latest_failure_time="1000",
                    chance_failure="0.25", num_episodes="1000",
                    pytorch_port="tcp://localhost:55555",
                    argos_filename="collectiveRlTransport.argos",
@@ -25,6 +26,7 @@ def generate_argos(num_obstacles = "0", num_robots="1", max_num_robot_failures="
         filestring = re.sub(r'\$\$seed\$\$', seed, filestring)
         filestring = re.sub(r'\$\$num_robots\$\$', num_robots, filestring)
         filestring = re.sub(r'\$\$max_robot_failures\$\$', max_num_robot_failures, filestring)
+        filestring = re.sub(r'\$\$latest_failure_time\$\$', latest_failure_time, filestring)
         filestring = re.sub(r'\$\$chance_failure\$\$', chance_failure, filestring)
         filestring = re.sub(r'\$\$num_episodes\$\$', num_episodes, filestring)
         filestring = re.sub(r'\$\$pytorch_port\$\$', pytorch_port, filestring)
@@ -60,6 +62,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_obstacles", default="0")
 parser.add_argument("--num_robots", default="1")
 parser.add_argument("--max_num_robot_failures", default="1")
+parser.add_argument("--latest_failure_time", default="1000")
 parser.add_argument("--chance_failure", default="0.25")
 parser.add_argument("--num_episodes", default="1000")
 parser.add_argument("--pytorch_port", default="55555")
